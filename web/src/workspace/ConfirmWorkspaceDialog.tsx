@@ -170,7 +170,9 @@ export const ConfirmWorkspaceDialog = ({
               <WorkspaceCommandPresetSelect
                 error={commandPresetError ?? presetAvailabilityError}
                 onChange={onCommandPresetChange}
+                onStartupCommandChange={setStartupCommand}
                 presets={commandPresets}
+                startupCommand={startupCommand}
                 value={commandPresetId}
               />
 

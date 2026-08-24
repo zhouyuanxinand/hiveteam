@@ -23,6 +23,7 @@ interface UseWorkerComposerInput {
 export interface WorkerComposerState {
   commandPresets: CommandPreset[]
   commandPresetId: string
+  model: string
   createWorkerError: string | null
   creating: boolean
   customTemplates: RoleTemplate[]
@@ -35,6 +36,7 @@ export interface WorkerComposerState {
   workerName: string
   workerRole: WorkerRole
   setCommandPresetId: (value: string) => void
+  setModel: (value: string) => void
   setRoleDescription: (value: string) => void
   setStartupCommand: (value: string) => void
   setWorkerName: (value: string) => void
@@ -147,6 +149,7 @@ export const useWorkerComposer = ({
   )
   const [commandPresets, setCommandPresets] = useState<CommandPreset[]>([])
   const [commandPresetId, setCommandPresetId] = useState('claude')
+  const [model, setModel] = useState('')
   const [startupCommand, setStartupCommand] = useState('')
   const [createWorkerError, setCreateWorkerError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -332,6 +335,7 @@ export const useWorkerComposer = ({
     setCreateWorkerError(null)
     void createWorker({
       commandPresetId,
+      model,
       name: workerName,
       role: workerRole,
       roleDescription,
@@ -343,6 +347,7 @@ export const useWorkerComposer = ({
         selectWorkerRole('coder')
         setSelectedTemplateId(null)
         setCommandPresetId('claude')
+        setModel('')
         setStartupCommand('')
         onSuccess()
         if (error) setCreateWorkerError(error)
@@ -356,6 +361,7 @@ export const useWorkerComposer = ({
   return {
     commandPresets,
     commandPresetId,
+    model,
     createWorkerError,
     creating,
     customTemplates,
@@ -368,6 +374,7 @@ export const useWorkerComposer = ({
     workerName,
     workerRole,
     setCommandPresetId: selectCommandPresetId,
+    setModel,
     setRoleDescription,
     setStartupCommand,
     setWorkerName: setWorkerNameFromUser,

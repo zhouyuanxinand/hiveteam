@@ -136,12 +136,13 @@ describe('pickFolder — platform dispatch', () => {
     expect(result.canceled).toBe(false)
   })
 
-  test('picked path outside the sandbox is rejected by probeDirectory', async () => {
+  test('native picker accepts a valid path outside the server browse sandbox', async () => {
     const runCommand: RunPickCommand = async () => ({ ...emptySpawn, stdout: `${outsideDir}\n` })
-    const result = await pickFolder({ platform: 'darwin', runCommand })
+    const result = await pickFolder({ platform: 'win32', runCommand })
     expect(result.path).toBe(outsideDir)
-    expect(result.probe?.ok).toBe(false)
-    expect(result.error).toMatch(/outside the Hive browse sandbox/)
+    expect(result.probe?.ok).toBe(true)
+    expect(result.probe?.is_dir).toBe(true)
+    expect(result.error).toBeNull()
   })
 
   test('unexpected timeout is surfaced as an error, not a silent cancel', async () => {

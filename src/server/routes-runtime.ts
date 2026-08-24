@@ -1,5 +1,10 @@
+import { getModelSwitchCapability } from './model-switch-capabilities.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
-import type { ConfigureAgentLaunchBody, RouteDefinition } from './route-types.js'
+import type {
+  ConfigureAgentLaunchBody,
+  OpenModelPickerBody,
+  RouteDefinition,
+} from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 import { getWorkspaceShellAgentId } from './workspace-shell-runtime.js'
 
@@ -130,4 +135,31 @@ export const runtimeRoutes: RouteDefinition[] = [
 
     sendJson(response, 200, store.getLiveRun(runId))
   }),
+  route(
+    'POST',
+    '/api/runtime/runs/:runId/model-picker',
+    async ({ params, request, response, store }) => {
+      const runId = getRequiredParam(response, params, 'runId', 'Run id is required')
+      if (!runId) return
+
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const body = await readJsonBody<OpenModelPickerBody>(request)
+      const presetId = typeof body.command_preset_id === 'string' ? body.command_preset_id : ''
+      const preset = store.settings.getCommandPreset(presetId)
+      const capability = preset ? getModelSwitchCapability(preset.command) : undefined
+      if (!capability) {
+        sendJson(response, 409, {
+          error: 'This CLI does not expose a documented native model picker.',
+        })
+        return
+      }
+
+      store.getLiveRun(runId)
+      store.writeRunInput(runId, capability.input)
+      sendJson(response, 200, {
+        command: capability.pickerCommand,
+        strategy: capability.strategy,
+      })
+    }
+  ),
 ]

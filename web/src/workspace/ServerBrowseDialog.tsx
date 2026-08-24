@@ -208,7 +208,9 @@ export const ServerBrowseDialog = ({
                 <WorkspaceCommandPresetSelect
                   error={commandPresetError ?? presetAvailabilityError}
                   onChange={onCommandPresetChange}
+                  onStartupCommandChange={setStartupCommand}
                   presets={commandPresets}
+                  startupCommand={startupCommand}
                   value={commandPresetId}
                 />
                 <button

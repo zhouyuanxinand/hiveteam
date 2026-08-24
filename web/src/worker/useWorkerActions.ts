@@ -31,6 +31,7 @@ interface UseWorkerActionsInput {
 export interface CreateWorkerActionInput {
   commandPresetId: string
   name: string
+  model?: string
   role: WorkerRole
   roleDescription: string
   startupCommand: string
@@ -53,13 +54,14 @@ export const useWorkerActions = ({
   setWorkersByWorkspaceId,
 }: UseWorkerActionsInput): WorkerActions => {
   const createWorkerAction = useCallback<WorkerActions['createWorker']>(
-    async ({ commandPresetId, name, role, roleDescription, startupCommand }) => {
+    async ({ commandPresetId, model, name, role, roleDescription, startupCommand }) => {
       if (!activeWorkspaceId) return { error: 'No active workspace', runId: null }
       const startupClean = startupCommand.trim()
       const result = await createWorker(activeWorkspaceId, {
         autostart: true,
         command_preset_id: commandPresetId || null,
         description: roleDescription.trim(),
+        model: model?.trim() || null,
         name,
         role,
         startup_command: startupClean || null,

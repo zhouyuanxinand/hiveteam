@@ -3,6 +3,13 @@ import { createContext, type ReactNode, useContext, useMemo, useState } from 're
 import { isUiLanguage, UI_LANGUAGE_STORAGE_KEY, type UiLanguage } from './uiLanguage.js'
 
 const enMessages = {
+  'cliBinding.description':
+    '{command} was not found on PATH. Paste its executable path to bind it.',
+  'cliBinding.help':
+    'The path is saved as this launch override. The CLI must already be installed. Wrap paths with spaces in quotes.',
+  'cliBinding.inputAria': 'Executable path for {name}',
+  'cliBinding.placeholder': 'C:\\Users\\you\\AppData\\Local\\Programs\\...\\agent.cmd',
+  'cliBinding.title': 'Bind {name} from a local path',
   'addWorker.agentCli': 'Agent CLI',
   'addWorker.agentNotFound': 'not found',
   'addWorker.cancel': 'Cancel',
@@ -16,6 +23,11 @@ const enMessages = {
   'addWorker.genericAgent': 'Generic command',
   'addWorker.genericCommand': 'startup command only',
   'addWorker.loadingPresets': 'Loading presets…',
+  'addWorker.model': 'Model (optional)',
+  'addWorker.modelAria': 'Model for {name}',
+  'addWorker.modelHelp':
+    'Hive starts {command} with --model and applies this value on the next run.',
+  'addWorker.modelPlaceholder': 'e.g. gpt-5.6, claude-sonnet-4, qwen3-coder',
   'addWorker.name': 'Name',
   'addWorker.namePlaceholder': 'e.g. Alice',
   'addWorker.modifiedFrom': 'Modified from {role} default',
@@ -74,7 +86,8 @@ const enMessages = {
   'firstRun.optionDesc': 'Choose how you want to begin.',
   'firstRun.slide1Desc': 'Pick a project folder on your machine.',
   'firstRun.slide1Title': 'Add a Workspace',
-  'firstRun.slide2Desc': 'Claude Code, Codex, Gemini, OpenCode — your choice.',
+  'firstRun.slide2Desc':
+    'Claude Code, Codex, Gemini, OpenCode, Qwen Code, Zcode, Kimi — your choice.',
   'firstRun.slide2Title': 'Pick an Orchestrator',
   'firstRun.slide3Desc':
     'The Orchestrator runs `team send <worker> <task>` for you in the terminal.',
@@ -201,6 +214,9 @@ const enMessages = {
   'worker.deleteDescription':
     "This stops {name}'s terminal and removes it from the workspace. All queued dispatches are dropped.",
   'worker.deleteMember': 'Delete member',
+  'worker.changeModel': 'Change model',
+  'worker.modelPickerOpened': '{command} sent. Choose a model in the native CLI picker.',
+  'worker.modelPickerFailed': 'Could not open the model picker: {message}',
   'worker.detail': '{name} detail',
   'worker.emptyAdd': 'Add your first member',
   'worker.emptyDesc':
@@ -383,6 +399,11 @@ const enMessages = {
 export type TranslationKey = keyof typeof enMessages
 
 const zhMessages: Record<TranslationKey, string> = {
+  'cliBinding.description': '未在 PATH 中找到 {command}。粘贴可执行文件路径即可绑定。',
+  'cliBinding.help': '路径会保存为本次启动覆盖命令；CLI 仍需先安装到本机。路径含空格时请加引号。',
+  'cliBinding.inputAria': '{name} 的可执行文件路径',
+  'cliBinding.placeholder': 'C:\\Users\\你\\AppData\\Local\\Programs\\...\\agent.cmd',
+  'cliBinding.title': '从本机路径绑定 {name}',
   'addWorker.agentCli': 'Agent CLI',
   'addWorker.agentNotFound': '未找到',
   'addWorker.cancel': '取消',
@@ -396,6 +417,10 @@ const zhMessages: Record<TranslationKey, string> = {
   'addWorker.genericAgent': '通用命令',
   'addWorker.genericCommand': '仅使用启动命令',
   'addWorker.loadingPresets': '正在加载预设…',
+  'addWorker.model': '模型（可选）',
+  'addWorker.modelAria': '{name} 使用的模型',
+  'addWorker.modelHelp': 'Hive 会以 --model 参数启动 {command}，下次启动时生效。',
+  'addWorker.modelPlaceholder': '例如 gpt-5.6、claude-sonnet-4、qwen3-coder',
   'addWorker.name': '名称',
   'addWorker.namePlaceholder': '例如 鲁班',
   'addWorker.modifiedFrom': '已修改 {role} 默认说明',
@@ -453,7 +478,7 @@ const zhMessages: Record<TranslationKey, string> = {
   'firstRun.optionDesc': '选择一个开始方式。',
   'firstRun.slide1Desc': '选择本机项目目录。',
   'firstRun.slide1Title': '添加 Workspace',
-  'firstRun.slide2Desc': 'Claude Code、Codex、Gemini、OpenCode，任选。',
+  'firstRun.slide2Desc': 'Claude Code、Codex、Gemini、OpenCode、Qwen Code、Zcode、Kimi，任选。',
   'firstRun.slide2Title': '选择 Orchestrator',
   'firstRun.slide3Desc': 'Orchestrator 会在终端中通过 `team send <worker> <task>` 派单。',
   'firstRun.slide3Title': '分派任务',
@@ -573,6 +598,9 @@ const zhMessages: Record<TranslationKey, string> = {
   'worker.deleteConfirm': '删除 {name}？',
   'worker.deleteDescription': '这会停止 {name} 的终端，并从 workspace 中移除它。排队任务会被丢弃。',
   'worker.deleteMember': '删除成员',
+  'worker.changeModel': '更换模型',
+  'worker.modelPickerOpened': '已发送 {command}，请在原生 CLI 选择模型。',
+  'worker.modelPickerFailed': '无法打开模型选择器：{message}',
   'worker.detail': '{name} 详情',
   'worker.emptyAdd': '添加第一个成员',
   'worker.emptyDesc':

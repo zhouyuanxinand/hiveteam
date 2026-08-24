@@ -52,6 +52,8 @@ export interface CreateWorkerBody {
   autostart?: boolean
   command_preset_id?: string | null
   description?: string
+  /** Optional model id. Built-in CLIs receive it as `--model <id>`. */
+  model?: string | null
   name: string
   role: WorkerRole
   /** Optional full startup command. When set, it overrides the executable only. */
@@ -60,6 +62,10 @@ export interface CreateWorkerBody {
 
 export interface UserInputBody {
   text: string
+}
+
+export interface OpenModelPickerBody {
+  command_preset_id?: string | null
 }
 
 export interface ConfigureAgentLaunchBody {

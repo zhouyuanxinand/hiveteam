@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { AlertTriangle, Play, X } from 'lucide-react'
+import { AlertTriangle, Play, SlidersHorizontal, X } from 'lucide-react'
 
 import type { TeamListItem } from '../../../src/shared/types.js'
 import { useI18n } from '../i18n.js'
@@ -10,7 +10,9 @@ import { useWorkerModalResize, WORKER_MODAL_MIN } from './useWorkerModalResize.j
 import { presentWorkerRuntimeStatus } from './worker-status.js'
 
 type WorkerModalProps = {
+  commandPresetId?: string
   onClose: () => void
+  onOpenModelPicker?: (worker: TeamListItem) => void
   onStart: (worker: TeamListItem) => void
   runId: string | null
   startError: string | null
@@ -25,7 +27,9 @@ type WorkerModalProps = {
  * is the lone exception so a stopped agent is restartable from inside.
  */
 export const WorkerModal = ({
+  commandPresetId,
   onClose,
+  onOpenModelPicker,
   onStart,
   runId,
   startError,
@@ -108,6 +112,16 @@ export const WorkerModal = ({
               className="relative flex min-h-0 flex-1 flex-col p-3"
               data-testid="worker-modal-terminal-slot"
             >
+              {ptyRunning && commandPresetId ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenModelPicker?.(worker)}
+                  className="icon-btn icon-btn--tertiary absolute top-4 left-4 z-10"
+                  data-testid="worker-model-picker"
+                >
+                  <SlidersHorizontal size={13} aria-hidden /> {t('worker.changeModel')}
+                </button>
+              ) : null}
               <Tooltip label={t('common.close')}>
                 <Dialog.Close asChild>
                   <button

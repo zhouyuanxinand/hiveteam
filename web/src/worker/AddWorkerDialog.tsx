@@ -10,6 +10,7 @@ import { Tooltip } from '../ui/Tooltip.js'
 import { useToast } from '../ui/useToast.js'
 import {
   AgentCliPicker,
+  ModelField,
   RoleInstructionsField,
   RolePicker,
   RoleTemplatePicker,
@@ -26,6 +27,7 @@ type AddWorkerDialogProps = {
   onClose: () => void
   onDeleteTemplate: (templateId: string) => Promise<void> | void
   onNameChange: (value: string) => void
+  onModelChange?: (value: string) => void
   onPresetChange: (value: string) => void
   onRandomName: () => void
   onRoleDescriptionChange: (value: string) => void
@@ -38,6 +40,7 @@ type AddWorkerDialogProps = {
   roleDescription: string
   roleDescriptionDefault: string
   selectedTemplateId: string | null
+  model?: string
   startupCommand: string
   templateBusy: boolean
   workerName: string
@@ -53,6 +56,7 @@ export const AddWorkerDialog = ({
   onApplyMarketplaceImport,
   onClose,
   onDeleteTemplate,
+  onModelChange,
   onNameChange,
   onPresetChange,
   onRandomName,
@@ -67,6 +71,7 @@ export const AddWorkerDialog = ({
   roleDescriptionDefault,
   selectedTemplateId,
   startupCommand,
+  model = '',
   templateBusy,
   workerName,
   workerRole,
@@ -124,7 +129,7 @@ export const AddWorkerDialog = ({
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
           <Dialog.Content
             data-testid="add-worker-content"
-            className="dialog-scale-pop elev-2 pointer-events-auto flex max-h-[calc(100vh-32px)] w-[560px] max-w-full flex-col rounded-lg border"
+            className="dialog-scale-pop elev-2 pointer-events-auto flex h-[min(820px,calc(100vh-32px))] max-h-[calc(100vh-32px)] w-[560px] max-w-full flex-col overflow-hidden rounded-lg border"
             style={{
               background: 'var(--bg-elevated)',
               borderColor: 'var(--border-bright)',
@@ -133,7 +138,7 @@ export const AddWorkerDialog = ({
             <form
               onSubmit={handleSubmit}
               aria-label={t('addWorker.title')}
-              className="flex flex-col"
+              className="flex min-h-0 flex-1 flex-col"
             >
               <div
                 className="flex shrink-0 flex-col gap-0.5 border-b px-5 py-4"
@@ -147,7 +152,10 @@ export const AddWorkerDialog = ({
                 </Dialog.Description>
               </div>
 
-              <div className="flex flex-col gap-4 overflow-y-auto px-5 py-4">
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4"
+                data-testid="add-worker-scroll-region"
+              >
                 <label className="flex flex-col gap-2">
                   <div className="flex items-baseline justify-between gap-2">
                     <SectionLabel>{t('addWorker.name')}</SectionLabel>
@@ -218,8 +226,23 @@ export const AddWorkerDialog = ({
                   commandPresetId={commandPresetId}
                   commandPresets={commandPresets}
                   onPresetChange={onPresetChange}
+                  onStartupCommandChange={onStartupCommandChange}
+                  startupCommand={startupCommand}
                 />
-                <StartupCommandField value={startupCommand} onChange={onStartupCommandChange} />
+                {selectedPreset?.available &&
+                selectedPreset.supportsModel &&
+                !startupCommandClean ? (
+                  <ModelField
+                    command={selectedPreset.command}
+                    displayName={selectedPreset.displayName}
+                    model={model}
+                    onChange={onModelChange}
+                  />
+                ) : null}
+                {commandPresets.find((preset) => preset.id === commandPresetId)?.available !==
+                false ? (
+                  <StartupCommandField value={startupCommand} onChange={onStartupCommandChange} />
+                ) : null}
               </div>
 
               <div

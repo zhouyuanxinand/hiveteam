@@ -170,10 +170,66 @@ describe('schema version', () => {
       .prepare('SELECT key, value FROM app_state WHERE key = ?')
       .get('active_workspace_id') as { key: string; value: string | null } | undefined
 
-    expect(presetCount.count).toBe(4)
+    expect(presetCount.count).toBe(7)
+    const newPresetIds = db
+      .prepare('SELECT id FROM command_presets WHERE id IN (?, ?, ?) ORDER BY id')
+      .all('kimi', 'qwen', 'zcode') as Array<{ id: string }>
+    expect(newPresetIds).toEqual([{ id: 'kimi' }, { id: 'qwen' }, { id: 'zcode' }])
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(19)).toEqual({
+      version: 19,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(20)).toEqual({
+      version: 20,
+    })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })
 
+    db.close()
+  })
+
+  test('v20 migration backfills Zcode and Kimi into an existing preset database', () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-schema-cli-bindings-'))
+    tempDirs.push(dataDir)
+
+    const db = new Database(join(dataDir, 'runtime.sqlite'))
+    db.exec(`
+      CREATE TABLE schema_version (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      );
+      CREATE TABLE command_presets (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        command TEXT NOT NULL,
+        args TEXT NOT NULL,
+        env TEXT NOT NULL,
+        resume_args_template TEXT,
+        session_id_capture TEXT,
+        yolo_args_template TEXT,
+        is_builtin INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    const insertVersion = db.prepare(
+      'INSERT INTO schema_version (version, applied_at) VALUES (?, ?)'
+    )
+    for (let version = 1; version <= 19; version += 1) insertVersion.run(version, version)
+    db.prepare(
+      `INSERT INTO command_presets (
+         id, display_name, command, args, env, is_builtin, created_at, updated_at
+       ) VALUES (?, ?, ?, '[]', '{}', 1, 1, 1)`
+    ).run('qwen', 'Qwen Code', 'qwen')
+
+    initializeRuntimeDatabase(db)
+
+    const rows = db
+      .prepare("SELECT id FROM command_presets WHERE id IN ('kimi', 'qwen', 'zcode') ORDER BY id")
+      .all() as Array<{ id: string }>
+    expect(rows).toEqual([{ id: 'kimi' }, { id: 'qwen' }, { id: 'zcode' }])
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(20)).toEqual({
+      version: 20,
+    })
     db.close()
   })
 

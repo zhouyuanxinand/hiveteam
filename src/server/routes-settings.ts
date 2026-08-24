@@ -1,4 +1,5 @@
 import { resolveCommandPath } from './agent-command-resolver.js'
+import { supportsModelSelection } from './model-arguments.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import type { SessionIdCaptureConfig } from './session-capture.js'
@@ -54,6 +55,7 @@ const serializeCommandPreset = (preset: {
     session_id_capture: preset.sessionIdCapture,
     yolo_args_template: preset.yoloArgsTemplate,
     is_builtin: preset.isBuiltin,
+    supports_model: supportsModelSelection(preset.command),
     available,
   }
 }

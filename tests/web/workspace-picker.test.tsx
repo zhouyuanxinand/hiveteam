@@ -192,7 +192,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
   test('probe.ok=false surfaces the error dialog with "Paste path instead" fallback', async () => {
     stubFetch(() => ({
       canceled: false,
-      error: 'Selected path is outside the Hive browse sandbox or is not a directory.',
+      error: 'Selected path is not a directory or cannot be accessed.',
       path: '/outside',
       probe: { ...sandboxProbe, ok: false, is_dir: false, path: '/outside' },
       supported: true,
@@ -200,7 +200,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     render(<AddWorkspaceDialog trigger={1} onClose={() => {}} onCreate={() => {}} />)
 
     const err = await screen.findByTestId('add-workspace-error')
-    expect(within(err).getByText(/outside the Hive browse sandbox/)).toBeInTheDocument()
+    expect(within(err).getByText(/not a directory or cannot be accessed/)).toBeInTheDocument()
 
     // Clicking the paste-path recovery action opens the compact confirm with
     // the paste-path fallback expanded (same state as supported=false).

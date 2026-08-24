@@ -52,6 +52,7 @@ const Harness = () => {
         onApplyMarketplaceImport={composer.applyMarketplaceImport}
         onClose={() => {}}
         onDeleteTemplate={composer.deleteTemplate}
+        onModelChange={composer.setModel}
         onNameChange={composer.setWorkerName}
         onPresetChange={composer.setCommandPresetId}
         onRandomName={composer.randomizeWorkerName}
@@ -67,6 +68,7 @@ const Harness = () => {
         roleDescription={composer.roleDescription}
         roleDescriptionDefault={composer.roleDescriptionDefault}
         selectedTemplateId={composer.selectedTemplateId}
+        model={composer.model}
         startupCommand={composer.startupCommand}
         templateBusy={composer.templateBusy}
         workerName={composer.workerName}
@@ -84,6 +86,7 @@ beforeEach(() => {
       command: 'claude',
       args: [],
       available: true,
+      supportsModel: true,
     },
   ])
 })
@@ -128,9 +131,65 @@ describe('Agent CLI picker', () => {
       )
     ).toBeInTheDocument()
   })
+
+  test('shows a local binding field for an unavailable CLI preset', () => {
+    const onPresetChange = vi.fn()
+    const onStartupCommandChange = vi.fn()
+    render(
+      <AgentCliPicker
+        commandPresetId="kimi"
+        commandPresets={[
+          {
+            id: 'kimi',
+            displayName: 'Kimi',
+            command: 'kimi',
+            args: [],
+            available: false,
+          },
+        ]}
+        onPresetChange={onPresetChange}
+        onStartupCommandChange={onStartupCommandChange}
+        startupCommand=""
+      />
+    )
+
+    const binding = screen.getByTestId('agent-cli-binding-path')
+    expect(binding).toHaveAttribute('placeholder')
+    fireEvent.change(binding, { target: { value: 'C:\\Tools\\kimi.cmd' } })
+    expect(onStartupCommandChange).toHaveBeenCalledWith('C:\\Tools\\kimi.cmd')
+  })
 })
 
 describe('Add Worker dialog: custom role templates', () => {
+  test('renders the model field when the selected CLI supports models', async () => {
+    listRoleTemplates.mockResolvedValue([])
+
+    render(<Harness />)
+
+    await screen.findByTestId('worker-model-input')
+    fireEvent.change(screen.getByTestId('worker-model-input'), {
+      target: { value: 'claude-sonnet-4' },
+    })
+    expect(screen.getByTestId('worker-model-input')).toHaveValue('claude-sonnet-4')
+  })
+
+  test('keeps the dialog footer visible when the form content grows', async () => {
+    listRoleTemplates.mockResolvedValue([])
+
+    render(<Harness />)
+
+    const dialog = await screen.findByTestId('add-worker-content')
+    expect(dialog).toHaveClass('overflow-hidden')
+    expect(dialog).toHaveClass('max-h-[calc(100vh-32px)]')
+    expect(dialog.querySelector('form')).toHaveClass('min-h-0', 'flex-1')
+    expect(screen.getByTestId('add-worker-scroll-region')).toHaveClass(
+      'min-h-0',
+      'flex-1',
+      'overflow-y-auto'
+    )
+    expect(screen.getByTestId('add-worker-submit')).toBeVisible()
+  })
+
   test('template picker stays hidden when a builtin role is selected', async () => {
     listRoleTemplates.mockResolvedValue([
       {

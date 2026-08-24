@@ -13,6 +13,9 @@ export interface BuiltinCommandPresetDefaults {
 const CODEX_DEFAULT_YOLO_ARGS = ['--dangerously-bypass-approvals-and-sandbox']
 const OPENCODE_DEFAULT_YOLO_ARGS: string[] = []
 const GEMINI_DEFAULT_YOLO_ARGS = ['--yolo']
+const QWEN_DEFAULT_YOLO_ARGS: string[] = []
+const ZCODE_DEFAULT_YOLO_ARGS: string[] = []
+const KIMI_DEFAULT_YOLO_ARGS: string[] = []
 
 export const BUILTIN_COMMAND_PRESETS: BuiltinCommandPresetDefaults[] = [
   {
@@ -58,6 +61,30 @@ export const BUILTIN_COMMAND_PRESETS: BuiltinCommandPresetDefaults[] = [
       source: 'gemini_session_json_dir',
     },
     yoloArgsTemplate: GEMINI_DEFAULT_YOLO_ARGS,
+  },
+  {
+    command: 'qwen',
+    displayName: 'Qwen Code',
+    id: 'qwen',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: QWEN_DEFAULT_YOLO_ARGS,
+  },
+  {
+    command: 'zcode',
+    displayName: 'Zcode',
+    id: 'zcode',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: ZCODE_DEFAULT_YOLO_ARGS,
+  },
+  {
+    command: 'kimi',
+    displayName: 'Kimi',
+    id: 'kimi',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: KIMI_DEFAULT_YOLO_ARGS,
   },
 ]
 

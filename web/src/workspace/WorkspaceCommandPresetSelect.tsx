@@ -3,11 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { CommandPreset } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { CliBindingField } from '../ui/CliBindingField.js'
 
 type WorkspaceCommandPresetSelectProps = {
   error: string | null
   onChange: (value: string) => void
+  onStartupCommandChange: (value: string) => void
   presets: CommandPreset[]
+  startupCommand: string
   value: string
 }
 
@@ -22,7 +25,9 @@ type WorkspaceCommandPresetSelectProps = {
 export const WorkspaceCommandPresetSelect = ({
   error,
   onChange,
+  onStartupCommandChange,
   presets,
+  startupCommand,
   value,
 }: WorkspaceCommandPresetSelectProps) => {
   const { t } = useI18n()
@@ -141,6 +146,15 @@ export const WorkspaceCommandPresetSelect = ({
         <span className="text-sec">$</span>
         <span className="truncate">{commandPreview}</span>
       </div>
+      {selected?.available === false ? (
+        <CliBindingField
+          command={selected.command}
+          displayName={selected.displayName}
+          onChange={onStartupCommandChange}
+          testId="workspace-cli-binding-path"
+          value={startupCommand}
+        />
+      ) : null}
       {error ? (
         <span className="text-xs" style={{ color: 'var(--status-red)' }}>
           {error}

@@ -4,6 +4,7 @@ import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
 import {
   isWorkspaceShellRun,
   type OrchestratorStartResult,
+  openModelPicker,
   renameWorker,
   type TerminalRunSummary,
 } from './api.js'
@@ -200,6 +201,22 @@ export const WorkspaceDetail = ({
     }
   }
 
+  const handleOpenModelPicker = (worker: TeamListItem) => {
+    const run = findRunByAgentId(terminalRuns, worker.id)
+    if (!run || !worker.commandPresetId) return
+    void openModelPicker(run.run_id, worker.commandPresetId)
+      .then(({ command }) => {
+        toast.show({ kind: 'success', message: t('worker.modelPickerOpened', { command }) })
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        toast.show({
+          kind: 'error',
+          message: t('worker.modelPickerFailed', { message }),
+        })
+      })
+  }
+
   const orchWidth = `${(split.orchPct * 100).toFixed(2)}%`
   const openShellTerminal = () => {
     setTerminalPanelHidden(false)
@@ -287,7 +304,9 @@ export const WorkspaceDetail = ({
       {activeWorker ? (
         <Suspense fallback={null}>
           <WorkerModal
+            commandPresetId={activeWorker.commandPresetId}
             onClose={() => setActiveWorkerId(null)}
+            onOpenModelPicker={handleOpenModelPicker}
             onStart={handleStartWorker}
             runId={activeWorkerRun?.run_id ?? null}
             startError={startWorkerError}
@@ -307,6 +326,7 @@ export const WorkspaceDetail = ({
             onClose={() => setComposerOpen(false)}
             onDeleteTemplate={composer.deleteTemplate}
             onNameChange={composer.setWorkerName}
+            onModelChange={composer.setModel}
             onPresetChange={composer.setCommandPresetId}
             onRandomName={composer.randomizeWorkerName}
             onRoleDescriptionChange={composer.setRoleDescription}
@@ -319,6 +339,7 @@ export const WorkspaceDetail = ({
             roleDescription={composer.roleDescription}
             roleDescriptionDefault={composer.roleDescriptionDefault}
             selectedTemplateId={composer.selectedTemplateId}
+            model={composer.model}
             startupCommand={composer.startupCommand}
             templateBusy={composer.templateBusy}
             workerName={composer.workerName}

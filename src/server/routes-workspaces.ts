@@ -154,10 +154,11 @@ export const workspaceRoutes: RouteDefinition[] = [
       const body = await readJsonBody<CreateWorkerBody>(request)
       const presetId = body.command_preset_id ?? null
       const startupCommand = typeof body.startup_command === 'string' ? body.startup_command : null
+      const model = typeof body.model === 'string' ? body.model : null
       const launchConfig = startupCommand?.trim()
         ? resolveStartupCommandLaunchConfig(store.settings, startupCommand, presetId)
         : presetId
-          ? resolveCommandPresetLaunchConfig(store.settings, presetId)
+          ? resolveCommandPresetLaunchConfig(store.settings, presetId, model)
           : undefined
       if (presetId && !startupCommand?.trim() && !launchConfig) {
         throw new Error(`Command preset not found: ${presetId}`)

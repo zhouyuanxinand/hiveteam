@@ -2,7 +2,10 @@ import { basename } from 'node:path'
 
 const getEnvValue = (env: NodeJS.ProcessEnv, key: string, platform = process.platform) => {
   if (platform !== 'win32') return env[key]
-  const matchedKey = Object.keys(env).find((item) => item.toLowerCase() === key.toLowerCase())
+  if (Object.hasOwn(env, key)) return env[key]
+  const matchedKey = Object.keys(env)
+    .filter((item) => item.toLowerCase() === key.toLowerCase())
+    .at(-1)
   return matchedKey ? env[matchedKey] : undefined
 }
 
@@ -38,6 +41,13 @@ export const createStartupCommandLaunch = (
 export const getStartupCommandExecutable = (startupCommand: string) => {
   const command = startupCommand.trim()
   if (!command) return null
-  const match = /^(['"]?)([^'"\s]+)\1/.exec(command)
-  return match?.[2] ?? null
+  const match = /^"([^"]+)"|^'([^']+)'|^([^\s'"]+)/.exec(command)
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null
+}
+
+export const normalizeExecutableToken = (token: string | null | undefined) => {
+  if (!token) return null
+  const lastSegment = token.replace(/^.*[\\/]/, '')
+  if (!lastSegment) return null
+  return lastSegment.toLowerCase().replace(/\.(cmd|bat|exe|ps1)$/u, '')
 }

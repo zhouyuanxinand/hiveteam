@@ -71,10 +71,13 @@ const emptyResponse = (overrides: Partial<PickFolderResponse> = {}): PickFolderR
 })
 
 const finalizeWithProbe = async (path: string): Promise<PickFolderResponse> => {
-  const probe = await probeDirectory(path)
+  // A native OS picker can select a valid workspace on another drive or
+  // outside the user's home directory. The server-side browse API remains
+  // sandboxed, but the user explicitly chose this path in the OS dialog.
+  const probe = await probeDirectory(path, { allowOutsideRoot: true })
   if (!probe.ok || !probe.is_dir) {
     return emptyResponse({
-      error: 'Selected path is outside the Hive browse sandbox or is not a directory.',
+      error: 'Selected path is not a directory or cannot be accessed.',
       path,
       probe,
     })

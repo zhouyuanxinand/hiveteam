@@ -34,6 +34,15 @@ export interface FsProbeResponse {
   suggested_name: string
 }
 
+export interface ProbeDirectoryOptions {
+  /**
+   * Native OS folder pickers already return a user-selected absolute path.
+   * Probe that path without applying the server browse root, while keeping
+   * the HTTP probe route sandboxed by default.
+   */
+  allowOutsideRoot?: boolean
+}
+
 const detectGitRepository = async (entryPath: string): Promise<boolean> => {
   try {
     const info = await stat(resolve(entryPath, '.git'))
@@ -133,7 +142,10 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
   }
 }
 
-export const probeDirectory = async (requestedPath: string): Promise<FsProbeResponse> => {
+export const probeDirectory = async (
+  requestedPath: string,
+  options: ProbeDirectoryOptions = {}
+): Promise<FsProbeResponse> => {
   const rootPath = getFsBrowseRoot()
   const candidate = resolve(rootPath, requestedPath.trim())
   const base = {
@@ -146,7 +158,7 @@ export const probeDirectory = async (requestedPath: string): Promise<FsProbeResp
     suggested_name: candidate.split(/[\\/]/).filter(Boolean).pop() ?? '',
   }
 
-  if (!isPathWithinRoot(rootPath, candidate)) {
+  if (!options.allowOutsideRoot && !isPathWithinRoot(rootPath, candidate)) {
     return base
   }
 

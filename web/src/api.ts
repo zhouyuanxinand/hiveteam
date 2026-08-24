@@ -122,6 +122,7 @@ export interface CommandPreset {
   command: string
   displayName: string
   id: string
+  supportsModel?: boolean
 }
 
 export interface RoleTemplate {
@@ -144,6 +145,7 @@ interface CommandPresetPayload {
   command: string
   display_name: string
   id: string
+  supports_model: boolean
 }
 
 interface RoleTemplatePayload {
@@ -245,6 +247,21 @@ export const stopAgentRun = async (runId: string): Promise<void> => {
   }
 }
 
+export const openModelPicker = async (
+  runId: string,
+  commandPresetId: string
+): Promise<{ command: string; strategy: 'native-picker' | 'unsupported' }> => {
+  const response = await apiFetch(`/api/runtime/runs/${runId}/model-picker`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ command_preset_id: commandPresetId }),
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to open the model picker'))
+  }
+  return (await response.json()) as { command: string; strategy: 'native-picker' | 'unsupported' }
+}
+
 export const restartAgentRun = async (
   workspaceId: string,
   agentId: string,
@@ -308,6 +325,7 @@ export const listCommandPresets = async (): Promise<CommandPreset[]> => {
     command: preset.command,
     displayName: preset.display_name,
     id: preset.id,
+    supportsModel: preset.supports_model,
   }))
 }
 
@@ -477,6 +495,7 @@ export const createWorker = async (
     autostart?: boolean
     command_preset_id?: string | null
     description?: string
+    model?: string | null
     role: WorkerRole
     startup_command?: string | null
   }

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkerRole } from '../../../src/shared/types.js'
 import type { CommandPreset, RoleTemplate } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { CliBindingField } from '../ui/CliBindingField.js'
 import { Confirm } from '../ui/Confirm.js'
 import { CliAgentLogo } from './CliAgentAvatar.js'
 import { RoleAvatar } from './RoleAvatar.js'
@@ -506,15 +507,21 @@ export const AgentCliPicker = ({
   commandPresetId,
   commandPresets,
   onPresetChange,
+  onStartupCommandChange = () => undefined,
+  startupCommand = '',
 }: {
   commandPresetId: string
   commandPresets: CommandPreset[]
   onPresetChange: (value: string) => void
+  onStartupCommandChange?: (value: string) => void
+  startupCommand?: string
 }) => (
   <AgentCliPickerInner
     commandPresetId={commandPresetId}
     commandPresets={commandPresets}
     onPresetChange={onPresetChange}
+    onStartupCommandChange={onStartupCommandChange}
+    startupCommand={startupCommand}
   />
 )
 
@@ -522,12 +529,17 @@ const AgentCliPickerInner = ({
   commandPresetId,
   commandPresets,
   onPresetChange,
+  onStartupCommandChange,
+  startupCommand,
 }: {
   commandPresetId: string
   commandPresets: CommandPreset[]
   onPresetChange: (value: string) => void
+  onStartupCommandChange: (value: string) => void
+  startupCommand: string
 }) => {
   const { t } = useI18n()
+  const selectedPreset = commandPresets.find((preset) => preset.id === commandPresetId)
   return (
     <div className="flex flex-col gap-2">
       <SectionLabel>{t('addWorker.agentCli')}</SectionLabel>
@@ -552,7 +564,47 @@ const AgentCliPickerInner = ({
           />
         </div>
       )}
+      {selectedPreset?.available === false ? (
+        <CliBindingField
+          command={selectedPreset.command}
+          displayName={selectedPreset.displayName}
+          onChange={onStartupCommandChange}
+          testId="agent-cli-binding-path"
+          value={startupCommand}
+        />
+      ) : null}
     </div>
+  )
+}
+
+export const ModelField = ({
+  command,
+  displayName,
+  model,
+  onChange,
+}: {
+  command: string
+  displayName: string
+  model?: string
+  onChange?: (value: string) => void
+}) => {
+  const { t } = useI18n()
+  if (!onChange) return null
+  return (
+    <label className="flex flex-col gap-2" data-testid="model-field">
+      <SectionLabel>{t('addWorker.model')}</SectionLabel>
+      <input
+        type="text"
+        value={model ?? ''}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        placeholder={t('addWorker.modelPlaceholder')}
+        aria-label={t('addWorker.modelAria', { name: displayName })}
+        className="input mono text-sm"
+        spellCheck={false}
+        data-testid="worker-model-input"
+      />
+      <p className="text-xs leading-5 text-ter">{t('addWorker.modelHelp', { command })}</p>
+    </label>
   )
 }
 
