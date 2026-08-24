@@ -15,8 +15,9 @@ import { applySchemaVersion17 } from './sqlite-schema-v17.js'
 import { applySchemaVersion18 } from './sqlite-schema-v18.js'
 import { applySchemaVersion19 } from './sqlite-schema-v19.js'
 import { applySchemaVersion20 } from './sqlite-schema-v20.js'
+import { applySchemaVersion21 } from './sqlite-schema-v21.js'
 
-export const CURRENT_SCHEMA_VERSION = 20
+export const CURRENT_SCHEMA_VERSION = 21
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -261,5 +262,10 @@ export const initializeRuntimeDatabase = (db: Database) => {
     // built-in presets shipped. Keep the backfill idempotent on every start
     // so those databases still receive newly added presets.
     applySchemaVersion20(db)
+  }
+
+  if (!appliedVersions.has(21)) {
+    applySchemaVersion21(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(21, Date.now())
   }
 }

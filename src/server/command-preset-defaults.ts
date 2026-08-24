@@ -14,6 +14,7 @@ const CODEX_DEFAULT_YOLO_ARGS = ['--dangerously-bypass-approvals-and-sandbox']
 const OPENCODE_DEFAULT_YOLO_ARGS: string[] = []
 const GEMINI_DEFAULT_YOLO_ARGS = ['--yolo']
 const QWEN_DEFAULT_YOLO_ARGS: string[] = []
+const PI_DEFAULT_YOLO_ARGS = ['--approve']
 const ZCODE_DEFAULT_YOLO_ARGS: string[] = []
 const KIMI_DEFAULT_YOLO_ARGS: string[] = []
 
@@ -69,6 +70,14 @@ export const BUILTIN_COMMAND_PRESETS: BuiltinCommandPresetDefaults[] = [
     resumeArgsTemplate: null,
     sessionIdCapture: null,
     yoloArgsTemplate: QWEN_DEFAULT_YOLO_ARGS,
+  },
+  {
+    command: 'pi',
+    displayName: 'Pi',
+    id: 'pi',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: PI_DEFAULT_YOLO_ARGS,
   },
   {
     command: 'zcode',

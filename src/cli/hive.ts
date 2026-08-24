@@ -11,6 +11,7 @@ import { createApp } from '../server/app.js'
 import { readPackageVersion } from '../server/package-version.js'
 import { createRuntimeStore, type RuntimeStore } from '../server/runtime-store.js'
 import { createVersionService, type VersionService } from '../server/version-service.js'
+import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
 import { runHiveUpdateCommand } from './hive-update.js'
 
 interface RunHiveCommandResult {
@@ -35,7 +36,7 @@ export const HIVE_USAGE = [
   '  hive update',
   '',
   'Options:',
-  '  --port <port>   Bind the local runtime to a specific port (default: 3000).',
+  `  --port <port>   Bind the local runtime to a specific port (default: ${DEFAULT_HIVE_PORT}).`,
   '  -h, --help      Print this help.',
   '  -v, --version   Print the installed Hive version.',
   '',
@@ -55,7 +56,7 @@ export const handleHiveInfoCommand = (argv: string[]) => {
   return false
 }
 
-const parsePort = (argv: string[]) => {
+export const parseHivePort = (argv: string[]) => {
   let parsedPort: number | null = null
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -80,7 +81,7 @@ const parsePort = (argv: string[]) => {
     index += 1
   }
 
-  return parsedPort ?? 3000
+  return parsedPort ?? DEFAULT_HIVE_PORT
 }
 
 const resolveDataDir = () => process.env.HIVE_DATA_DIR || join(homedir(), '.config', 'hive')
@@ -122,7 +123,7 @@ export const runHiveCommand = async (
   argv: string[],
   options: RunHiveCommandOptions = {}
 ): Promise<RunHiveCommandResult> => {
-  const port = parsePort(argv)
+  const port = parseHivePort(argv)
   const dataDir = resolveDataDir()
   const versionService = options.versionService ?? createVersionService()
   const app = createApp({

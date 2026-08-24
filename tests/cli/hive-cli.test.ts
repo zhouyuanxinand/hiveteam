@@ -1,9 +1,15 @@
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-
-import { HIVE_USAGE, handleHiveInfoCommand, runHiveCommand } from '../../src/cli/hive.js'
+import {
+  HIVE_USAGE,
+  handleHiveInfoCommand,
+  parseHivePort,
+  runHiveCommand,
+} from '../../src/cli/hive.js'
+import { DEFAULT_HIVE_PORT } from '../../src/cli/hive-defaults.js'
 import {
   defaultRunUpdate,
   HIVE_UPDATE_USAGE,
@@ -16,6 +22,12 @@ afterEach(() => {
 })
 
 describe('hive cli', () => {
+  test('uses the packaged default port unless --port overrides it', () => {
+    expect(parseHivePort([])).toBe(DEFAULT_HIVE_PORT)
+    expect(parseHivePort(['--port', '0'])).toBe(0)
+    expect(HIVE_USAGE).toContain(`default: ${DEFAULT_HIVE_PORT}`)
+  })
+
   test('prints help without starting the runtime', () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -99,7 +111,7 @@ describe('hive update cli', () => {
 
   test('successful npm install exits 0 and prints a restart hint', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const calls: Array<{ command: string; args: string[] }> = []
+    const calls: Array<{ command: string; args: readonly string[] }> = []
     const runUpdate: RunUpdate = async (command, args) => {
       calls.push({ command, args })
       return { exitCode: 0 }
@@ -108,7 +120,12 @@ describe('hive update cli', () => {
     const code = await runHiveUpdateCommand([], { runUpdate })
 
     expect(code).toBe(0)
-    expect(calls).toEqual([{ command: 'npm', args: ['install', '-g', '@tt-a1i/hive@latest'] }])
+    expect(calls).toEqual([
+      {
+        command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
+        args: ['install', '-g', '@tt-a1i/hive@latest'],
+      },
+    ])
     expect(logSpy).toHaveBeenCalledWith('Running: npm install -g @tt-a1i/hive@latest')
     expect(logSpy).toHaveBeenCalledWith(
       'Hive updated. Restart any running Hive process to pick up the new version.'
@@ -222,9 +239,18 @@ describe('hive cli dispatch (real subprocess)', () => {
   test('`hive update --help` exits 0 with the update usage on stdout', async () => {
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
       (resolve, reject) => {
-        const child = spawn('node_modules/.bin/tsx', ['src/cli/hive.ts', 'update', '--help'], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+        const child = spawn(
+          process.execPath,
+          [
+            join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+            'src/cli/hive.ts',
+            'update',
+            '--help',
+          ],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+          }
+        )
         const stdout: Buffer[] = []
         const stderr: Buffer[] = []
         child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))

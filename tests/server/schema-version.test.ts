@@ -170,16 +170,19 @@ describe('schema version', () => {
       .prepare('SELECT key, value FROM app_state WHERE key = ?')
       .get('active_workspace_id') as { key: string; value: string | null } | undefined
 
-    expect(presetCount.count).toBe(7)
+    expect(presetCount.count).toBe(8)
     const newPresetIds = db
-      .prepare('SELECT id FROM command_presets WHERE id IN (?, ?, ?) ORDER BY id')
-      .all('kimi', 'qwen', 'zcode') as Array<{ id: string }>
-    expect(newPresetIds).toEqual([{ id: 'kimi' }, { id: 'qwen' }, { id: 'zcode' }])
+      .prepare('SELECT id FROM command_presets WHERE id IN (?, ?, ?, ?) ORDER BY id')
+      .all('kimi', 'pi', 'qwen', 'zcode') as Array<{ id: string }>
+    expect(newPresetIds).toEqual([{ id: 'kimi' }, { id: 'pi' }, { id: 'qwen' }, { id: 'zcode' }])
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(19)).toEqual({
       version: 19,
     })
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(20)).toEqual({
       version: 20,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(21)).toEqual({
+      version: 21,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })
@@ -229,6 +232,57 @@ describe('schema version', () => {
     expect(rows).toEqual([{ id: 'kimi' }, { id: 'qwen' }, { id: 'zcode' }])
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(20)).toEqual({
       version: 20,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(21)).toEqual({
+      version: 21,
+    })
+    db.close()
+  })
+
+  test('v21 migration backfills Pi without replacing existing preset settings', () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-schema-pi-cli-'))
+    tempDirs.push(dataDir)
+
+    const db = new Database(join(dataDir, 'runtime.sqlite'))
+    db.exec(`
+      CREATE TABLE schema_version (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      );
+      CREATE TABLE command_presets (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        command TEXT NOT NULL,
+        args TEXT NOT NULL,
+        env TEXT NOT NULL,
+        resume_args_template TEXT,
+        session_id_capture TEXT,
+        yolo_args_template TEXT,
+        is_builtin INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `)
+    const insertVersion = db.prepare(
+      'INSERT INTO schema_version (version, applied_at) VALUES (?, ?)'
+    )
+    for (let version = 1; version <= 20; version += 1) insertVersion.run(version, version)
+    db.prepare(
+      `INSERT INTO command_presets (
+         id, display_name, command, args, env, is_builtin, created_at, updated_at
+       ) VALUES (?, ?, ?, '[]', '{}', 0, 1, 1)`
+    ).run('custom', 'Custom CLI', 'custom-agent')
+
+    initializeRuntimeDatabase(db)
+
+    expect(
+      db.prepare("SELECT command, yolo_args_template FROM command_presets WHERE id = 'pi'").get()
+    ).toEqual({ command: 'pi', yolo_args_template: '["--approve"]' })
+    expect(db.prepare("SELECT is_builtin FROM command_presets WHERE id = 'custom'").get()).toEqual({
+      is_builtin: 0,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(21)).toEqual({
+      version: 21,
     })
     db.close()
   })

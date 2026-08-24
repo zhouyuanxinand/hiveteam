@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -21,7 +21,23 @@ const copyDirRequired = (source, target) => {
     throw new Error(`Missing required build artifact source: ${source}`)
   }
   const targetPath = join(root, target)
-  cpSync(sourcePath, targetPath, { recursive: true })
+  const copyDirectory = (from, to) => {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const fromPath = join(from, entry.name)
+      const toPath = join(to, entry.name)
+      if (entry.isDirectory()) {
+        copyDirectory(fromPath, toPath)
+      } else if (entry.isFile()) {
+        copyFileSync(fromPath, toPath)
+      }
+    }
+  }
+
+  // Node's fs.cpSync can crash on Windows while recursively copying the
+  // Marketplace bundle. Copying entries explicitly has the same packaged
+  // result while keeping `pnpm build` reliable on Windows.
+  copyDirectory(sourcePath, targetPath)
 }
 
 mkdirSync(distBin, { recursive: true })
