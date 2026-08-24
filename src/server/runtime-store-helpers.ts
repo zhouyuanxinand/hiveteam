@@ -7,6 +7,7 @@ import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
 import { createMessageLogStore } from './message-log-store.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import { createReportOutboxStore } from './report-outbox-store.js'
 import { openRuntimeDatabase } from './runtime-database.js'
 import { buildRuntimeRestartPolicy } from './runtime-restart-policy.js'
 import { createSettingsStore } from './settings-store.js'
@@ -25,6 +26,7 @@ export interface RuntimeStoreServices {
   db: ReturnType<typeof openRuntimeDatabase>
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
+  reportOutbox: ReturnType<typeof createReportOutboxStore>
   settings: ReturnType<typeof createSettingsStore>
   shellRuntime: ReturnType<typeof createWorkspaceShellRuntime>
   tasksFileWatcher: ReturnType<typeof createTasksFileWatcher>
@@ -62,6 +64,7 @@ export const createRuntimeStoreServices = (
   const db = openRuntimeDatabase(options.dataDir)
   const messageLogStore = createMessageLogStore(db)
   const dispatchLedgerStore = createDispatchLedgerStore(db)
+  const reportOutbox = createReportOutboxStore(db)
   const agentRunStore = createAgentRunStore(db)
   const agentSessionStore = createAgentSessionStore(db)
   const settings = createSettingsStore(db)
@@ -116,6 +119,8 @@ export const createRuntimeStoreServices = (
     markDispatchCancelled: dispatchLedgerStore.markCancelled,
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
+    reportOutbox,
+    runDataMutation: (mutation) => db.transaction(mutation)(),
     workspaceStore,
   })
   startExistingWorkspaceWatches()
@@ -126,6 +131,7 @@ export const createRuntimeStoreServices = (
     db,
     dispatchLedgerStore,
     messageLogStore,
+    reportOutbox,
     settings,
     shellRuntime,
     tasksFileWatcher,

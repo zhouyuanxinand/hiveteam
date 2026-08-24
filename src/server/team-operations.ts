@@ -1,7 +1,9 @@
 import type { AgentRuntime } from './agent-runtime.js'
+import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
-import { ConflictError, PtyInactiveError } from './http-errors.js'
+import { ConflictError } from './http-errors.js'
 import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
+import type { ReportOutboxStore } from './report-outbox-store.js'
 import {
   createReportMessage,
   createSendMessage,
@@ -40,6 +42,8 @@ export interface TeamOperationsInput {
     workspaceId: string
   }) => DispatchRecord | undefined
   markDispatchSubmitted: (dispatchId: string) => void
+  reportOutbox?: ReportOutboxStore
+  runDataMutation?: (mutation: () => void) => void
   workspaceStore: WorkspaceStore
 }
 
@@ -68,10 +72,13 @@ export interface CancelTaskInput {
 }
 
 export interface ReportTaskResult {
+  deliveryState?: ReportDeliveryState
   dispatch: DispatchRecord | null
   forwardError: string | null
   forwarded: boolean
 }
+
+export type ReportDeliveryState = 'delivering' | 'queued' | 'failed'
 
 const reportForwardErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
@@ -87,8 +94,55 @@ export const createTeamOperations = ({
   markDispatchCancelled,
   markDispatchReportedByWorker,
   markDispatchSubmitted,
+  reportOutbox,
+  runDataMutation,
   workspaceStore,
 }: TeamOperationsInput) => {
+  const runMutation = runDataMutation ?? ((mutation: () => void) => mutation())
+  const drainingReportOutboxIds = new Set<number>()
+
+  /**
+   * Leave entries pending until the terminal input writer has pasted and
+   * submitted them. A stopped Orchestrator is normal here: its next `team
+   * list` call will retry the same durable entry.
+   */
+  const drainReportOutbox = (
+    workspaceId: string,
+    targetAgentId = `${workspaceId}:orchestrator`
+  ) => {
+    if (!reportOutbox || !agentRuntime.getActiveRunByAgentId(workspaceId, targetAgentId)) {
+      return { attempted: 0, firstSyncError: null }
+    }
+
+    let attempted = 0
+    let firstSyncError: string | null = null
+    for (const entry of reportOutbox.listPending(workspaceId, targetAgentId)) {
+      if (drainingReportOutboxIds.has(entry.id)) continue
+      drainingReportOutboxIds.add(entry.id)
+      attempted += 1
+      try {
+        void agentRuntime
+          .deliverSystemMessageToAgent(workspaceId, targetAgentId, entry.payload, {
+            requireActiveRun: true,
+          })
+          .then(() => {
+            reportOutbox.markDelivered(entry.id)
+          })
+          .catch((error: unknown) => {
+            console.error('[hive] swallowed:teamReport.outboxDrain', error)
+          })
+          .finally(() => {
+            drainingReportOutboxIds.delete(entry.id)
+          })
+      } catch (error) {
+        drainingReportOutboxIds.delete(entry.id)
+        firstSyncError ??= reportForwardErrorMessage(error)
+        console.error('[hive] swallowed:teamReport.outboxDrain', error)
+      }
+    }
+    return { attempted, firstSyncError }
+  }
+
   const ensureWorkerRun = async (workspaceId: string, workerId: string, hivePort: string) => {
     if (agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) {
       return
@@ -192,6 +246,7 @@ export const createTeamOperations = ({
       return { dispatch, forwardError, forwarded }
     },
     dispatchTask,
+    drainReportOutbox,
     dispatchTaskByWorkerName(
       workspaceId: string,
       workerName: string,
@@ -238,12 +293,6 @@ export const createTeamOperations = ({
       const status = input.status
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
-      if (
-        input.requireActiveRun === true &&
-        !agentRuntime.getActiveRunByAgentId(workspaceId, `${workspaceId}:orchestrator`)
-      ) {
-        throw new PtyInactiveError(`No active run for agent: ${workspaceId}:orchestrator`)
-      }
       const openDispatch = findOpenDispatch(workspaceId, workerId, input.dispatchId)
       if (!openDispatch && input.dispatchId) {
         throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
@@ -251,24 +300,84 @@ export const createTeamOperations = ({
       if (!openDispatch) {
         throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
       }
-      const messageHandle = insertMessage(
-        createReportMessage(workspaceId, workerId, text, status, artifacts)
-      )
+      const orchestratorId = `${workspaceId}:orchestrator`
+      const shouldQueueForOrchestrator =
+        input.requireActiveRun === true && reportOutbox !== undefined
+      const payload = buildOrchestratorReportPayload(worker.name, text, artifacts)
+      let messageHandle: MessageLogHandle | undefined
+      let dispatch: DispatchRecord | undefined
+      let reportQueuedBeforeCommit = false
+
+      if (
+        shouldQueueForOrchestrator &&
+        agentRuntime.getActiveRunByAgentId(workspaceId, orchestratorId)
+      ) {
+        drainReportOutbox(workspaceId, orchestratorId)
+      }
+
       try {
-        const dispatch = markDispatchReportedByWorker({
-          artifacts,
-          ...(input.dispatchId ? { dispatchId: input.dispatchId } : {}),
-          reportText: text,
-          toAgentId: workerId,
-          workspaceId,
+        runMutation(() => {
+          messageHandle = insertMessage(
+            createReportMessage(workspaceId, workerId, text, status, artifacts)
+          )
+          if (shouldQueueForOrchestrator) {
+            reportOutbox.enqueue({
+              dispatchId: openDispatch.id,
+              payload,
+              targetAgentId: orchestratorId,
+              workspaceId,
+            })
+            reportQueuedBeforeCommit = true
+          }
+          const nextDispatch = markDispatchReportedByWorker({
+            artifacts,
+            ...(input.dispatchId ? { dispatchId: input.dispatchId } : {}),
+            reportText: text,
+            toAgentId: workerId,
+            workspaceId,
+          })
+          if (!nextDispatch) {
+            throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
+          }
+          dispatch = nextDispatch
         })
-        if (!dispatch) {
-          throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
+      } catch (error) {
+        if (!runDataMutation) {
+          if (reportQueuedBeforeCommit) {
+            try {
+              reportOutbox?.deletePendingForDispatch(openDispatch.id)
+            } catch (rollbackError) {
+              console.error('[hive] swallowed:teamReport.outboxRollback', rollbackError)
+            }
+          }
+          if (messageHandle) deleteMessage(messageHandle)
         }
-        workspaceStore.markTaskReported(workspaceId, workerId)
-        let forwardError: string | null = null
-        let forwarded = false
-        if (input.requireActiveRun === true) {
+        throw error
+      }
+
+      if (!dispatch) throw new Error('Report dispatch was not committed')
+
+      workspaceStore.markTaskReported(workspaceId, workerId)
+      let deliveryState: ReportDeliveryState | undefined
+      let forwardError: string | null = null
+      let forwarded = false
+      if (input.requireActiveRun === true) {
+        if (shouldQueueForOrchestrator) {
+          if (agentRuntime.getActiveRunByAgentId(workspaceId, orchestratorId)) {
+            const drainResult = drainReportOutbox(workspaceId, orchestratorId)
+            if (drainResult.firstSyncError) {
+              deliveryState = reportQueuedBeforeCommit ? 'queued' : 'failed'
+              forwardError = drainResult.firstSyncError
+            } else {
+              deliveryState = 'delivering'
+            }
+          } else {
+            deliveryState = reportQueuedBeforeCommit ? 'queued' : 'failed'
+            forwardError = reportQueuedBeforeCommit
+              ? 'Orchestrator is not running; report queued for delivery.'
+              : 'Orchestrator is not running; report could not be queued for delivery.'
+          }
+        } else {
           try {
             agentRuntime.writeReportPrompt(workspaceId, worker.name, workerId, text, artifacts, {
               requireActiveRun: input.requireActiveRun,
@@ -279,10 +388,12 @@ export const createTeamOperations = ({
             console.error('[hive] swallowed:teamReport.forward', error)
           }
         }
-        return { dispatch, forwardError, forwarded }
-      } catch (error) {
-        deleteMessage(messageHandle)
-        throw error
+      }
+      return {
+        ...(deliveryState ? { deliveryState } : {}),
+        dispatch,
+        forwardError,
+        forwarded,
       }
     },
   }

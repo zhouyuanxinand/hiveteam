@@ -112,6 +112,22 @@ export const initializeRuntimeDatabase = (db: Database) => {
 
     CREATE INDEX IF NOT EXISTS idx_dispatches_open_by_worker
       ON dispatches (workspace_id, to_agent_id, status, sequence);
+
+    -- This table also exists in the published 2.1.19 runtime. Keep it in the
+    -- unconditional bootstrap block so databases that already recorded newer
+    -- schema versions (v22+) still receive it when opened by this branch.
+    CREATE TABLE IF NOT EXISTS report_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      target_agent_id TEXT NOT NULL,
+      dispatch_id TEXT NOT NULL UNIQUE,
+      payload TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      delivered_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_report_outbox_pending
+      ON report_outbox (workspace_id, target_agent_id, delivered_at, created_at);
   `)
 
   const versions = db

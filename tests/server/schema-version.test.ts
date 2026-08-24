@@ -101,6 +101,16 @@ describe('schema version', () => {
         (column) => column.name
       )
     )
+    const reportOutboxColumns = new Set(
+      (db.prepare('PRAGMA table_info(report_outbox)').all() as Array<{ name: string }>).map(
+        (column) => column.name
+      )
+    )
+    const reportOutboxIndexes = new Set(
+      (db.prepare('PRAGMA index_list(report_outbox)').all() as Array<{ name: string }>).map(
+        (index) => index.name
+      )
+    )
 
     expect(workerColumns.has('last_session_id')).toBe(true)
     expect(agentRunColumns.has('pid')).toBe(true)
@@ -158,6 +168,18 @@ describe('schema version', () => {
         'artifacts',
       ])
     )
+    expect(reportOutboxColumns).toEqual(
+      new Set([
+        'id',
+        'workspace_id',
+        'target_agent_id',
+        'dispatch_id',
+        'payload',
+        'created_at',
+        'delivered_at',
+      ])
+    )
+    expect(reportOutboxIndexes.has('idx_report_outbox_pending')).toBe(true)
     expectDispatchSchema(db)
 
     const presetCount = db

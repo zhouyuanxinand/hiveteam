@@ -87,6 +87,7 @@ export const teamRoutes: RouteDefinition[] = [
         status: body.status,
       })
       sendJson(response, 202, {
+        ...(result.deliveryState ? { delivery_state: result.deliveryState } : {}),
         dispatch_id: result.dispatch?.id ?? null,
         forward_error: result.forwardError,
         forwarded: result.forwarded,
@@ -96,6 +97,7 @@ export const teamRoutes: RouteDefinition[] = [
     } else {
       const result = store.reportTask(projectId, fromAgentId, reportInput)
       sendJson(response, 202, {
+        ...(result.deliveryState ? { delivery_state: result.deliveryState } : {}),
         dispatch_id: result.dispatch?.id ?? null,
         forward_error: result.forwardError,
         forwarded: result.forwarded,

@@ -46,6 +46,9 @@ const canTimeoutBeforePromptReady = (command: string) => getCommandName(command)
 const isWritableRunStatus = (status: string | undefined) =>
   status === undefined || status === 'starting' || status === 'running'
 
+const createRunInactiveError = (runId: string) =>
+  new Error(`Run became inactive before input was submitted: ${runId}`)
+
 const writeIfRunWritable = (agentManager: AgentManager, runId: string, text: string) => {
   let run: ReturnType<AgentManager['getRun']>
   try {
@@ -113,13 +116,145 @@ const submitPastedInteractiveInput = (
   setTimeout(trySubmit, minDelay)
 }
 
+/**
+ * The regular post-start writer intentionally has fire-and-forget semantics:
+ * startup guidance should never keep an agent launch pending. Report outbox
+ * delivery needs a stronger signal, though, so it can retain an entry until
+ * the paste and final Enter were both accepted by the live PTY.
+ */
+const submitPastedInteractiveInputAwaitable = (
+  agentManager: AgentManager,
+  runId: string,
+  text: string,
+  baselineLength: number,
+  waitForPasteAck: boolean
+) =>
+  new Promise<void>((resolve, reject) => {
+    const pastedAt = Date.now()
+    const minDelay = getSubmitAfterPasteDelayMs(text)
+    let acknowledgedAt: number | null = null
+
+    const getWritableOutput = () => {
+      try {
+        const run = agentManager.getRun(runId)
+        return isWritableRunStatus(run.status) ? run.output : null
+      } catch {
+        return null
+      }
+    }
+
+    const submit = () => {
+      try {
+        if (!writeIfRunWritable(agentManager, runId, '\r')) {
+          reject(createRunInactiveError(runId))
+          return
+        }
+        resolve()
+      } catch (error) {
+        reject(error)
+      }
+    }
+
+    const trySubmit = () => {
+      if (!waitForPasteAck) {
+        submit()
+        return
+      }
+
+      const output = getWritableOutput()
+      if (output === null) {
+        reject(createRunInactiveError(runId))
+        return
+      }
+      if (acknowledgedAt === null && hasBracketedPasteAcknowledgement(output, baselineLength)) {
+        acknowledgedAt = Date.now()
+      }
+
+      const elapsed = Date.now() - pastedAt
+      const ackSettled =
+        acknowledgedAt !== null && Date.now() - acknowledgedAt >= PASTE_ACK_SETTLE_DELAY_MS
+      if ((ackSettled && elapsed >= minDelay) || elapsed >= PASTE_ACK_TIMEOUT_MS) {
+        submit()
+        return
+      }
+      setTimeout(trySubmit, PASTE_ACK_CHECK_INTERVAL_MS)
+    }
+
+    setTimeout(trySubmit, minDelay)
+  })
+
+export const createAwaitablePostStartInputWriter = (
+  agentManager: AgentManager,
+  command: string
+): ((runId: string, text: string) => Promise<void>) => {
+  if (!isInteractiveAgentCommand(command)) {
+    return (runId, text) => {
+      try {
+        if (!writeIfRunWritable(agentManager, runId, `${text}\r`)) {
+          return Promise.reject(createRunInactiveError(runId))
+        }
+        return Promise.resolve()
+      } catch (error) {
+        return Promise.reject(error)
+      }
+    }
+  }
+
+  return (runId, text) =>
+    new Promise<void>((resolve, reject) => {
+      const startedAt = Date.now()
+
+      const tryWrite = () => {
+        let output: string | null
+        try {
+          const run = agentManager.getRun(runId)
+          output = isWritableRunStatus(run.status) ? run.output : null
+        } catch (error) {
+          reject(error)
+          return
+        }
+        if (output === null) {
+          reject(createRunInactiveError(runId))
+          return
+        }
+        if (
+          hasInteractivePromptReady(output, command) ||
+          (canTimeoutBeforePromptReady(command) && Date.now() - startedAt >= READY_TIMEOUT_MS)
+        ) {
+          const baselineLength = output.length
+          const input = usesBracketedPaste(command) ? toBracketedPasteSubmission(text) : text
+          try {
+            if (!writeIfRunWritable(agentManager, runId, input)) {
+              reject(createRunInactiveError(runId))
+              return
+            }
+          } catch (error) {
+            reject(error)
+            return
+          }
+          submitPastedInteractiveInputAwaitable(
+            agentManager,
+            runId,
+            text,
+            baselineLength,
+            isClaudeCommand(command)
+          ).then(resolve, reject)
+          return
+        }
+        setTimeout(tryWrite, READY_CHECK_INTERVAL_MS)
+      }
+
+      tryWrite()
+    })
+}
+
 export const createPostStartInputWriter = (
   agentManager: AgentManager,
   command: string
 ): ((runId: string, text: string) => void) => {
   if (!isInteractiveAgentCommand(command)) {
     return (runId, text) => {
-      writeIfRunWritable(agentManager, runId, `${text}\n`)
+      writeIfRunWritable(agentManager, runId, `${text}\r`)
     }
   }
 

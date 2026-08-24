@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
+  createAwaitablePostStartInputWriter,
   createPostStartInputWriter,
   hasBracketedPasteAcknowledgement,
   hasInteractivePromptReady,
@@ -27,6 +28,25 @@ describe('post-start input writer', () => {
     ).toBe(true)
     const oldOutput = `${baseline}old [Pasted text #1]`
     expect(hasBracketedPasteAcknowledgement(oldOutput, oldOutput.length)).toBe(false)
+  })
+
+  test('awaitable writer resolves only after the interactive paste is submitted', async () => {
+    vi.useFakeTimers()
+    let output = 'Welcome back\n❯ '
+    const manager = {
+      getRun: vi.fn(() => ({ output, status: 'running' })),
+      writeInput: vi.fn(),
+    }
+
+    const write = createAwaitablePostStartInputWriter(manager as never, 'claude')
+    const delivered = write('run-1', 'payload')
+    expect(manager.writeInput).toHaveBeenCalledWith('run-1', '\u001b[200~payload\u001b[201~')
+
+    output += '[Pasted text #1 +1 lines]\n'
+    vi.advanceTimersByTime(700)
+
+    await expect(delivered).resolves.toBeUndefined()
+    expect(manager.writeInput).toHaveBeenLastCalledWith('run-1', '\r')
   })
 
   test('defers Claude input until prompt and paste acknowledgement are ready, then submits Enter', () => {
@@ -178,7 +198,7 @@ describe('post-start input writer', () => {
     write('run-1', 'payload')
 
     expect(manager.getRun).toHaveBeenCalledWith('run-1')
-    expect(manager.writeInput).toHaveBeenCalledWith('run-1', 'payload\n')
+    expect(manager.writeInput).toHaveBeenCalledWith('run-1', 'payload\r')
   })
 
   test('skips non-interactive post-start input after the run exits', () => {

@@ -133,6 +133,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       }
       await services.tasksFileWatcher.stop(workspaceId)
       runDataMutation(() => {
+        services.reportOutbox.deleteWorkspaceEntries(workspaceId)
         services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
         services.workspaceStore.deleteWorkspace(workspaceId)
       })
@@ -148,6 +149,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
       services.agentRuntime.deleteAgentLaunchConfig(workspaceId, workerId)
       runDataMutation(() => {
+        services.reportOutbox.deleteWorkerEntries(workspaceId, workerId)
         services.dispatchLedgerStore.deleteWorkerDispatches(workspaceId, workerId)
         services.workspaceStore.deleteWorker(workspaceId, workerId)
       })
@@ -159,7 +161,12 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     reportTask: services.teamOps.reportTask,
     statusTask: services.teamOps.statusTask,
     listDispatches: services.dispatchLedgerStore.listWorkspaceDispatches,
-    listWorkers: (workspaceId) => services.workspaceStore.listWorkers(workspaceId),
+    listWorkers: (workspaceId) => {
+      // `team list` is the Orchestrator's normal first call after a restart.
+      // Use it as the durable report replay trigger.
+      services.teamOps.drainReportOutbox(workspaceId)
+      return services.workspaceStore.listWorkers(workspaceId)
+    },
     getLastPtyLineForAgent: (workspaceId, agentId) =>
       services.workerOutputTracker?.getLastPtyLine(workspaceId, agentId) ?? null,
     getWorkspaceSnapshot: (workspaceId) =>

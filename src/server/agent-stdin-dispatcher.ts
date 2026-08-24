@@ -4,7 +4,10 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import { buildWorkerReminderTail, ORCHESTRATOR_REMINDER_TAIL } from './hive-team-guidance.js'
 import { PtyInactiveError } from './http-errors.js'
 import type { LiveRunRegistry } from './live-run-registry.js'
-import { createPostStartInputWriter } from './post-start-input-writer.js'
+import {
+  createAwaitablePostStartInputWriter,
+  createPostStartInputWriter,
+} from './post-start-input-writer.js'
 
 interface AgentStdinDispatcherInput {
   agentManager: AgentManager | undefined
@@ -81,13 +84,8 @@ export const createAgentStdinDispatcher = ({
   registry,
   syncRun,
 }: AgentStdinDispatcherInput) => {
-  const writeToActiveAgentRun = (
-    workspaceId: string,
-    agentId: string,
-    text: string,
-    input: { requireActiveRun?: boolean } = {}
-  ) => {
-    const run = registry
+  const findActiveAgentRun = (workspaceId: string, agentId: string) =>
+    registry
       .list()
       .filter((item) => item.agentId === agentId && getWorkspaceId(item.agentId) === workspaceId)
       .sort((left, right) => right.startedAt - left.startedAt)
@@ -95,6 +93,14 @@ export const createAgentStdinDispatcher = ({
         const status = syncRun(item).status
         return status === 'starting' || status === 'running'
       })
+
+  const writeToActiveAgentRun = (
+    workspaceId: string,
+    agentId: string,
+    text: string,
+    input: { requireActiveRun?: boolean } = {}
+  ) => {
+    const run = findActiveAgentRun(workspaceId, agentId)
     if (!run) {
       if (input.requireActiveRun) {
         throw new PtyInactiveError(`No active run for agent: ${agentId}`)
@@ -114,6 +120,42 @@ export const createAgentStdinDispatcher = ({
       }
     } catch (error) {
       throw new PtyInactiveError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const deliverToActiveAgentRun = (
+    workspaceId: string,
+    agentId: string,
+    text: string,
+    input: { requireActiveRun?: boolean } = {}
+  ): Promise<void> => {
+    const run = findActiveAgentRun(workspaceId, agentId)
+    if (!run) {
+      if (input.requireActiveRun) {
+        return Promise.reject(new PtyInactiveError(`No active run for agent: ${agentId}`))
+      }
+      return Promise.resolve()
+    }
+
+    try {
+      const config = getLaunchConfig(workspaceId, agentId)
+      if (agentManager && config) {
+        return createAwaitablePostStartInputWriter(
+          agentManager,
+          config.interactiveCommand ?? config.command
+        )(run.runId, text).catch((error: unknown) => {
+          throw new PtyInactiveError(error instanceof Error ? error.message : String(error))
+        })
+      }
+      if (!agentManager) {
+        return Promise.reject(new PtyInactiveError(`Agent manager is unavailable for: ${agentId}`))
+      }
+      agentManager.writeInput(run.runId, text)
+      return Promise.resolve()
+    } catch (error) {
+      return Promise.reject(
+        new PtyInactiveError(error instanceof Error ? error.message : String(error))
+      )
     }
   }
 
@@ -181,6 +223,14 @@ export const createAgentStdinDispatcher = ({
         `${workspaceId}:orchestrator`,
         buildOrchestratorUserInputPayload(text)
       )
+    },
+    deliverSystemMessageToAgent(
+      workspaceId: string,
+      agentId: string,
+      text: string,
+      input: { requireActiveRun?: boolean } = {}
+    ) {
+      return deliverToActiveAgentRun(workspaceId, agentId, text, input)
     },
   }
 }

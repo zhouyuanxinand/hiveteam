@@ -36,6 +36,16 @@ export interface AgentRuntime {
   ) => Promise<LiveAgentRun>
   stopAgentRun: (runId: string) => void
   validateAgentToken: AgentTokenRegistry['validate']
+  /**
+   * Resolves only after a live terminal accepted the opaque system message.
+   * Report outbox entries use this acknowledgement before becoming delivered.
+   */
+  deliverSystemMessageToAgent: (
+    workspaceId: string,
+    agentId: string,
+    text: string,
+    input?: { requireActiveRun?: boolean }
+  ) => Promise<void>
   writeReportPrompt: (
     workspaceId: string,
     workerName: string,
