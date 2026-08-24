@@ -6,6 +6,7 @@ import type { AgentTokenRegistry } from './agent-tokens.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 
 interface StartAgentOptions {
+  autoResume?: boolean
   hivePort: string
 }
 

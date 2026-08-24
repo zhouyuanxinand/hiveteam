@@ -214,6 +214,8 @@ const enMessages = {
   'worker.deleteDescription':
     "This stops {name}'s terminal and removes it from the workspace. All queued dispatches are dropped.",
   'worker.deleteMember': 'Delete member',
+  'worker.autoResume': 'Auto-resume after runtime restart',
+  'worker.autoResumeAria': 'Automatically resume this workspace after a Hive runtime restart',
   'worker.changeModel': 'Change model',
   'worker.modelPickerOpened': '{command} sent. Choose a model in the native CLI picker.',
   'worker.modelPickerFailed': 'Could not open the model picker: {message}',
@@ -598,6 +600,8 @@ const zhMessages: Record<TranslationKey, string> = {
   'worker.deleteConfirm': '删除 {name}？',
   'worker.deleteDescription': '这会停止 {name} 的终端，并从 workspace 中移除它。排队任务会被丢弃。',
   'worker.deleteMember': '删除成员',
+  'worker.autoResume': '运行时重启后自动恢复',
+  'worker.autoResumeAria': 'Hive 运行时重启后自动恢复此 workspace',
   'worker.changeModel': '更换模型',
   'worker.modelPickerOpened': '已发送 {command}，请在原生 CLI 选择模型。',
   'worker.modelPickerFailed': '无法打开模型选择器：{message}',

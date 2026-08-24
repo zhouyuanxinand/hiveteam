@@ -192,6 +192,9 @@ export const runHiveCommand = async (
   process.once('SIGINT', gracefulShutdown)
 
   console.log(`Hive running at http://127.0.0.1:${address.port}`)
+  void app.store
+    .autoResumeInterruptedAgents({ hivePort: String(address.port) })
+    .catch((error) => console.error('[hive] auto-resume bootstrap failed', error))
   void maybePrintUpdateHint(versionService).catch(() => {})
 
   return {

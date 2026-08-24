@@ -30,6 +30,7 @@ export const initializeRuntimeDatabase = (db: Database) => {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       path TEXT NOT NULL,
+      auto_resume INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL
     );
 
@@ -79,6 +80,7 @@ export const initializeRuntimeDatabase = (db: Database) => {
       exit_code INTEGER,
       started_at INTEGER NOT NULL,
       ended_at INTEGER,
+      consecutive_fast_exits INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -129,6 +131,24 @@ export const initializeRuntimeDatabase = (db: Database) => {
     CREATE INDEX IF NOT EXISTS idx_report_outbox_pending
       ON report_outbox (workspace_id, target_agent_id, delivered_at, created_at);
   `)
+
+  const workspaceColumns = new Set(
+    (db.prepare('PRAGMA table_info(workspaces)').all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  )
+  if (!workspaceColumns.has('auto_resume')) {
+    db.exec('ALTER TABLE workspaces ADD COLUMN auto_resume INTEGER NOT NULL DEFAULT 1')
+  }
+
+  const agentRunColumns = new Set(
+    (db.prepare('PRAGMA table_info(agent_runs)').all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  )
+  if (!agentRunColumns.has('consecutive_fast_exits')) {
+    db.exec('ALTER TABLE agent_runs ADD COLUMN consecutive_fast_exits INTEGER NOT NULL DEFAULT 0')
+  }
 
   const versions = db
     .prepare('SELECT version FROM schema_version ORDER BY version ASC')

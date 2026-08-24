@@ -5,7 +5,7 @@ interface AutostartPort {
   startAgent: (
     workspaceId: string,
     agentId: string,
-    input: { hivePort: string }
+    input: { autoResume?: boolean; hivePort: string }
   ) => Promise<{ runId: string; status: string; exitCode: number | null }>
   getLiveRun: (runId: string) => { status: string; exitCode: number | null }
   peekAgentLaunchConfig: (

@@ -61,6 +61,11 @@ describe('schema version', () => {
     stores.push(createRuntimeStore({ dataDir }))
 
     const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    const workspaceColumns = new Set(
+      (db.prepare('PRAGMA table_info(workspaces)').all() as Array<{ name: string }>).map(
+        (column) => column.name
+      )
+    )
     const workerColumns = new Set(
       (db.prepare('PRAGMA table_info(workers)').all() as Array<{ name: string }>).map(
         (column) => column.name
@@ -113,8 +118,10 @@ describe('schema version', () => {
     )
 
     expect(workerColumns.has('last_session_id')).toBe(true)
+    expect(workspaceColumns.has('auto_resume')).toBe(true)
     expect(agentRunColumns.has('pid')).toBe(true)
     expect(agentRunColumns.has('ended_at')).toBe(true)
+    expect(agentRunColumns.has('consecutive_fast_exits')).toBe(true)
     expect(launchConfigColumns.has('command_preset_id')).toBe(true)
     expect(launchConfigColumns.has('interactive_command')).toBe(true)
     expect(launchConfigColumns.has('preset_augmentation_disabled')).toBe(true)

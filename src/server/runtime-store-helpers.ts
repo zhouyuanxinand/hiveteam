@@ -1,5 +1,9 @@
 import type { AgentManager } from './agent-manager.js'
-import { type AgentLaunchConfigInput, createAgentRunStore } from './agent-run-store.js'
+import {
+  type AgentLaunchConfigInput,
+  createAgentRunStore,
+  type InterruptedAgentRun,
+} from './agent-run-store.js'
 import { createAgentRuntime } from './agent-runtime.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
@@ -23,6 +27,7 @@ import { createWorkspaceStore } from './workspace-store.js'
 export interface RuntimeStoreServices {
   agentRunStore: ReturnType<typeof createAgentRunStore>
   agentRuntime: ReturnType<typeof createAgentRuntime>
+  interruptedRuns: InterruptedAgentRun[]
   db: ReturnType<typeof openRuntimeDatabase>
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
@@ -46,6 +51,14 @@ interface CreateRuntimeStoreServicesOptions {
 interface CreateRuntimeStoreLifecycleOptions {
   agentManager?: AgentManager
   services: RuntimeStoreServices
+}
+
+export interface AutoResumeResult {
+  agentId: string
+  error: string | null
+  ok: boolean
+  runId: string | null
+  workspaceId: string
 }
 
 const notifyTasksUpdated = (
@@ -78,6 +91,7 @@ export const createRuntimeStoreServices = (
   const uiAuth = createUiAuth()
   const shellRuntime = createWorkspaceShellRuntime(options.agentManager)
 
+  const interruptedRuns = agentRunStore.listInterruptedRuns()
   agentRunStore.markUnfinishedRunsStale()
 
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
@@ -115,6 +129,10 @@ export const createRuntimeStoreServices = (
     deleteMessage: messageLogStore.deleteMessage,
     findOpenDispatch: dispatchLedgerStore.findOpenDispatch,
     findOpenDispatchById: dispatchLedgerStore.findOpenDispatchById,
+    listOpenWorkspaceDispatches: (workspaceId) =>
+      dispatchLedgerStore
+        .listWorkspaceDispatches(workspaceId)
+        .filter((dispatch) => dispatch.status === 'queued' || dispatch.status === 'submitted'),
     insertMessage: messageLogStore.insertMessage,
     markDispatchCancelled: dispatchLedgerStore.markCancelled,
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
@@ -128,6 +146,7 @@ export const createRuntimeStoreServices = (
   return {
     agentRunStore,
     agentRuntime,
+    interruptedRuns,
     db,
     dispatchLedgerStore,
     messageLogStore,
@@ -148,10 +167,13 @@ export const createRuntimeStoreLifecycle = ({
   agentManager,
   services,
 }: CreateRuntimeStoreLifecycleOptions) => {
+  const AUTO_RESUME_INTERVAL_MS = 500
+  let autoResumePromise: Promise<AutoResumeResult[]> | null = null
+
   const startAgent = async (
     workspaceId: string,
     agentId: string,
-    input: { hivePort: string }
+    input: { autoResume?: boolean; hivePort: string }
   ): Promise<LiveAgentRun> => {
     services.workspaceStore.getAgent(workspaceId, agentId)
     services.workspaceStore.markAgentStarted(workspaceId, agentId)
@@ -165,6 +187,17 @@ export const createRuntimeStoreLifecycle = ({
         services.workspaceStore.markAgentStopped(workspaceId, agentId)
       } else {
         services.workerOutputTracker?.attach(workspaceId, agentId, run.runId, run.output)
+        queueMicrotask(() => {
+          try {
+            services.teamOps.replayQueuedDispatches(workspaceId, agentId)
+          } catch (error) {
+            console.error('[hive] queued dispatch replay failed after agent start', {
+              agentId,
+              error: error instanceof Error ? error.message : String(error),
+              workspaceId,
+            })
+          }
+        })
       }
       return run
     } catch (error) {
@@ -206,6 +239,117 @@ export const createRuntimeStoreLifecycle = ({
         })
     })
     return Promise.all(starts)
+  }
+
+  const autoResumeInterruptedAgents = (input: { hivePort: string }) => {
+    if (autoResumePromise) return autoResumePromise
+
+    autoResumePromise = (async () => {
+      if (!agentManager) return []
+
+      const latestByAgent = new Map<string, InterruptedAgentRun>()
+      for (const candidate of services.interruptedRuns) {
+        const current = latestByAgent.get(`${candidate.workspaceId}:${candidate.agentId}`)
+        if (!current || current.startedAt < candidate.startedAt) {
+          latestByAgent.set(`${candidate.workspaceId}:${candidate.agentId}`, candidate)
+        }
+      }
+
+      const candidates = [...latestByAgent.values()].sort((left, right) => {
+        const leftAgent = services.workspaceStore
+          .getWorkspaceSnapshot(left.workspaceId)
+          .agents.find((agent) => agent.id === left.agentId)
+        const rightAgent = services.workspaceStore
+          .getWorkspaceSnapshot(right.workspaceId)
+          .agents.find((agent) => agent.id === right.agentId)
+        const leftPriority = leftAgent?.role === 'orchestrator' ? 0 : 1
+        const rightPriority = rightAgent?.role === 'orchestrator' ? 0 : 1
+        return leftPriority - rightPriority || left.agentId.localeCompare(right.agentId)
+      })
+
+      const results: AutoResumeResult[] = []
+      for (const [index, candidate] of candidates.entries()) {
+        if (index > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, AUTO_RESUME_INTERVAL_MS))
+        }
+
+        const settings = services.workspaceStore.getWorkspaceRecoverySettings(candidate.workspaceId)
+        if (!settings.autoResumeOnRestart) {
+          console.info(`[hive] auto-resume skipped: workspace ${candidate.workspaceId} is disabled`)
+          results.push({
+            agentId: candidate.agentId,
+            error: 'Workspace auto-resume is disabled.',
+            ok: false,
+            runId: null,
+            workspaceId: candidate.workspaceId,
+          })
+          continue
+        }
+
+        if (candidate.consecutiveFastExits >= 3) {
+          console.warn(
+            `[hive] auto-resume suspended after ${candidate.consecutiveFastExits} fast exits: ${candidate.agentId}`
+          )
+          results.push({
+            agentId: candidate.agentId,
+            error: 'Auto-resume suspended after repeated fast exits; start it manually to retry.',
+            ok: false,
+            runId: null,
+            workspaceId: candidate.workspaceId,
+          })
+          continue
+        }
+
+        if (services.agentRuntime.getActiveRunByAgentId(candidate.workspaceId, candidate.agentId)) {
+          continue
+        }
+        if (
+          !services.agentRuntime.peekAgentLaunchConfig(candidate.workspaceId, candidate.agentId)
+        ) {
+          results.push({
+            agentId: candidate.agentId,
+            error: 'No agent launch config available.',
+            ok: false,
+            runId: null,
+            workspaceId: candidate.workspaceId,
+          })
+          continue
+        }
+
+        try {
+          const run = await startAgent(candidate.workspaceId, candidate.agentId, {
+            autoResume: true,
+            hivePort: input.hivePort,
+          })
+          const ok = run.status !== 'error'
+          console.info(
+            `[hive] auto-resume ${ok ? 'started' : 'failed'}: ${candidate.agentId} (${run.runId})`
+          )
+          results.push({
+            agentId: candidate.agentId,
+            error: ok ? null : `${candidate.agentId} failed to resume`,
+            ok,
+            runId: run.runId,
+            workspaceId: candidate.workspaceId,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          console.error(`[hive] auto-resume failed: ${candidate.agentId}`, error)
+          results.push({
+            agentId: candidate.agentId,
+            error: message,
+            ok: false,
+            runId: null,
+            workspaceId: candidate.workspaceId,
+          })
+        }
+      }
+      return results
+    })().finally(() => {
+      autoResumePromise = null
+    })
+
+    return autoResumePromise
   }
 
   return {
@@ -257,6 +401,7 @@ export const createRuntimeStoreLifecycle = ({
         services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary
       ),
     autostartConfiguredAgents,
+    autoResumeInterruptedAgents,
     registerTasksListener: (listener: (workspaceId: string, content: string) => void) => {
       services.tasksFileWatchCallbacks.add(listener)
       return () => {

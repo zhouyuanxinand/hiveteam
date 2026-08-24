@@ -22,6 +22,7 @@ export interface AgentRunStarterStorePort {
     exitCode: number | null,
     endedAt: number | null
   ) => void
+  resetFastExitCount?: (agentId: string) => void
 }
 
 export interface AgentRunExitContext {

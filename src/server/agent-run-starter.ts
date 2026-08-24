@@ -41,9 +41,11 @@ export const createAgentRunStarter =
     workspace: WorkspaceSummary,
     agentId: string,
     config: AgentLaunchConfigInput,
-    hivePort: string
+    input: { autoResume?: boolean; hivePort: string }
   ) => {
     if (!agentManager) throw new Error('Agent manager is required to start agents')
+
+    if (input.autoResume !== true) store.resetFastExitCount?.(agentId)
 
     const agent = getAgent?.(workspace.id, agentId)
     const { sessionCaptureSnapshot, startConfig, startEnv } = buildAgentRunBootstrap(
@@ -81,7 +83,7 @@ export const createAgentRunStarter =
         NO_COLOR: undefined,
         TERM: 'xterm-256color',
         TERM_PROGRAM: 'hive',
-        HIVE_PORT: hivePort,
+        HIVE_PORT: input.hivePort,
         HIVE_AGENT_TOKEN: token,
       },
       onExit: ({ runId, exitCode }: { runId: string; exitCode: number | null }) => {

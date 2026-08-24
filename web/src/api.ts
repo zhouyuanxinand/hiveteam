@@ -4,6 +4,7 @@ import type {
   TeamListItem,
   TeamListItemPayload,
   WorkerRole,
+  WorkspaceRecoverySettings,
   WorkspaceSummary,
 } from '../../src/shared/types.js'
 
@@ -72,6 +73,37 @@ export const listWorkspaces = async (): Promise<WorkspaceSummary[]> => {
   }
 
   return (await response.json()) as WorkspaceSummary[]
+}
+
+interface WorkspaceRecoverySettingsPayload {
+  auto_resume_on_restart: boolean
+}
+
+export const getWorkspaceRecoverySettings = async (
+  workspaceId: string
+): Promise<WorkspaceRecoverySettings> => {
+  const response = await apiFetch(`/api/workspaces/${workspaceId}/recovery-settings`)
+  if (!response.ok) {
+    throw new Error('Failed to load workspace recovery settings')
+  }
+  const payload = (await response.json()) as WorkspaceRecoverySettingsPayload
+  return { autoResumeOnRestart: payload.auto_resume_on_restart }
+}
+
+export const setWorkspaceAutoResumeOnRestart = async (
+  workspaceId: string,
+  enabled: boolean
+): Promise<WorkspaceRecoverySettings> => {
+  const response = await apiFetch(`/api/workspaces/${workspaceId}/recovery-settings`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ auto_resume_on_restart: enabled }),
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to save workspace recovery settings'))
+  }
+  const payload = (await response.json()) as WorkspaceRecoverySettingsPayload
+  return { autoResumeOnRestart: payload.auto_resume_on_restart }
 }
 
 export interface VersionInfo {

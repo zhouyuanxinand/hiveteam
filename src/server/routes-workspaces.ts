@@ -38,6 +38,47 @@ export const workspaceRoutes: RouteDefinition[] = [
     requireUiTokenFromRequest(request, store.validateUiToken)
     sendJson(response, 200, store.listWorkspaces())
   }),
+  route(
+    'GET',
+    '/api/workspaces/:workspaceId/recovery-settings',
+    ({ params, request, response, store }) => {
+      const workspaceId = getRequiredParam(
+        response,
+        params,
+        'workspaceId',
+        'Workspace id is required'
+      )
+      if (!workspaceId) return
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const settings = store.getWorkspaceRecoverySettings(workspaceId)
+      sendJson(response, 200, {
+        auto_resume_on_restart: settings.autoResumeOnRestart,
+      })
+    }
+  ),
+  route(
+    'PATCH',
+    '/api/workspaces/:workspaceId/recovery-settings',
+    async ({ params, request, response, store }) => {
+      const workspaceId = getRequiredParam(
+        response,
+        params,
+        'workspaceId',
+        'Workspace id is required'
+      )
+      if (!workspaceId) return
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const body = await readJsonBody<{ auto_resume_on_restart?: unknown }>(request)
+      if (typeof body.auto_resume_on_restart !== 'boolean') {
+        sendJson(response, 400, { error: 'auto_resume_on_restart must be a boolean' })
+        return
+      }
+      store.setAutoResumeOnRestart(workspaceId, body.auto_resume_on_restart)
+      sendJson(response, 200, {
+        auto_resume_on_restart: body.auto_resume_on_restart,
+      })
+    }
+  ),
   route('POST', '/api/workspaces', async ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     const body = await readJsonBody<CreateWorkspaceBody>(request)

@@ -2,10 +2,12 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
 import {
+  getWorkspaceRecoverySettings,
   isWorkspaceShellRun,
   type OrchestratorStartResult,
   openModelPicker,
   renameWorker,
+  setWorkspaceAutoResumeOnRestart,
   type TerminalRunSummary,
 } from './api.js'
 import { useI18n } from './i18n.js'
@@ -72,6 +74,8 @@ export const WorkspaceDetail = ({
   const [startWorkerError, setStartWorkerError] = useState<string | null>(null)
   const [startingWorkerId, setStartingWorkerId] = useState<string | null>(null)
   const [terminalPanelHidden, setTerminalPanelHidden] = useState(false)
+  const [autoResumeOnRestart, setAutoResumeOnRestart] = useState<boolean | undefined>(undefined)
+  const [autoResumeBusy, setAutoResumeBusy] = useState(false)
   const toast = useToast()
   const composer = useWorkerComposer({
     createWorker: onCreateWorker,
@@ -147,6 +151,28 @@ export const WorkspaceDetail = ({
     setStartingWorkerId(null)
     setTerminalPanelHidden(false)
   }, [workspace?.id])
+
+  useEffect(() => {
+    let active = true
+    setAutoResumeOnRestart(undefined)
+    const workspaceId = workspace?.id
+    if (!workspaceId) return () => {}
+    void getWorkspaceRecoverySettings(workspaceId)
+      .then((settings) => {
+        if (active) setAutoResumeOnRestart(settings.autoResumeOnRestart)
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          toast.show({
+            kind: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [toast, workspace?.id])
 
   if (!workspace) {
     const welcomeProps: {
@@ -267,7 +293,25 @@ export const WorkspaceDetail = ({
         />
         <div className="relative flex min-w-0 flex-1 flex-col">
           <WorkersPane
+            autoResumeBusy={autoResumeBusy}
+            autoResumeOnRestart={autoResumeOnRestart}
             onAddWorkerClick={() => setComposerOpen(true)}
+            onAutoResumeChange={(enabled) => {
+              if (!workspace) return
+              const previous = autoResumeOnRestart
+              setAutoResumeOnRestart(enabled)
+              setAutoResumeBusy(true)
+              void setWorkspaceAutoResumeOnRestart(workspace.id, enabled)
+                .then((settings) => setAutoResumeOnRestart(settings.autoResumeOnRestart))
+                .catch((error: unknown) => {
+                  setAutoResumeOnRestart(previous)
+                  toast.show({
+                    kind: 'error',
+                    message: error instanceof Error ? error.message : String(error),
+                  })
+                })
+                .finally(() => setAutoResumeBusy(false))
+            }}
             onDeleteWorker={handleDeleteWorker}
             onOpenShellTerminal={openShellTerminal}
             onOpenWorker={(worker) => setActiveWorkerId(worker.id)}

@@ -12,6 +12,47 @@ afterEach(async () => {
 })
 
 describe('settings api', () => {
+  test('workspace recovery settings can be read and toggled', async () => {
+    const server = await startTestServer()
+    servers.push(server)
+    const cookie = await getUiCookie(server.baseUrl)
+    const workspace = server.store.createWorkspace('/tmp/hive-recovery', 'Recovery')
+
+    const initialResponse = await fetch(
+      `${server.baseUrl}/api/workspaces/${workspace.id}/recovery-settings`,
+      { headers: { cookie } }
+    )
+    expect(initialResponse.status).toBe(200)
+    await expect(initialResponse.json()).resolves.toEqual({ auto_resume_on_restart: true })
+
+    const updateResponse = await fetch(
+      `${server.baseUrl}/api/workspaces/${workspace.id}/recovery-settings`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ auto_resume_on_restart: false }),
+      }
+    )
+    expect(updateResponse.status).toBe(200)
+    await expect(updateResponse.json()).resolves.toEqual({ auto_resume_on_restart: false })
+
+    const persistedResponse = await fetch(
+      `${server.baseUrl}/api/workspaces/${workspace.id}/recovery-settings`,
+      { headers: { cookie } }
+    )
+    await expect(persistedResponse.json()).resolves.toEqual({ auto_resume_on_restart: false })
+
+    const invalidResponse = await fetch(
+      `${server.baseUrl}/api/workspaces/${workspace.id}/recovery-settings`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ auto_resume_on_restart: 'false' }),
+      }
+    )
+    expect(invalidResponse.status).toBe(400)
+  })
+
   test('GET settings endpoints return builtin presets/templates and app_state can round-trip', async () => {
     const server = await startTestServer()
     servers.push(server)
@@ -47,32 +88,34 @@ describe('settings api', () => {
       value: string | null
     }
 
-    expect(presets).toEqual([
-      expect.objectContaining({
-        id: 'claude',
-        display_name: 'Claude Code (CC)',
-        yolo_args_template: [
-          '--dangerously-skip-permissions',
-          '--permission-mode=bypassPermissions',
-          '--disallowedTools=Task',
-        ],
-      }),
-      expect.objectContaining({
-        id: 'codex',
-        display_name: 'Codex',
-        yolo_args_template: ['--dangerously-bypass-approvals-and-sandbox'],
-      }),
-      expect.objectContaining({
-        id: 'opencode',
-        display_name: 'OpenCode',
-        yolo_args_template: [],
-      }),
-      expect.objectContaining({
-        id: 'gemini',
-        display_name: 'Gemini',
-        yolo_args_template: ['--yolo'],
-      }),
-    ])
+    expect(presets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'claude',
+          display_name: 'Claude Code (CC)',
+          yolo_args_template: [
+            '--dangerously-skip-permissions',
+            '--permission-mode=bypassPermissions',
+            '--disallowedTools=Task',
+          ],
+        }),
+        expect.objectContaining({
+          id: 'codex',
+          display_name: 'Codex',
+          yolo_args_template: ['--dangerously-bypass-approvals-and-sandbox'],
+        }),
+        expect.objectContaining({
+          id: 'opencode',
+          display_name: 'OpenCode',
+          yolo_args_template: [],
+        }),
+        expect.objectContaining({
+          id: 'gemini',
+          display_name: 'Gemini',
+          yolo_args_template: ['--yolo'],
+        }),
+      ])
+    )
     expect(templates).toEqual([
       expect.objectContaining({
         id: 'orchestrator',

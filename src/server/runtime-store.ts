@@ -5,7 +5,11 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
-import { createRuntimeStoreLifecycle, createRuntimeStoreServices } from './runtime-store-helpers.js'
+import {
+  type AutoResumeResult,
+  createRuntimeStoreLifecycle,
+  createRuntimeStoreServices,
+} from './runtime-store-helpers.js'
 import type { SettingsStore } from './settings-store.js'
 import type {
   CancelTaskInput,
@@ -47,6 +51,7 @@ interface RuntimeStore {
   getWorkspaceSnapshot: (workspaceId: string) => WorkspaceRecord
   getWorker: (workspaceId: string, workerId: string) => AgentSummary
   getAgent: (workspaceId: string, agentId: string) => AgentSummary
+  getWorkspaceRecoverySettings: (workspaceId: string) => { autoResumeOnRestart: boolean }
   getPtyOutputBus: () => PtyOutputBus
   listTerminalRuns: (workspaceId: string) => TerminalRunSummary[]
   closeWorkspaceShell: (workspaceId: string, runId: string) => boolean
@@ -74,7 +79,9 @@ interface RuntimeStore {
       workspace_id: string
     }>
   >
+  autoResumeInterruptedAgents: (input: StartAgentOptions) => Promise<AutoResumeResult[]>
   startWorkspaceWatch: (workspaceId: string) => Promise<void>
+  setAutoResumeOnRestart: (workspaceId: string, enabled: boolean) => void
   getLiveRun: (runId: string) => LiveAgentRun
   getActiveRunByAgentId: (workspaceId: string, agentId: string) => LiveAgentRun | undefined
   registerTasksListener: (listener: (workspaceId: string, content: string) => void) => () => void
@@ -98,6 +105,7 @@ interface RuntimeStoreOptions {
 }
 
 interface StartAgentOptions {
+  autoResume?: boolean
   hivePort: string
 }
 
@@ -173,6 +181,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       services.workspaceStore.getWorkspaceSnapshot(workspaceId),
     getWorker: (workspaceId, workerId) => services.workspaceStore.getWorker(workspaceId, workerId),
     getAgent: (workspaceId, agentId) => services.workspaceStore.getAgent(workspaceId, agentId),
+    getWorkspaceRecoverySettings: (workspaceId) =>
+      services.workspaceStore.getWorkspaceRecoverySettings(workspaceId),
     getPtyOutputBus: lifecycle.getPtyOutputBus,
     listTerminalRuns: lifecycle.listTerminalRuns,
     closeWorkspaceShell: lifecycle.closeWorkspaceShell,
@@ -180,7 +190,10 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     peekAgentLaunchConfig: lifecycle.peekAgentLaunchConfig,
     startAgent: lifecycle.startAgent,
     autostartConfiguredAgents: lifecycle.autostartConfiguredAgents,
+    autoResumeInterruptedAgents: lifecycle.autoResumeInterruptedAgents,
     startWorkspaceWatch: lifecycle.startWorkspaceWatch,
+    setAutoResumeOnRestart: (workspaceId, enabled) =>
+      services.workspaceStore.setAutoResumeOnRestart(workspaceId, enabled),
     startWorkspaceShell: lifecycle.startWorkspaceShell,
     getLiveRun: lifecycle.getLiveRun,
     getActiveRunByAgentId: (workspaceId, agentId) =>

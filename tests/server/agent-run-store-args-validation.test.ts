@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
+import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 
 const tempDirs: string[] = []
 
@@ -15,6 +16,39 @@ afterEach(() => {
 })
 
 describe('agent run store args validation', () => {
+  test('carries consecutive fast-exit counts across runs and resets after a normal exit', () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-fast-exit-counts-'))
+    tempDirs.push(dataDir)
+    const db = new Database(join(dataDir, 'runtime.sqlite'))
+    initializeRuntimeDatabase(db)
+    const store = createAgentRunStore(db)
+    const agentId = 'agent-fast-exit'
+    const baseStartedAt = Date.now()
+
+    for (let index = 1; index <= 3; index += 1) {
+      const startedAt = baseStartedAt + index
+      store.insertAgentRun(`run-${index}`, agentId, startedAt, 123, 'running')
+      store.updatePersistedRun(`run-${index}`, 'error', 1, startedAt + 100)
+    }
+
+    const beforeReset = db
+      .prepare(
+        'SELECT consecutive_fast_exits FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT 1'
+      )
+      .get(agentId) as { consecutive_fast_exits: number }
+    expect(beforeReset.consecutive_fast_exits).toBe(3)
+
+    const normalStartedAt = baseStartedAt + 10
+    store.insertAgentRun('run-normal', agentId, normalStartedAt, 123, 'running')
+    store.updatePersistedRun('run-normal', 'exited', 0, normalStartedAt + 11_000)
+
+    const afterReset = db
+      .prepare('SELECT consecutive_fast_exits FROM agent_runs WHERE run_id = ?')
+      .get('run-normal') as { consecutive_fast_exits: number }
+    expect(afterReset.consecutive_fast_exits).toBe(0)
+    db.close()
+  })
+
   test('non-string-array args_json falls back to empty args and warns', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-bad-args-shape-'))
     tempDirs.push(dataDir)

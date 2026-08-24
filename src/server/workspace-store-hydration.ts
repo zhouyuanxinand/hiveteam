@@ -56,14 +56,15 @@ export const hydrateWorkspaceFromDb = (
     return
   }
 
-  const row = db.prepare('SELECT id, name, path FROM workspaces WHERE id = ?').get(workspaceId) as
-    | WorkspaceSummaryRow
-    | undefined
+  const row = db
+    .prepare('SELECT id, name, path, auto_resume FROM workspaces WHERE id = ?')
+    .get(workspaceId) as WorkspaceSummaryRow | undefined
   if (!row) {
     return
   }
 
   workspaces.set(row.id, {
+    autoResumeOnRestart: row.auto_resume !== 0,
     summary: { id: row.id, name: row.name, path: row.path },
     agents: [createOrchestrator(row.id)],
   })
@@ -85,9 +86,10 @@ export const seedWorkspacesFromDb = (
   messageKinds: MessageKindRecord[]
 ) => {
   for (const row of db
-    .prepare('SELECT id, name, path FROM workspaces ORDER BY created_at ASC')
+    .prepare('SELECT id, name, path, auto_resume FROM workspaces ORDER BY created_at ASC')
     .all() as WorkspaceRow[]) {
     workspaces.set(row.id, {
+      autoResumeOnRestart: row.auto_resume !== 0,
       summary: { id: row.id, name: row.name, path: row.path },
       agents: [createOrchestrator(row.id)],
     })

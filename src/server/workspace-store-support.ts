@@ -8,6 +8,7 @@ export interface MessageKindRecord {
 }
 
 export interface WorkspaceRow {
+  auto_resume: number | null
   id: string
   name: string
   path: string

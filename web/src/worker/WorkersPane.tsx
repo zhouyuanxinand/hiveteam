@@ -11,7 +11,10 @@ import { WorkerCard, type WorkerCardActionKind } from './WorkerCard.js'
 import { presentWorkerStatus, type WorkerStatusKind } from './worker-status.js'
 
 type WorkersPaneProps = {
+  autoResumeBusy?: boolean
+  autoResumeOnRestart?: boolean
   onAddWorkerClick: () => void
+  onAutoResumeChange?: (enabled: boolean) => void
   onDeleteWorker: (worker: TeamListItem) => void
   onOpenShellTerminal: () => void
   onOpenWorker: (worker: TeamListItem) => void
@@ -51,7 +54,10 @@ const summarizeWorkers = (workers: TeamListItem[]) => {
 }
 
 export const WorkersPane = ({
+  autoResumeBusy = false,
+  autoResumeOnRestart,
   onAddWorkerClick,
+  onAutoResumeChange,
   onDeleteWorker,
   onOpenShellTerminal,
   onOpenWorker,
@@ -114,6 +120,19 @@ export const WorkersPane = ({
             {workers.length}
           </span>
           <div className="flex-1" />
+          {autoResumeOnRestart !== undefined && onAutoResumeChange ? (
+            <label className="mr-1 inline-flex items-center gap-1.5 text-xs text-sec">
+              <input
+                type="checkbox"
+                checked={autoResumeOnRestart}
+                disabled={autoResumeBusy}
+                onChange={(event) => onAutoResumeChange(event.target.checked)}
+                aria-label={t('worker.autoResumeAria')}
+                data-testid="workspace-auto-resume"
+              />
+              <span>{t('worker.autoResume')}</span>
+            </label>
+          ) : null}
           {shellTerminalAvailable ? (
             <button
               type="button"

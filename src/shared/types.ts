@@ -10,6 +10,10 @@ export interface WorkspaceSummary {
   path: string
 }
 
+export interface WorkspaceRecoverySettings {
+  autoResumeOnRestart: boolean
+}
+
 export interface AgentSummary {
   id: string
   workspaceId: string

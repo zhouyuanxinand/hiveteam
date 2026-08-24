@@ -24,6 +24,13 @@ export interface PersistedAgentRun {
   endedAt: number | null
 }
 
+export interface InterruptedAgentRun extends PersistedAgentRun {
+  consecutiveFastExits: number
+  workspaceId: string
+}
+
+export const FAST_EXIT_WINDOW_MS = 10_000
+
 const parseArgsJson = (argsJson: string, agentId: string) => {
   try {
     const parsed = JSON.parse(argsJson) as unknown
@@ -64,6 +71,11 @@ interface AgentRunRow {
   exit_code: number | null
   started_at: number
   ended_at: number | null
+  consecutive_fast_exits: number
+}
+
+interface InterruptedAgentRunRow extends AgentRunRow {
+  workspace_id: string
 }
 
 export const createAgentRunStore = (db: Database) => {
@@ -172,10 +184,28 @@ export const createAgentRunStore = (db: Database) => {
     if (closed) {
       return
     }
+    const previous = db
+      .prepare(
+        'SELECT consecutive_fast_exits FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT 1'
+      )
+      .get(agentId) as { consecutive_fast_exits: number } | undefined
     db.prepare(
-      `INSERT INTO agent_runs (run_id, agent_id, pid, status, exit_code, started_at, ended_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(runId, agentId, pid, status, exitCode, startedAt, endedAt, startedAt, startedAt)
+      `INSERT INTO agent_runs (
+         run_id, agent_id, pid, status, exit_code, started_at, ended_at,
+         consecutive_fast_exits, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      runId,
+      agentId,
+      pid,
+      status,
+      exitCode,
+      startedAt,
+      endedAt,
+      previous?.consecutive_fast_exits ?? 0,
+      startedAt,
+      startedAt
+    )
   }
 
   const updatePersistedRun = (
@@ -187,9 +217,22 @@ export const createAgentRunStore = (db: Database) => {
     if (closed) {
       return
     }
+    const current = db
+      .prepare('SELECT started_at, consecutive_fast_exits FROM agent_runs WHERE run_id = ?')
+      .get(runId) as { consecutive_fast_exits: number; started_at: number } | undefined
+    let consecutiveFastExits = current?.consecutive_fast_exits ?? 0
+    if (endedAt !== null && status !== 'starting' && status !== 'running') {
+      const fastExit =
+        exitCode !== null &&
+        exitCode !== 0 &&
+        endedAt - (current?.started_at ?? endedAt) < FAST_EXIT_WINDOW_MS
+      consecutiveFastExits = fastExit ? consecutiveFastExits + 1 : 0
+    }
     db.prepare(
-      'UPDATE agent_runs SET status = ?, exit_code = ?, ended_at = ?, updated_at = ? WHERE run_id = ?'
-    ).run(status, exitCode, endedAt, Date.now(), runId)
+      `UPDATE agent_runs
+       SET status = ?, exit_code = ?, ended_at = ?, consecutive_fast_exits = ?, updated_at = ?
+       WHERE run_id = ?`
+    ).run(status, exitCode, endedAt, consecutiveFastExits, Date.now(), runId)
   }
 
   const listAgentRuns = (agentId: string) => {
@@ -216,6 +259,40 @@ export const createAgentRunStore = (db: Database) => {
       }) satisfies PersistedAgentRun[]
   }
 
+  const listInterruptedRuns = () => {
+    if (closed) return []
+
+    return db
+      .prepare(
+        `SELECT r.run_id, r.agent_id, r.pid, r.status, r.exit_code, r.started_at, r.ended_at,
+                r.consecutive_fast_exits, c.workspace_id
+         FROM agent_runs r
+         INNER JOIN agent_launch_configs c ON c.agent_id = r.agent_id
+         WHERE r.status IN ('starting', 'running')
+         ORDER BY r.started_at ASC`
+      )
+      .all()
+      .map((row: unknown) => {
+        const typedRow = row as InterruptedAgentRunRow
+        return {
+          agentId: typedRow.agent_id,
+          consecutiveFastExits: typedRow.consecutive_fast_exits,
+          endedAt: typedRow.ended_at,
+          exitCode: typedRow.exit_code,
+          pid: typedRow.pid,
+          runId: typedRow.run_id,
+          startedAt: typedRow.started_at,
+          status: typedRow.status,
+          workspaceId: typedRow.workspace_id,
+        } satisfies InterruptedAgentRun
+      })
+  }
+
+  const resetFastExitCount = (agentId: string) => {
+    if (closed) return
+    db.prepare('UPDATE agent_runs SET consecutive_fast_exits = 0 WHERE agent_id = ?').run(agentId)
+  }
+
   const markUnfinishedRunsStale = (endedAt = Date.now()) => {
     if (closed) {
       return
@@ -232,8 +309,10 @@ export const createAgentRunStore = (db: Database) => {
     insertAgentRun,
     deleteLaunchConfig,
     listAgentRuns,
+    listInterruptedRuns,
     listLaunchConfigs,
     markUnfinishedRunsStale,
+    resetFastExitCount,
     saveLaunchConfig,
     updatePersistedRun,
   }

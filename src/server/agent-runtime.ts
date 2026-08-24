@@ -123,7 +123,7 @@ export const createAgentRuntime = (
         workspace,
         agentId,
         launchCache.get(workspace.id, agentId),
-        input.hivePort
+        input
       ).finally(() => {
         if (startPromises.get(key) === startPromise) {
           startPromises.delete(key)

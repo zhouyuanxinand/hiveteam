@@ -69,13 +69,14 @@ export const createWorkspaceStore = (
     },
     createWorkspace(path, name) {
       const summary = { id: randomUUID(), name, path }
-      db.prepare('INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(
-        summary.id,
-        name,
-        path,
-        Date.now()
-      )
-      workspaces.set(summary.id, { summary, agents: [createOrchestrator(summary.id)] })
+      db.prepare(
+        'INSERT INTO workspaces (id, name, path, auto_resume, created_at) VALUES (?, ?, ?, ?, ?)'
+      ).run(summary.id, name, path, 1, Date.now())
+      workspaces.set(summary.id, {
+        autoResumeOnRestart: true,
+        summary,
+        agents: [createOrchestrator(summary.id)],
+      })
       return summary
     },
     deleteWorkspace(workspaceId) {
@@ -141,6 +142,9 @@ export const createWorkspaceStore = (
     getWorkerByName: (workspaceId, workerName) =>
       getWorkerByNameRecord(workspaces, workspaceId, workerName),
     getWorkspaceSnapshot: getWorkspace,
+    getWorkspaceRecoverySettings(workspaceId) {
+      return { autoResumeOnRestart: getWorkspace(workspaceId).autoResumeOnRestart }
+    },
     hasAgent(workspaceId, agentId) {
       hydrateWorkspaceFromDb(db, workspaces, messageKinds, workspaceId)
       return workspaces.get(workspaceId)?.agents.some((agent) => agent.id === agentId) ?? false
@@ -158,6 +162,14 @@ export const createWorkspaceStore = (
     },
     listWorkspaces() {
       return Array.from(workspaces.values(), (workspace) => workspace.summary)
+    },
+    setAutoResumeOnRestart(workspaceId, enabled) {
+      const workspace = getWorkspace(workspaceId)
+      db.prepare('UPDATE workspaces SET auto_resume = ? WHERE id = ?').run(
+        enabled ? 1 : 0,
+        workspaceId
+      )
+      workspace.autoResumeOnRestart = enabled
     },
     markAgentStarted: (workspaceId, agentId) => markAgentStarted(workspaces, workspaceId, agentId),
     markAgentStopped: (workspaceId, agentId) => markAgentStopped(workspaces, workspaceId, agentId),

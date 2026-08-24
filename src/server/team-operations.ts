@@ -28,6 +28,7 @@ export interface TeamOperationsInput {
     dispatchId?: string
   ) => DispatchRecord | undefined
   findOpenDispatchById: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
   insertMessage: (record: MessageLogRecord) => MessageLogHandle
   markDispatchCancelled: (input: {
     dispatchId: string
@@ -90,6 +91,7 @@ export const createTeamOperations = ({
   deleteMessage,
   findOpenDispatch,
   findOpenDispatchById,
+  listOpenWorkspaceDispatches = () => [],
   insertMessage,
   markDispatchCancelled,
   markDispatchReportedByWorker,
@@ -170,6 +172,44 @@ export const createTeamOperations = ({
     }
   }
 
+  const replayQueuedDispatches = (workspaceId: string, workerId: string) => {
+    if (workspaceStore.getAgent(workspaceId, workerId).role === 'orchestrator') return 0
+    if (!agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) return 0
+
+    const worker = workspaceStore.getWorker(workspaceId, workerId)
+    let replayed = 0
+    for (const dispatch of listOpenWorkspaceDispatches(workspaceId)) {
+      if (dispatch.status !== 'queued' || dispatch.toAgentId !== workerId) {
+        continue
+      }
+
+      try {
+        const sender = dispatch.fromAgentId
+          ? workspaceStore.getAgent(workspaceId, dispatch.fromAgentId)
+          : null
+        agentRuntime.writeSendPrompt(
+          workspaceId,
+          workerId,
+          dispatch.id,
+          sender?.name ?? 'Hive',
+          worker.description,
+          dispatch.text
+        )
+        markDispatchSubmitted(dispatch.id)
+        replayed += 1
+      } catch (error) {
+        console.error('[hive] queued dispatch replay failed', {
+          dispatchId: dispatch.id,
+          error: reportForwardErrorMessage(error),
+          workerId,
+          workspaceId,
+        })
+        break
+      }
+    }
+    return replayed
+  }
+
   const dispatchTask = async (
     workspaceId: string,
     workerId: string,
@@ -247,6 +287,7 @@ export const createTeamOperations = ({
     },
     dispatchTask,
     drainReportOutbox,
+    replayQueuedDispatches,
     dispatchTaskByWorkerName(
       workspaceId: string,
       workerName: string,
