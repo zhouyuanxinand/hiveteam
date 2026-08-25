@@ -1,7 +1,7 @@
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import { buildAgentRunBootstrap, startAgentRunCapture } from './agent-run-bootstrap.js'
-import { handleAgentRunExit } from './agent-run-exit-handler.js'
+import { clearResumedSessionIfInvalid, handleAgentRunExit } from './agent-run-exit-handler.js'
 import type { AgentRunExitContext, AgentRunStarterStorePort } from './agent-run-start-context.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
@@ -48,14 +48,8 @@ export const createAgentRunStarter =
     if (input.autoResume !== true) store.resetFastExitCount?.(agentId)
 
     const agent = getAgent?.(workspace.id, agentId)
-    const { sessionCaptureSnapshot, startConfig, startEnv } = buildAgentRunBootstrap(
-      workspace,
-      agentId,
-      config,
-      sessionStore,
-      getCommandPreset,
-      agent
-    )
+    const { sessionCaptureDiscriminator, sessionCaptureSnapshot, startConfig, startEnv } =
+      buildAgentRunBootstrap(workspace, agentId, config, sessionStore, getCommandPreset, agent)
     const handledRunExits = new Set<string>()
     const abortedRunIds = new Set<string>()
     const startedAt = Date.now()
@@ -67,6 +61,7 @@ export const createAgentRunStarter =
       registry,
       sessionStore,
       startConfig,
+      sessionCaptureDiscriminator,
       store,
       token,
       tokenRegistry,
@@ -127,9 +122,7 @@ export const createAgentRunStarter =
 
     if (run.status === 'error') {
       store.updatePersistedRun(run.runId, 'error', run.exitCode, Date.now())
-      if (startConfig.resumedSessionId) {
-        sessionStore.clearLastSessionId(workspace.id, agentId)
-      }
+      clearResumedSessionIfInvalid(exitContext, run.exitCode)
       tokenRegistry.revokeIfMatches(agentId, token)
       // Ensure §12 three-state: failed spawn must flip AgentSummary to stopped.
       onAgentExit(workspace.id, agentId)

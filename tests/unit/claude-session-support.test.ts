@@ -13,6 +13,7 @@ import {
 } from '../../src/server/session-capture-claude.js'
 
 const tempDirs: string[] = []
+const originalCodexHome = process.env.CODEX_HOME
 const presetCapture = {
   source: 'claude_project_jsonl_dir' as const,
   pattern: '~/.claude/projects/{encoded_cwd}/*.jsonl',
@@ -32,8 +33,28 @@ const writeSession = (root: string, cwd: string, sessionId: string, content = '{
   writeFileSync(join(projectDir, `${sessionId}.jsonl`), content)
 }
 
+const createCodexHome = () => {
+  const root = join(tmpdir(), `hive-codex-session-${crypto.randomUUID()}`)
+  const codexHome = join(root, '.codex')
+  mkdirSync(join(codexHome, 'sessions'), { recursive: true })
+  tempDirs.push(root)
+  process.env.CODEX_HOME = codexHome
+  return codexHome
+}
+
+const writeCodexSession = (codexHome: string, cwd: string, sessionId: string) => {
+  const sessionDir = join(codexHome, 'sessions', '2026', '04', '30')
+  mkdirSync(sessionDir, { recursive: true })
+  writeFileSync(
+    join(sessionDir, `rollout-${sessionId}.jsonl`),
+    `${JSON.stringify({ payload: { cwd, id: sessionId } })}\n`
+  )
+}
+
 afterEach(() => {
   delete process.env.HIVE_CLAUDE_PROJECTS_DIR
+  if (originalCodexHome === undefined) delete process.env.CODEX_HOME
+  else process.env.CODEX_HOME = originalCodexHome
   resetClaudeSessionClaimsForTests()
   for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
 })
@@ -197,7 +218,9 @@ describe('claude session support', () => {
     expect(invalidSessionIds).toEqual([sessionId])
   })
 
-  test('withPresetResumeArgs trusts Codex last_session_id without a filesystem preflight', () => {
+  test('withPresetResumeArgs clears a stale Codex session before resume', () => {
+    createCodexHome()
+    const invalidSessionIds: string[] = []
     const result = withPresetResumeArgs(
       {
         command: 'codex',
@@ -212,12 +235,44 @@ describe('claude session support', () => {
         yoloArgsTemplate: null,
       },
       '019dc277-0e8e-75c1-9794-94929426288e',
-      '/tmp/no-such-codex-workspace'
+      '/tmp/no-such-codex-workspace',
+      undefined,
+      (invalidSessionId) => invalidSessionIds.push(invalidSessionId)
     )
 
     expect(result).toMatchObject({
-      args: ['resume', '019dc277-0e8e-75c1-9794-94929426288e'],
-      resumedSessionId: '019dc277-0e8e-75c1-9794-94929426288e',
+      args: [],
+    })
+    expect(result).not.toHaveProperty('resumedSessionId')
+    expect(invalidSessionIds).toEqual(['019dc277-0e8e-75c1-9794-94929426288e'])
+  })
+
+  test('withPresetResumeArgs resumes Codex when the native session exists', () => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-project-with-session'
+    const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
+    writeCodexSession(codexHome, cwd, sessionId)
+
+    const result = withPresetResumeArgs(
+      {
+        command: 'codex',
+        args: [],
+      },
+      {
+        resumeArgsTemplate: 'resume {session_id}',
+        sessionIdCapture: {
+          source: 'codex_session_jsonl_dir',
+          pattern: '~/.codex/sessions/**/*.jsonl',
+        },
+        yoloArgsTemplate: null,
+      },
+      sessionId,
+      cwd
+    )
+
+    expect(result).toMatchObject({
+      args: ['resume', sessionId],
+      resumedSessionId: sessionId,
     })
   })
 

@@ -31,6 +31,14 @@ export type SessionIdCaptureConfig =
   | { source: 'stdout_regex'; pattern: string }
   | { source: 'banner_parse'; pattern?: string }
 
+export const supportsNativeSessionExistenceCheck = (
+  capture: SessionIdCaptureConfig | null | undefined
+) =>
+  capture?.source === 'claude_project_jsonl_dir' ||
+  capture?.source === 'codex_session_jsonl_dir' ||
+  capture?.source === 'gemini_session_json_dir' ||
+  capture?.source === 'opencode_session_db'
+
 export interface SessionCaptureSnapshot {
   discriminator?: { contentIncludes: string | readonly string[] }
   knownSessionIds: Set<string>

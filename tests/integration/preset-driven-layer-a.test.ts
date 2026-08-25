@@ -115,6 +115,8 @@ const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '019dc277-0e8e-75
 const delayIndex = args.indexOf('--session-write-delay-ms-test')
 const writeDelayMs = delayIndex >= 0 ? Number.parseInt(args[delayIndex + 1] ?? '0', 10) : 0
 const expectYoloMarker = join(process.cwd(), '.expect-yolo')
+const expectFreshMarker = join(process.cwd(), '.expect-fresh')
+const failResumeMarker = join(process.cwd(), '.fail-resume')
 const codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex')
 const sessionDir = join(codexHome, 'sessions', '2026', '04', '30')
 process.stdin.setEncoding('utf8')
@@ -132,6 +134,8 @@ else writeSession()
 process.stdout.write('ARGS:' + args.join(' ') + '\\n')
 const resumeIndex = args.indexOf('resume')
 if (existsSync(join(process.cwd(), '.expect-resume')) && !(resumeIndex >= 0 && args[resumeIndex + 1] === sessionId)) process.exit(2)
+if (existsSync(expectFreshMarker) && resumeIndex >= 0) process.exit(3)
+if (existsSync(failResumeMarker) && resumeIndex >= 0) process.exit(6)
 if (existsSync(expectYoloMarker) && !args.includes('--dangerously-bypass-approvals-and-sandbox')) process.exit(4)
 process.stdout.write('❯ ')
 setInterval(() => {}, 1000)
@@ -641,7 +645,7 @@ describe('preset-driven Layer A', () => {
     }
   })
 
-  test('bound codex preset trusts captured session id even when the session file is gone', async () => {
+  test('bound codex preset starts fresh when the captured session is gone', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-codex-fast-resume-'))
     const workspacePathRaw = join(homeDir, 'workspace')
     tempDirs.push(homeDir)
@@ -673,16 +677,67 @@ describe('preset-driven Layer A', () => {
         expect(state.status).toBe('exited')
       })
       rmSync(codexHome, { force: true, recursive: true })
-      writeFileSync(join(workspacePath, '.expect-resume'), '1\n')
+      writeFileSync(join(workspacePath, '.expect-fresh'), '1\n')
 
       const secondRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(state.status).toBe('running')
         expect(state.output).toContain(
-          `ARGS:--dangerously-bypass-approvals-and-sandbox resume ${sessionId} --session-id-test ${sessionId}`
+          `ARGS:--dangerously-bypass-approvals-and-sandbox --session-id-test ${sessionId}`
         )
+        expect(state.output).not.toContain(` resume ${sessionId}`)
       })
+    } finally {
+      await server.close()
+    }
+  })
+
+  test('bound codex preset keeps its session after a transient resume failure', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'hive-codex-transient-resume-'))
+    const workspacePathRaw = join(homeDir, 'workspace')
+    tempDirs.push(homeDir)
+    mkdirSync(workspacePathRaw, { recursive: true })
+    const workspacePath = realpathSync(workspacePathRaw)
+    process.env.CODEX_HOME = join(homeDir, '.codex')
+    const fakeCodex = writeFakeCodex(workspacePath)
+
+    const server = await startTestServer()
+    try {
+      const cookie = await getUiCookie(server.baseUrl)
+      const workspace = await createWorkspaceViaHttp(server.baseUrl, cookie, workspacePath)
+      const worker = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id)
+      const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
+
+      await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id, {
+        command: fakeCodex,
+        args: ['--session-id-test', sessionId],
+        command_preset_id: 'codex',
+      })
+      const firstRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
+      await waitFor(() => {
+        expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
+      })
+      server.store.stopAgentRun(firstRun.runId)
+      await waitFor(async () => {
+        const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
+        expect(state.status).toBe('exited')
+      })
+
+      writeFileSync(join(workspacePath, '.fail-resume'), '1\n')
+      const failedResumeRun = await startWorkerViaHttp(
+        server.baseUrl,
+        cookie,
+        workspace.id,
+        worker.id
+      )
+      await waitFor(async () => {
+        const state = await getRunViaHttp(server.baseUrl, cookie, failedResumeRun.runId)
+        expect(state.status).toBe('exited')
+        expect(state.output).toContain(`resume ${sessionId}`)
+      })
+
+      expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
     } finally {
       await server.close()
     }

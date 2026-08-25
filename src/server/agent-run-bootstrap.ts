@@ -86,6 +86,7 @@ export const buildAgentRunBootstrap = (
     : snapshotSessionIdsForCapture(workspace.path, startConfig.sessionIdCapture, discriminator)
   return {
     sessionCaptureSnapshot,
+    sessionCaptureDiscriminator: discriminator,
     startConfig,
     startEnv: {
       ...getSessionCaptureEnvironment(sessionCaptureSnapshot),

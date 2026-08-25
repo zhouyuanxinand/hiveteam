@@ -1,7 +1,7 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
-import type { SessionCaptureSnapshot, SessionIdCaptureConfig } from './session-capture.js'
-import { doesCapturedSessionExist } from './session-capture.js'
+import type { SessionCaptureSnapshot } from './session-capture.js'
+import { doesCapturedSessionExist, supportsNativeSessionExistenceCheck } from './session-capture.js'
 
 type BoundPreset = Pick<
   CommandPresetRecord,
@@ -50,18 +50,7 @@ const hasResumeArgs = (args: string[]) =>
   args.includes('-s') ||
   args[0] === 'resume'
 
-const shouldVerifySessionBeforeResume = (capture: SessionIdCaptureConfig | null | undefined) => {
-  // Claude is a cheap project-dir existence check; OpenCode is a direct DB query.
-  // Codex/Gemini require broad session-store scans, so trust the persisted id and
-  // let the CLI fail fast if it is stale.
-  return capture?.source === 'claude_project_jsonl_dir' || capture?.source === 'opencode_session_db'
-}
-
-const supportsPresetResume = (capture: SessionIdCaptureConfig | null | undefined) =>
-  capture?.source === 'claude_project_jsonl_dir' ||
-  capture?.source === 'codex_session_jsonl_dir' ||
-  capture?.source === 'gemini_session_json_dir' ||
-  capture?.source === 'opencode_session_db'
+const supportsPresetResume = supportsNativeSessionExistenceCheck
 
 export const withPresetResumeArgs = (
   config: AgentLaunchConfigInput,
@@ -83,7 +72,7 @@ export const withPresetResumeArgs = (
   if (
     cwd &&
     sessionIdCapture &&
-    shouldVerifySessionBeforeResume(sessionIdCapture) &&
+    supportsNativeSessionExistenceCheck(sessionIdCapture) &&
     !doesCapturedSessionExist(cwd, sessionIdCapture, lastSessionId, discriminator)
   ) {
     onInvalidSessionId?.(lastSessionId)

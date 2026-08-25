@@ -1,8 +1,9 @@
 import type { WorkspaceSummary } from '../shared/types.js'
-import type { PersistedAgentRun } from './agent-run-store.js'
+import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
 import type { AgentTokenRegistry } from './agent-tokens.js'
 import type { LiveRunRegistry } from './live-run-registry.js'
+import type { SessionCaptureSnapshot } from './session-capture.js'
 
 export type PersistedRunStatus = PersistedAgentRun['status']
 
@@ -31,7 +32,8 @@ export interface AgentRunExitContext {
   onAgentExit: (workspaceId: string, agentId: string) => void
   registry: LiveRunRegistry
   sessionStore: AgentSessionStorePort
-  startConfig: { resumedSessionId?: string | null }
+  startConfig: Pick<AgentLaunchConfigInput, 'resumedSessionId' | 'sessionIdCapture'>
+  sessionCaptureDiscriminator?: SessionCaptureSnapshot['discriminator']
   store: AgentRunStarterStorePort
   token: string
   tokenRegistry: AgentTokenRegistry

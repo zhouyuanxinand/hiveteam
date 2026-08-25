@@ -1,5 +1,6 @@
 import type { AgentRunExitContext } from './agent-run-start-context.js'
 import { completeLiveRun } from './agent-run-sync.js'
+import { doesCapturedSessionExist, supportsNativeSessionExistenceCheck } from './session-capture.js'
 
 interface HandleRunExitInput {
   exitCode: number | null
@@ -7,13 +8,27 @@ interface HandleRunExitInput {
   runId: string
 }
 
-const clearResumedSessionOnFailure = (
-  context: Pick<AgentRunExitContext, 'agentId' | 'sessionStore' | 'startConfig' | 'workspace'>,
+export const clearResumedSessionIfInvalid = (
+  context: Pick<
+    AgentRunExitContext,
+    'agentId' | 'sessionStore' | 'sessionCaptureDiscriminator' | 'startConfig' | 'workspace'
+  >,
   exitCode: number | null
 ) => {
-  if (exitCode !== 0 && context.startConfig.resumedSessionId) {
-    context.sessionStore.clearLastSessionId(context.workspace.id, context.agentId)
+  const sessionId = context.startConfig.resumedSessionId
+  const capture = context.startConfig.sessionIdCapture
+  if (exitCode === 0 || !sessionId || !supportsNativeSessionExistenceCheck(capture)) return
+  if (
+    doesCapturedSessionExist(
+      context.workspace.path,
+      capture,
+      sessionId,
+      context.sessionCaptureDiscriminator
+    )
+  ) {
+    return
   }
+  context.sessionStore.clearLastSessionId(context.workspace.id, context.agentId)
 }
 
 export const handleAgentRunExit = (
@@ -32,7 +47,7 @@ export const handleAgentRunExit = (
   }
 
   completeLiveRun(liveRun, exitCode, endedAt, context.store)
-  clearResumedSessionOnFailure(context, exitCode)
+  clearResumedSessionIfInvalid(context, exitCode)
   context.handledRunExits.add(runId)
   context.tokenRegistry.revokeIfMatches(context.agentId, context.token)
   context.onAgentExit(context.workspace.id, context.agentId)
