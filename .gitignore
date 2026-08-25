@@ -8,3 +8,5 @@ coverage/
 .harnessed/
 .screenshots-prod/
 ~/.hive/
+.hive-gateway/
+.tmp-gateway-test/
