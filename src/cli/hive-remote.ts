@@ -109,6 +109,28 @@ export const defaultGatewayClient: GatewayClient = {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+const gatewayErrorDetail = (cause: unknown) => {
+  if (!(cause instanceof Error)) return String(cause)
+  const nested = (cause as Error & { cause?: unknown }).cause
+  if (nested instanceof Error && nested.message && nested.message !== cause.message) {
+    return `${cause.message} (${nested.message})`
+  }
+  return cause.message
+}
+
+const isTransientGatewayError = (cause: unknown) => {
+  const detail = gatewayErrorDetail(cause).toLowerCase()
+  return (
+    detail.includes('fetch failed') ||
+    detail.includes('econnreset') ||
+    detail.includes('econnrefused') ||
+    detail.includes('etimedout') ||
+    detail.includes('enotfound') ||
+    detail.includes('eai_again') ||
+    detail.includes('connect timeout')
+  )
+}
+
 const readGatewayFlag = (argv: string[]) => {
   const index = argv.indexOf('--gateway')
   if (index === -1) return undefined
@@ -148,8 +170,26 @@ const runLogin = async (
   log(`  Code: ${code}`)
   log('Waiting for approval…')
 
+  let lastNetworkError: string | null = null
   for (;;) {
-    const token = await client.exchangeToken(gatewayUrl, code, getMachineName() ?? undefined)
+    let token: DaemonTokenResponse | null
+    try {
+      token = await client.exchangeToken(gatewayUrl, code, getMachineName() ?? undefined)
+      lastNetworkError = null
+    } catch (cause) {
+      if (!isTransientGatewayError(cause)) throw cause
+      const detail = gatewayErrorDetail(cause)
+      if (detail !== lastNetworkError) {
+        log(`Gateway connection failed (${detail}); retrying until the code expires…`)
+        lastNetworkError = detail
+      }
+      if (now() >= expiresAt) {
+        log('The login code expired. Run `hive remote login` again.')
+        return 1
+      }
+      await sleep(Math.max(250, pollIntervalMs))
+      continue
+    }
     if (token) {
       store.set(REMOTE_GATEWAY_URL_KEY, gatewayUrl)
       store.set(REMOTE_DAEMON_ID_KEY, token.daemonId)
