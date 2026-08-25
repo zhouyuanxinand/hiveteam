@@ -1,0 +1,317 @@
+.remote-gate-page {
+  min-height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: max(24px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% -8%, color-mix(in oklab, var(--accent) 24%, transparent), transparent 42%),
+    var(--bg-0);
+}
+
+.remote-gate-wrap {
+  width: min(100%, 480px);
+  margin: 0 auto;
+}
+
+.remote-gate-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 4px 18px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.remote-gate-brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in oklab, var(--accent) 62%, var(--border-bright));
+  border-radius: 9px;
+  color: #fff;
+  background: color-mix(in oklab, var(--accent) 84%, var(--bg-2));
+  font-size: 16px;
+}
+
+.remote-gate-card {
+  padding: 22px;
+  border: 1px solid var(--border-bright);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--bg-elevated) 94%, #000);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+}
+
+.remote-gate-eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent-hover);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.remote-gate-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 25px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.remote-gate-copy {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.remote-gate-steps {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: remote-step;
+}
+
+.remote-gate-step {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 9px;
+  align-items: start;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.remote-gate-step::before {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--border-bright);
+  border-radius: 50%;
+  color: var(--text-primary);
+  background: var(--bg-2);
+  content: counter(remote-step);
+  counter-increment: remote-step;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.remote-gate-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.remote-gate-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.remote-gate-input,
+.remote-gate-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-bright);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text-primary);
+  background: var(--bg-1);
+  font: inherit;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.remote-gate-input {
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.remote-gate-textarea {
+  min-height: 118px;
+  padding: 11px 12px;
+  resize: vertical;
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.remote-gate-input::placeholder,
+.remote-gate-textarea::placeholder {
+  color: var(--text-extra-light);
+}
+
+.remote-gate-input:focus-visible,
+.remote-gate-textarea:focus-visible {
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+.remote-gate-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.remote-gate-button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--border-bright);
+  border-radius: 9px;
+  color: var(--text-primary);
+  background: var(--bg-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.remote-gate-button:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: color-mix(in oklab, var(--accent) 18%, var(--bg-2));
+}
+
+.remote-gate-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 24%, transparent);
+}
+
+.remote-gate-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.remote-gate-button--primary {
+  flex: 1;
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+.remote-gate-button--primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.remote-gate-button--danger {
+  color: var(--status-red);
+}
+
+.remote-gate-error,
+.remote-gate-success,
+.remote-gate-status {
+  margin-top: 14px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.remote-gate-error {
+  border: 1px solid color-mix(in oklab, var(--status-red) 42%, var(--border));
+  color: #f1aaa7;
+  background: color-mix(in oklab, var(--status-red) 11%, transparent);
+}
+
+.remote-gate-success {
+  border: 1px solid color-mix(in oklab, var(--status-green) 42%, var(--border));
+  color: #a6ddb7;
+  background: color-mix(in oklab, var(--status-green) 11%, transparent);
+}
+
+.remote-gate-status {
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--bg-1);
+}
+
+.remote-gate-sas {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.remote-gate-link {
+  display: inline-flex;
+  margin-top: 16px;
+  color: var(--accent-hover);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.remote-gate-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.remote-gate-footnote {
+  margin: 17px 4px 0;
+  color: var(--text-extra-light);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+@media (max-width: 420px) {
+  .remote-gate-page {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .remote-gate-card {
+    padding: 18px;
+    border-radius: 13px;
+  }
+
+  .remote-gate-title {
+    font-size: 23px;
+  }
+}
+
+/* The desktop Hive tree is intentionally reused after the secure handshake.
+   Give it a narrow, touch-friendly frame on phones: the compact sidebar keeps
+   workspace avatars available while leaving the content and terminal pane the
+   majority of the viewport. */
+@media (max-width: 760px) {
+  body[data-hive-remote] .workspace-sidebar {
+    width: 64px !important;
+  }
+
+  body[data-hive-remote] .workspace-sidebar-resizer {
+    display: none;
+  }
+
+  body[data-hive-remote] header {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  body[data-hive-remote] header > div:first-child > span:nth-of-type(2),
+  body[data-hive-remote] header > div:first-child > div {
+    display: none;
+  }
+
+  body[data-hive-remote] button[data-testid='topbar-remote'] {
+    display: none;
+  }
+
+  body[data-hive-remote] header > div:last-child {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  body[data-hive-remote] header > div:last-child::-webkit-scrollbar {
+    display: none;
+  }
+}

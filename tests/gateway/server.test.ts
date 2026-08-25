@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -83,6 +83,41 @@ afterEach(() => {
 })
 
 describe('gateway relay server', () => {
+  test('serves the mobile remote entry and bundled assets', async () => {
+    const dataDir = createTemporaryDirectory()
+    const webDistDir = createTemporaryDirectory()
+    mkdirSync(join(webDistDir, 'assets'))
+    writeFileSync(join(webDistDir, 'remote.html'), '<!doctype html><title>Hive Remote</title>')
+    writeFileSync(join(webDistDir, 'assets', 'remote.js'), 'console.log("hive")')
+    const gateway = createGatewayServer({
+      host: '127.0.0.1',
+      port: 0,
+      dataDir,
+      ownerToken: 'owner-token-for-tests',
+      webDistDir,
+    })
+    await gateway.start()
+
+    try {
+      const appResponse = await fetch(`http://${gateway.host}:${gateway.port}/app`)
+      expect(appResponse.status).toBe(200)
+      expect(appResponse.headers.get('content-type')).toContain('text/html')
+      expect(await appResponse.text()).toContain('Hive Remote')
+
+      const assetResponse = await fetch(`http://${gateway.host}:${gateway.port}/assets/remote.js`)
+      expect(assetResponse.status).toBe(200)
+      expect(assetResponse.headers.get('cache-control')).toContain('immutable')
+      expect(await assetResponse.text()).toContain('console.log')
+
+      const traversalResponse = await fetch(
+        `http://${gateway.host}:${gateway.port}/assets/%2e%2e/remote.html`
+      )
+      expect(traversalResponse.status).toBe(404)
+    } finally {
+      await gateway.close()
+    }
+  })
+
   test('approves a daemon and relays pair traffic over WebSocket', async () => {
     const gateway = createGatewayServer({
       host: '127.0.0.1',

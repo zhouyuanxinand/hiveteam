@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { extname, resolve, sep } from 'node:path'
 import { URL } from 'node:url'
 
 import WebSocket, { WebSocketServer } from 'ws'
@@ -25,6 +27,7 @@ export interface GatewayServerOptions {
   port?: number
   dataDir?: string
   ownerToken?: string
+  webDistDir?: string
   store?: GatewayStore
 }
 
@@ -54,6 +57,80 @@ const redirect = (response: ServerResponse, location: string) => {
   response.statusCode = 303
   response.setHeader('location', location)
   response.end()
+}
+
+const staticContentTypes: Record<string, string> = {
+  '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
+  '.html': 'text/html; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.ogg': 'audio/ogg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+}
+
+const isStaticAssetPath = (pathname: string) =>
+  pathname.startsWith('/assets/') ||
+  pathname.startsWith('/cli-icons/') ||
+  pathname.startsWith('/icons/') ||
+  pathname.startsWith('/screenshots/') ||
+  pathname.startsWith('/sounds/') ||
+  pathname === '/bilibili.ico' ||
+  pathname === '/logo.png' ||
+  pathname === '/manifest.webmanifest' ||
+  pathname === '/sw.js'
+
+const staticFileFor = (webDistDir: string, pathname: string) => {
+  const relativePath =
+    pathname === '/app' || pathname === '/app/' ? 'remote.html' : pathname.slice(1)
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(relativePath)
+  } catch {
+    return null
+  }
+  if (!decodedPath || decodedPath.includes('\0')) return null
+  if (decodedPath.split(/[\\/]/).some((segment) => segment === '..')) return null
+  const root = resolve(webDistDir)
+  const candidate = resolve(root, decodedPath)
+  if (candidate !== root && !candidate.startsWith(`${root}${sep}`)) return null
+  return candidate
+}
+
+const serveStatic = async (response: ServerResponse, webDistDir: string, pathname: string) => {
+  if (pathname !== '/app' && pathname !== '/app/' && !isStaticAssetPath(pathname)) return false
+  const filename = staticFileFor(webDistDir, pathname)
+  if (!filename) return false
+  try {
+    const file = await stat(filename)
+    if (!file.isFile()) return false
+    const body = await readFile(filename)
+    response.statusCode = 200
+    response.setHeader(
+      'content-type',
+      staticContentTypes[extname(filename).toLowerCase()] ?? 'application/octet-stream'
+    )
+    response.setHeader(
+      'cache-control',
+      pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache'
+    )
+    response.end(body)
+    return true
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false
+    throw error
+  }
 }
 
 const readBody = async (request: IncomingMessage) => {
@@ -126,6 +203,8 @@ export const createGatewayServer = (options: GatewayServerOptions = {}): Gateway
   const host = options.host ?? process.env.HIVE_GATEWAY_HOST ?? DEFAULT_HOST
   const requestedPort = options.port ?? Number(process.env.HIVE_GATEWAY_PORT ?? DEFAULT_PORT)
   const dataDir = options.dataDir ?? process.env.HIVE_GATEWAY_DATA_DIR ?? '.hive-gateway'
+  const webDistDir =
+    options.webDistDir ?? process.env.HIVE_WEB_DIST_DIR ?? resolve(process.cwd(), 'web/dist')
   const configuredOwnerToken = options.ownerToken ?? process.env.HIVE_GATEWAY_OWNER_TOKEN
   const store =
     options.store ??
@@ -318,6 +397,9 @@ export const createGatewayServer = (options: GatewayServerOptions = {}): Gateway
       response.end()
       return
     }
+    if (request.method === 'GET' && (await serveStatic(response, webDistDir, url.pathname))) {
+      return
+    }
     if (request.method === 'GET' && url.pathname === '/') {
       html(response, 200, gatewayHomePage())
       return
@@ -470,7 +552,7 @@ export const createGatewayServer = (options: GatewayServerOptions = {}): Gateway
   const shellMachinesPage = (machines: Array<{ id: string; name: string; online: boolean }>) =>
     shell(
       'Hive machines',
-      `<h1>Hive machines</h1>${machines.length === 0 ? '<p>还没有已登录的 Hive 设备。</p>' : machines.map((machine) => `<p><strong>${machine.name}</strong><br><span class="${machine.online ? 'ok' : 'warn'}">${machine.online ? '在线' : '离线'}</span><br><span class="hint">${machine.id}</span></p>`).join('')}`
+      `<h1>Hive machines</h1>${machines.length === 0 ? '<p>还没有已登录的 Hive 设备。</p>' : machines.map((machine) => `<p><strong>${machine.name}</strong><br><span class="${machine.online ? 'ok' : 'warn'}">${machine.online ? '在线' : '离线'}</span><br><span class="hint">${machine.id}</span>${machine.online ? `<br><a href="/app?daemonId=${encodeURIComponent(machine.id)}">打开 Hive 控制台 →</a>` : ''}</p>`).join('')}`
     )
 
   return {

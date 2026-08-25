@@ -40,7 +40,12 @@ const isStaleUiSession = async (response: Response): Promise<boolean> => {
   }
 }
 
+const isRemoteMode = () =>
+  typeof window !== 'undefined' &&
+  (window as Window & { __HIVE_REMOTE_MODE__?: boolean }).__HIVE_REMOTE_MODE__ === true
+
 export const initializeUiSession = async (): Promise<void> => {
+  if (isRemoteMode()) return
   const response = await fetch('/api/ui/session', { mode: 'same-origin' })
   if (!response.ok) {
     throw new Error('Failed to initialize UI session')

@@ -20,6 +20,12 @@ export default defineConfig({
   root: 'web',
   build: {
     outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: resolve(here, 'index.html'),
+        remote: resolve(here, 'remote.html'),
+      },
+    },
   },
   server: {
     host: '127.0.0.1',
