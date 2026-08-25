@@ -12,6 +12,7 @@ import { dispatchRoutes } from './routes-dispatches.js'
 import { fsRoutes } from './routes-fs.js'
 import { marketplaceRoutes } from './routes-marketplace.js'
 import { openWorkspaceRoutes } from './routes-open-workspace.js'
+import { remoteRoutes } from './routes-remote.js'
 import { runtimeRoutes } from './routes-runtime.js'
 import { settingsRoutes } from './routes-settings.js'
 import { taskRoutes } from './routes-tasks.js'
@@ -29,6 +30,7 @@ const routes: RouteDefinition[] = [
   ...settingsRoutes,
   ...taskRoutes,
   ...runtimeRoutes,
+  ...remoteRoutes,
   ...teamRoutes,
   ...fsRoutes,
   ...marketplaceRoutes,

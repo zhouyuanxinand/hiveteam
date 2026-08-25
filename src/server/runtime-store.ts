@@ -5,6 +5,10 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import type { RemoteAuditStore } from './remote-audit-store.js'
+import type { RemoteConfigSource } from './remote-config-keys.js'
+import type { RemoteDeviceStore } from './remote-device-store.js'
+import type { RemotePairing } from './remote-pairing.js'
 import {
   type AutoResumeResult,
   createRuntimeStoreLifecycle,
@@ -92,6 +96,12 @@ interface RuntimeStore {
   resizeAgentRun: (runId: string, cols: number, rows: number) => void
   resumeTerminalRun: (runId: string) => void
   settings: SettingsStore
+  remote: {
+    audit: RemoteAuditStore
+    config: RemoteConfigSource
+    devices: RemoteDeviceStore
+    pairing: RemotePairing
+  }
   writeRunInput: (runId: string, input: Buffer | string) => void
   getUiToken: () => string
   stopAgentRun: (runId: string) => void
@@ -207,6 +217,12 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     resizeAgentRun: lifecycle.resizeTerminalRun,
     resumeTerminalRun: lifecycle.resumeTerminalRun,
     settings: services.settings,
+    remote: {
+      audit: services.remoteAudit,
+      config: services.remoteConfig,
+      devices: services.remoteDevices,
+      pairing: services.remotePairing,
+    },
     writeRunInput: lifecycle.writeRunInput,
     getUiToken: () => services.uiAuth.getToken(),
     stopAgentRun: lifecycle.stopTerminalRun,

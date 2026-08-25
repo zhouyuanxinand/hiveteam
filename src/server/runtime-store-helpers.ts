@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { AgentManager } from './agent-manager.js'
 import {
   type AgentLaunchConfigInput,
@@ -11,6 +13,14 @@ import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
 import { createMessageLogStore } from './message-log-store.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import { createRemoteAuditStore, type RemoteAuditStore } from './remote-audit-store.js'
+import {
+  createRemoteConfigSource,
+  REMOTE_DAEMON_ID_KEY,
+  type RemoteConfigSource,
+} from './remote-config-keys.js'
+import { createRemoteDeviceStore, type RemoteDeviceStore } from './remote-device-store.js'
+import { createRemotePairing, type RemotePairing } from './remote-pairing.js'
 import { createReportOutboxStore } from './report-outbox-store.js'
 import { openRuntimeDatabase } from './runtime-database.js'
 import { buildRuntimeRestartPolicy } from './runtime-restart-policy.js'
@@ -32,6 +42,10 @@ export interface RuntimeStoreServices {
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
   reportOutbox: ReturnType<typeof createReportOutboxStore>
+  remoteAudit: RemoteAuditStore
+  remoteConfig: RemoteConfigSource
+  remoteDevices: RemoteDeviceStore
+  remotePairing: RemotePairing
   settings: ReturnType<typeof createSettingsStore>
   shellRuntime: ReturnType<typeof createWorkspaceShellRuntime>
   tasksFileWatcher: ReturnType<typeof createTasksFileWatcher>
@@ -81,6 +95,18 @@ export const createRuntimeStoreServices = (
   const agentRunStore = createAgentRunStore(db)
   const agentSessionStore = createAgentSessionStore(db)
   const settings = createSettingsStore(db)
+  if (!settings.getAppState(REMOTE_DAEMON_ID_KEY)?.value) {
+    settings.setAppState(REMOTE_DAEMON_ID_KEY, randomUUID())
+  }
+  const remoteConfig = createRemoteConfigSource({ get: settings.getAppState })
+  const remoteDevices = createRemoteDeviceStore(db)
+  const remoteAudit = createRemoteAuditStore(db)
+  const remotePairing = createRemotePairing({
+    audit: remoteAudit,
+    deviceStore: remoteDevices,
+    getDaemonId: remoteConfig.getDaemonId,
+    getGatewayUrl: remoteConfig.getGatewayUrl,
+  })
   const tasksFileService = createTasksFileService()
   const tasksFileWatchCallbacks = new Set<(workspaceId: string, content: string) => void>()
   const tasksFileWatcher = createTasksFileWatcher({
@@ -151,6 +177,10 @@ export const createRuntimeStoreServices = (
     dispatchLedgerStore,
     messageLogStore,
     reportOutbox,
+    remoteAudit,
+    remoteConfig,
+    remoteDevices,
+    remotePairing,
     settings,
     shellRuntime,
     tasksFileWatcher,
@@ -359,6 +389,8 @@ export const createRuntimeStoreLifecycle = ({
       await services.tasksFileWatcher.close()
       services.workerOutputTracker?.closeAll()
       services.agentRunStore.close?.()
+      services.remotePairing.dispose()
+      await services.remoteAudit.flush()
       services.db.close()
     },
     configureAgentLaunch: (workspaceId: string, agentId: string, input: AgentLaunchConfigInput) => {
