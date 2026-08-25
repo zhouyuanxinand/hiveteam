@@ -32,6 +32,8 @@ import { buildRuntimeRestartPolicy } from './runtime-restart-policy.js'
 import { createSettingsStore } from './settings-store.js'
 import { createTasksFileService } from './tasks-file.js'
 import { createTasksFileWatcher } from './tasks-file-watcher.js'
+import { createTeamMemoryDigestProvider } from './team-memory-digest.js'
+import { createTeamMemoryStore } from './team-memory-store.js'
 import { createTeamOperations } from './team-operations.js'
 import { resolveTerminalInputProfile } from './terminal-input-profile.js'
 import { createUiAuth } from './ui-auth.js'
@@ -46,6 +48,7 @@ export interface RuntimeStoreServices {
   db: ReturnType<typeof openRuntimeDatabase>
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
+  memoryStore: ReturnType<typeof createTeamMemoryStore>
   reportOutbox: ReturnType<typeof createReportOutboxStore>
   remoteAudit: RemoteAuditStore
   remoteConfig: RemoteConfigSource
@@ -101,6 +104,7 @@ export const createRuntimeStoreServices = (
   const agentRunStore = createAgentRunStore(db)
   const agentSessionStore = createAgentSessionStore(db)
   const settings = createSettingsStore(db)
+  const memoryStore = createTeamMemoryStore(db)
   if (!settings.getAppState(REMOTE_DAEMON_ID_KEY)?.value) {
     settings.setAppState(REMOTE_DAEMON_ID_KEY, randomUUID())
   }
@@ -153,7 +157,8 @@ export const createRuntimeStoreServices = (
       workspaceStore.markAgentStopped(workspaceId, agentId)
     },
     restartPolicy,
-    (workspaceId, agentId) => workspaceStore.getAgent(workspaceId, agentId)
+    (workspaceId, agentId) => workspaceStore.getAgent(workspaceId, agentId),
+    createTeamMemoryDigestProvider(memoryStore, settings)
   )
   const teamOps = createTeamOperations({
     agentRuntime,
@@ -183,6 +188,7 @@ export const createRuntimeStoreServices = (
     db,
     dispatchLedgerStore,
     messageLogStore,
+    memoryStore,
     reportOutbox,
     remoteAudit,
     remoteConfig,

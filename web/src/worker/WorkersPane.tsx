@@ -6,7 +6,6 @@ import type { TerminalRunSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { Confirm } from '../ui/Confirm.js'
 import { EmptyState } from '../ui/EmptyState.js'
-import { RenameWorkerDialog } from './RenameWorkerDialog.js'
 import { WorkerCard, type WorkerCardActionKind } from './WorkerCard.js'
 import { presentWorkerStatus, type WorkerStatusKind } from './worker-status.js'
 
@@ -75,8 +74,8 @@ export const WorkersPane = ({
     [terminalRuns]
   )
   const [pendingDelete, setPendingDelete] = useState<TeamListItem | null>(null)
-  const [renameTarget, setRenameTarget] = useState<TeamListItem | null>(null)
-  const [renameBusy, setRenameBusy] = useState(false)
+  const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null)
+  const [renameBusyWorkerId, setRenameBusyWorkerId] = useState<string | null>(null)
 
   const handleAction = (kind: WorkerCardActionKind, worker: TeamListItem) => {
     if (kind === 'start') {
@@ -84,7 +83,7 @@ export const WorkersPane = ({
       return
     }
     if (kind === 'rename') {
-      setRenameTarget(worker)
+      setEditingWorkerId(worker.id)
       return
     }
     if (kind === 'delete') {
@@ -98,12 +97,15 @@ export const WorkersPane = ({
     setPendingDelete(null)
   }
 
-  const submitRename = (worker: TeamListItem, newName: string) => {
-    setRenameBusy(true)
-    void onRenameWorker(worker, newName).finally(() => {
-      setRenameBusy(false)
-      setRenameTarget(null)
-    })
+  const submitRename = async (worker: TeamListItem, newName: string) => {
+    setRenameBusyWorkerId(worker.id)
+    try {
+      const result = await onRenameWorker(worker, newName)
+      if (!result.error) setEditingWorkerId(null)
+      return result
+    } finally {
+      setRenameBusyWorkerId(null)
+    }
   }
 
   return (
@@ -210,9 +212,13 @@ export const WorkersPane = ({
                     <li key={worker.id}>
                       <WorkerCard
                         hasRun={runIdsByAgentId.has(worker.id)}
+                        isEditing={editingWorkerId === worker.id}
                         isPending={startingWorkerId === worker.id}
                         onAction={handleAction}
+                        onCancelRename={() => setEditingWorkerId(null)}
                         onClick={onOpenWorker}
+                        onRename={submitRename}
+                        renameBusy={renameBusyWorkerId === worker.id}
                         worker={worker}
                       />
                     </li>
@@ -236,12 +242,6 @@ export const WorkersPane = ({
         confirmLabel={t('worker.deleteMember')}
         confirmKind="danger"
         onConfirm={confirmDelete}
-      />
-      <RenameWorkerDialog
-        worker={renameTarget}
-        busy={renameBusy}
-        onClose={() => setRenameTarget(null)}
-        onSubmit={submitRename}
       />
     </div>
   )

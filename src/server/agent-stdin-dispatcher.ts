@@ -11,6 +11,7 @@ import {
 
 interface AgentStdinDispatcherInput {
   agentManager: AgentManager | undefined
+  getDispatchMemoryDigest?: (workspaceId: string, agentId: string, task: string) => string
   getLaunchConfig: (workspaceId: string, agentId: string) => AgentLaunchConfigInput | undefined
   getWorkspaceId: (agentId: string) => string | undefined
   registry: LiveRunRegistry
@@ -46,9 +47,10 @@ export const buildWorkerDispatchPayload = (
   fromAgentName: string,
   workerDescription: string,
   dispatchId: string,
-  text: string
-): string =>
-  [
+  text: string,
+  memoryDigest?: string
+): string => {
+  const lines = [
     `[Hive 系统消息：来自 @${fromAgentName} 的派单]`,
     '',
     `你的角色：${workerDescription}`,
@@ -61,10 +63,11 @@ export const buildWorkerDispatchPayload = (
     '',
     '任务内容：',
     text,
-    '',
-    buildWorkerReminderTail(dispatchId),
-    '',
-  ].join('\n')
+  ]
+  if (memoryDigest?.trim()) lines.push('', memoryDigest.trim())
+  lines.push('', buildWorkerReminderTail(dispatchId), '')
+  return lines.join('\n')
+}
 
 export const buildWorkerCancelPayload = (dispatchId: string, reason: string): string =>
   [
@@ -79,6 +82,7 @@ export const buildWorkerCancelPayload = (dispatchId: string, reason: string): st
 
 export const createAgentStdinDispatcher = ({
   agentManager,
+  getDispatchMemoryDigest,
   getLaunchConfig,
   getWorkspaceId,
   registry,
@@ -199,7 +203,13 @@ export const createAgentStdinDispatcher = ({
       writeToActiveAgentRun(
         workspaceId,
         workerId,
-        buildWorkerDispatchPayload(fromAgentName, workerDescription, dispatchId, text),
+        buildWorkerDispatchPayload(
+          fromAgentName,
+          workerDescription,
+          dispatchId,
+          text,
+          getDispatchMemoryDigest?.(workspaceId, workerId, text)
+        ),
         { requireActiveRun: true }
       )
     },

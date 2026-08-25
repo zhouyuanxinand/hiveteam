@@ -17,6 +17,7 @@ import {
   createRuntimeStoreServices,
 } from './runtime-store-helpers.js'
 import type { SettingsStore } from './settings-store.js'
+import type { TeamMemoryStore } from './team-memory-store.js'
 import type {
   CancelTaskInput,
   DispatchTaskInput,
@@ -98,6 +99,7 @@ interface RuntimeStore {
   resizeAgentRun: (runId: string, cols: number, rows: number) => void
   resumeTerminalRun: (runId: string) => void
   settings: SettingsStore
+  memory: TeamMemoryStore
   remote: {
     audit: RemoteAuditStore
     config: RemoteConfigSource
@@ -159,6 +161,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       }
       await services.tasksFileWatcher.stop(workspaceId)
       runDataMutation(() => {
+        services.memoryStore.deleteWorkspaceEntries(workspaceId)
         services.reportOutbox.deleteWorkspaceEntries(workspaceId)
         services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
         services.workspaceStore.deleteWorkspace(workspaceId)
@@ -225,6 +228,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     resizeAgentRun: lifecycle.resizeTerminalRun,
     resumeTerminalRun: lifecycle.resumeTerminalRun,
     settings: services.settings,
+    memory: services.memoryStore,
     remote: {
       audit: services.remoteAudit,
       config: services.remoteConfig,

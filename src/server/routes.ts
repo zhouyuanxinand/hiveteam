@@ -19,10 +19,14 @@ import { taskRoutes } from './routes-tasks.js'
 import { teamRoutes } from './routes-team.js'
 import { uiRoutes } from './routes-ui.js'
 import { versionRoutes } from './routes-version.js'
+import { workflowRoutes } from './routes-workflows.js'
+import { workspaceMemoryRoutes } from './routes-workspace-memory.js'
 import { workspaceRoutes } from './routes-workspaces.js'
 
 const routes: RouteDefinition[] = [
   ...workspaceRoutes,
+  ...workspaceMemoryRoutes,
+  ...workflowRoutes,
   ...openWorkspaceRoutes,
   ...dispatchRoutes,
   ...versionRoutes,

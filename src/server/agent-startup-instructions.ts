@@ -21,9 +21,11 @@ export const buildAgentLegacyIdentityMarker = ({
 
 export const buildAgentStartupInstructions = ({
   agent,
+  memoryDigest,
   workspace,
 }: {
   agent: AgentSummary
+  memoryDigest?: string
   workspace: WorkspaceSummary
 }) => {
   const lines = [
@@ -82,6 +84,10 @@ export const buildAgentStartupInstructions = ({
       'Hive worker 边界：',
       ...getHiveTeamRules(agent)
     )
+  }
+
+  if (memoryDigest?.trim()) {
+    lines.push('', memoryDigest.trim())
   }
 
   lines.push('')

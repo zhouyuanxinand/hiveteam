@@ -1437,14 +1437,124 @@ html, body {
    the WorkersPane width: ~200 → 1, ~440 → 2, ~660 → 3, ~880 → 4 … */
 .worker-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
   gap: 10px;
 }
 
-/* Worker card — centered "person tile" with hero avatar, name, role text,
-   status indicator. Uses .card / .card--interactive shadow + hover lift. */
+/* Worker cards keep identity, role, activity and state in stable rows so a
+   mixed-status team can be scanned without opening each terminal. */
 .worker-card-shell {
   position: relative;
+}
+.worker-card {
+  min-height: 112px;
+  cursor: pointer;
+}
+.worker-card__open-target {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.worker-card__open-target:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+.worker-card__open-target:disabled { cursor: default; }
+.worker-card__content {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.worker-card[data-status='working'] {
+  border-color: color-mix(in oklab, var(--status-green) 34%, var(--border));
+}
+.worker-card__identity-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding-right: 54px;
+}
+.worker-card__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+}
+.worker-card__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.worker-card__name-input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  outline: 0;
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 16%, transparent);
+  pointer-events: auto;
+}
+.worker-card__role-tag {
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.worker-card__activity {
+  height: 31px;
+  margin: 9px 0 7px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  font-size: 11px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.worker-card__footer {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.worker-card__pending {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in oklab, var(--status-orange) 38%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--status-orange) 12%, transparent);
+  color: var(--status-orange);
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Stopped worker — the card visually steps back so a grid mixing working
@@ -1452,8 +1562,8 @@ html, body {
    on the card body. Hover restores full saturation so the user can still
    inspect / restart the agent without the chrome fighting them. */
 .worker-card-shell[data-status='stopped'] .worker-card {
-  opacity: 0.65;
-  filter: saturate(0.6);
+  opacity: 0.84;
+  filter: saturate(0.78);
   transition:
     opacity var(--dur-fast) ease,
     filter var(--dur-fast) ease;
@@ -1530,6 +1640,339 @@ html, body {
   background: color-mix(in oklab, var(--status-red) 14%, transparent);
   border-color: color-mix(in oklab, var(--status-red) 40%, var(--border-bright));
   color: var(--status-red);
+}
+
+/* Workspace knowledge — one responsive surface for Memory and Workflows.
+   Desktop keeps it as a right drawer so terminal context remains visible;
+   compact screens promote it to a full-screen route-like panel. */
+.topbar-knowledge-button {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-1);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
+}
+.topbar-knowledge-button:hover,
+.topbar-knowledge-button[data-active='true'] {
+  background: var(--bg-3);
+  border-color: var(--border-bright);
+  color: var(--text-primary);
+}
+.topbar-knowledge-button[data-active='true'] svg { color: var(--accent); }
+.topbar-knowledge-button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.workspace-knowledge-overlay { background: color-mix(in oklab, #000 32%, transparent); }
+.workspace-knowledge-drawer {
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: min(620px, calc(100vw - 48px));
+  background: var(--bg-elevated);
+  border-color: var(--border-bright);
+  box-shadow: -14px 0 36px color-mix(in oklab, #000 26%, transparent);
+  color: var(--text-primary);
+  animation: knowledge-drawer-enter 180ms ease-out;
+}
+@keyframes knowledge-drawer-enter {
+  from { transform: translateX(18px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.workspace-knowledge-header {
+  display: flex;
+  min-height: 68px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-knowledge-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.workspace-knowledge-close:hover { background: var(--bg-3); color: var(--text-primary); }
+.workspace-knowledge-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 280px);
+  flex: none;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-knowledge-tabs,
+.workspace-knowledge-filter-tabs {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+.workspace-knowledge-tabs button,
+.workspace-knowledge-filter-tabs button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.workspace-knowledge-tabs button[data-active='true'],
+.workspace-knowledge-filter-tabs button[data-active='true'] {
+  background: var(--bg-3);
+  box-shadow: inset 0 0 0 1px var(--border-bright);
+  color: var(--text-primary);
+}
+.workspace-knowledge-tabs button[data-active='true'] svg { color: var(--accent); }
+.workspace-knowledge-search {
+  display: flex;
+  height: 36px;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+  color: var(--text-tertiary);
+}
+.workspace-knowledge-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.workspace-knowledge-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.workspace-knowledge-subbar {
+  display: flex;
+  min-height: 49px;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-knowledge-filter-tabs button { min-height: 24px; padding: 0 8px; }
+.workspace-memory-enabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.workspace-memory-enabled input { accent-color: var(--accent); }
+.workspace-memory-add { margin-left: auto; white-space: nowrap; }
+.workspace-knowledge-error {
+  flex: none;
+  margin: 10px 18px 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklab, var(--status-red) 45%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--status-red) 10%, var(--bg-1));
+  color: var(--status-red);
+  font-size: 12px;
+}
+.workspace-knowledge-body { min-height: 0; flex: 1; padding: 14px 18px 24px; }
+.workspace-knowledge-state {
+  display: flex;
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--text-tertiary);
+  text-align: center;
+  font-size: 13px;
+}
+.workspace-knowledge-state code {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+}
+.workspace-memory-composer {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-bright);
+  border-radius: 7px;
+  background: var(--bg-1);
+}
+.workspace-memory-composer textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.workspace-memory-composer__fields {
+  display: grid;
+  grid-template-columns: 140px 130px minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.workspace-memory-composer__fields select,
+.workspace-memory-composer__fields input {
+  height: 32px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.workspace-memory-composer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.workspace-memory-list,
+.workspace-workflow-list { display: grid; gap: 9px; }
+.workspace-memory-card,
+.workspace-workflow-card {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-1);
+}
+.workspace-memory-card { padding: 12px 13px 10px; }
+.workspace-memory-card[data-disabled='true'] { opacity: 0.62; }
+.workspace-memory-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.workspace-memory-card__meta > span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--bg-3);
+}
+.workspace-memory-card__meta .workspace-memory-kind {
+  background: color-mix(in oklab, var(--accent) 13%, var(--bg-3));
+  color: var(--accent);
+  font-weight: 650;
+}
+.workspace-memory-card > p {
+  margin: 9px 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.workspace-memory-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 9px; }
+.workspace-memory-tags span { color: var(--text-tertiary); font-size: 10px; }
+.workspace-memory-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.workspace-memory-card__actions { display: flex; align-items: center; gap: 3px; }
+.workspace-memory-card__actions button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.workspace-memory-card__actions button:hover { background: var(--bg-3); color: var(--text-primary); }
+.workspace-memory-card__actions button:disabled { opacity: 0.45; cursor: wait; }
+.workspace-workflow-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 13px;
+}
+.workspace-workflow-card > svg { margin-top: 2px; color: var(--accent); }
+.workspace-workflow-card strong { display: block; color: var(--text-primary); font-size: 13px; }
+.workspace-workflow-card p { margin: 4px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.workspace-workflow-card code { color: var(--text-tertiary); font-size: 10px; }
+.workspace-workflow-card time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .topbar-knowledge-button span { display: none; }
+  .topbar-knowledge-button { width: 28px; justify-content: center; padding: 0; }
+  .workspace-knowledge-drawer {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    border-left: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .workspace-knowledge-header { min-height: 64px; padding: 12px 14px; }
+  .workspace-knowledge-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .workspace-knowledge-tabs { width: 100%; }
+  .workspace-knowledge-tabs button { flex: 1; }
+  .workspace-knowledge-subbar { flex-wrap: wrap; gap: 8px 10px; padding: 8px 14px; }
+  .workspace-memory-enabled { order: 3; width: 100%; }
+  .workspace-knowledge-body { padding: 12px 14px 24px; }
+  .workspace-memory-composer__fields { grid-template-columns: 1fr 1fr; }
+  .workspace-memory-composer__fields input { grid-column: 1 / -1; }
+  .workspace-workflow-card { grid-template-columns: auto minmax(0, 1fr); }
+  .workspace-workflow-card time { grid-column: 2; }
 }
 
 .modal-resize-handle {

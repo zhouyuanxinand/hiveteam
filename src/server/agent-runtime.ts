@@ -16,6 +16,7 @@ import { createAgentTokenRegistry } from './agent-tokens.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
 import { createLiveRunRegistry } from './live-run-registry.js'
 import { createNoopRestartPolicy, type RestartPolicy } from './restart-policy.js'
+import type { TeamMemoryDigestProvider } from './team-memory-digest.js'
 
 export const createAgentRuntime = (
   agentManager: AgentManager | undefined,
@@ -24,7 +25,8 @@ export const createAgentRuntime = (
   getCommandPreset: (id: string) => CommandPresetRecord | undefined,
   onAgentExit: (workspaceId: string, agentId: string) => void,
   restartPolicy: RestartPolicy = createNoopRestartPolicy(),
-  getAgent?: (workspaceId: string, agentId: string) => AgentSummary | undefined
+  getAgent?: (workspaceId: string, agentId: string) => AgentSummary | undefined,
+  memoryDigestProvider?: TeamMemoryDigestProvider
 ): AgentRuntime => {
   const registry = createLiveRunRegistry()
   const launchCache = createAgentLaunchCache(agentRunStore)
@@ -41,6 +43,7 @@ export const createAgentRuntime = (
     agentManager ? syncPersistedRun(run, agentManager.getRun(run.runId), agentRunStore) : run
   const stdinDispatcher = createAgentStdinDispatcher({
     agentManager,
+    ...(memoryDigestProvider ? { getDispatchMemoryDigest: memoryDigestProvider.forDispatch } : {}),
     getLaunchConfig: launchCache.peek,
     getWorkspaceId: launchCache.getWorkspaceId,
     registry,
@@ -55,6 +58,7 @@ export const createAgentRuntime = (
     tokenRegistry,
     getCommandPreset,
     getAgent,
+    ...(memoryDigestProvider ? { getStartupMemoryDigest: memoryDigestProvider.forStartup } : {}),
     restartPolicy,
   })
 

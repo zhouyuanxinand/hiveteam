@@ -1,5 +1,11 @@
 import { Pencil, Play, Trash2 } from 'lucide-react'
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import type { TeamListItem } from '../../../src/shared/types.js'
 import { useI18n } from '../i18n.js'
@@ -24,27 +30,58 @@ export type WorkerCardActionKind = 'start' | 'rename' | 'delete'
 
 type WorkerCardProps = {
   hasRun: boolean
+  isEditing?: boolean
   isPending?: boolean
   onAction?: (kind: WorkerCardActionKind, worker: TeamListItem) => void
+  onCancelRename?: () => void
   onClick: (worker: TeamListItem) => void
+  onRename?: (worker: TeamListItem, name: string) => Promise<{ error: string | null }>
+  renameBusy?: boolean
   worker: TeamListItem
 }
 
-/**
- * Worker tile — Vercel/Linear-style left-aligned identity card. Avatar at the
- * top, then name / role / status stacked beneath, each at a distinct
- * typographic weight so the eye walks down the card cleanly. Queue badge
- * sits top-right; hover action cluster floats over the same corner.
- */
 export const WorkerCard = ({
   hasRun,
+  isEditing = false,
   isPending = false,
   onAction,
+  onCancelRename,
   onClick,
+  onRename,
+  renameBusy = false,
   worker,
 }: WorkerCardProps) => {
   const { t } = useI18n()
   const status = presentWorkerStatus(worker)
+  const [draftName, setDraftName] = useState(worker.name)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const committingRef = useRef(false)
+
+  useEffect(() => {
+    if (!isEditing) return
+    setDraftName(worker.name)
+    const timeout = window.setTimeout(() => inputRef.current?.select(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [isEditing, worker.name])
+
+  const commitRename = async () => {
+    if (committingRef.current || renameBusy) return
+    const nextName = draftName.trim()
+    if (!nextName || nextName === worker.name) {
+      onCancelRename?.()
+      return
+    }
+    committingRef.current = true
+    try {
+      const result = await onRename?.(worker, nextName)
+      if (result?.error) {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }
+    } finally {
+      committingRef.current = false
+    }
+  }
 
   const handleAction =
     (kind: WorkerCardActionKind): ((event: ReactMouseEvent<HTMLButtonElement>) => void) =>
@@ -59,42 +96,86 @@ export const WorkerCard = ({
       data-status={status.kind}
       data-worker-name={worker.name}
     >
-      <button
-        type="button"
-        onClick={() => onClick(worker)}
-        aria-label={t('worker.open', { name: worker.name })}
-        className="card card--interactive worker-card relative flex w-full flex-col gap-3 overflow-hidden p-4 text-left"
+      <div
+        className="card card--interactive worker-card relative w-full overflow-hidden p-3 text-left"
         data-testid={`worker-card-${worker.id}`}
         data-status={status.kind}
       >
-        <div className="flex items-start gap-2">
-          <CliAgentAvatar
-            commandPresetId={worker.commandPresetId}
-            workerRole={worker.role}
-            size={40}
-            statusRing={status.kind}
-          />
-        </div>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span
-            className="truncate text-base font-medium leading-tight text-pri"
-            title={worker.name}
-          >
-            {worker.name}
-          </span>
-          <span className="truncate text-xs leading-tight text-ter">{t(roleKey(worker.role))}</span>
-        </div>
-        <span
-          className={`pill ${pillToneByStatus[status.kind]} worker-card__status`}
-          role="status"
-          title={t(statusKey(status.kind))}
-        >
-          <span className={status.dotClass} aria-hidden />
-          {t(statusKey(status.kind))}
-        </span>
-      </button>
+        <button
+          type="button"
+          className="worker-card__open-target"
+          onClick={() => onClick(worker)}
+          aria-label={t('worker.open', { name: worker.name })}
+          disabled={isEditing}
+        />
+        <div className="worker-card__content">
+          <div className="worker-card__identity-row">
+            <CliAgentAvatar
+              commandPresetId={worker.commandPresetId}
+              workerRole={worker.role}
+              size={40}
+              statusRing={status.kind}
+            />
+            <div className="worker-card__identity">
+              {isEditing ? (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={draftName}
+                  maxLength={64}
+                  disabled={renameBusy}
+                  className="worker-card__name-input"
+                  data-testid={`worker-card-rename-input-${worker.id}`}
+                  aria-label={t('worker.renameAria', { name: worker.name })}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  onBlur={() => void commitRename()}
+                  onKeyDown={(event) => {
+                    event.stopPropagation()
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void commitRename()
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault()
+                      setDraftName(worker.name)
+                      onCancelRename?.()
+                    }
+                  }}
+                />
+              ) : (
+                <span className="worker-card__name" title={worker.name}>
+                  {worker.name}
+                </span>
+              )}
+              <span className="worker-card__role-tag">{t(roleKey(worker.role))}</span>
+            </div>
+          </div>
 
-      {onAction ? (
+          {worker.lastPtyLine ? (
+            <p className="worker-card__activity" title={worker.lastPtyLine}>
+              {worker.lastPtyLine}
+            </p>
+          ) : null}
+
+          <div className="worker-card__footer">
+            <span
+              className={`pill ${pillToneByStatus[status.kind]} worker-card__status`}
+              role="status"
+              title={t(statusKey(status.kind))}
+            >
+              <span className={status.dotClass} aria-hidden />
+              {t(statusKey(status.kind))}
+            </span>
+            {worker.pendingTaskCount > 0 ? (
+              <span className="worker-card__pending" role="status">
+                {t('worker.pendingDispatch', { count: worker.pendingTaskCount })}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {onAction && !isEditing ? (
         <div className="worker-card__actions">
           {!hasRun ? (
             <CardActionBtn

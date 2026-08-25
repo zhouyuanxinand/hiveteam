@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { WorkspaceSummary } from '../../src/shared/types.js'
 import { AppOverlays } from './AppOverlays.js'
@@ -6,6 +6,7 @@ import { AppWorkspaceContent } from './AppWorkspaceContent.js'
 import { DEMO_TASKS_MD } from './demo/demo-fixture.js'
 import { useDemoMode } from './demo/useDemoMode.js'
 import { useEffectiveWorkspaceState } from './demo/useEffectiveWorkspaceState.js'
+import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import { MainLayout } from './layout/MainLayout.js'
 import { RuntimeOfflinePage } from './pwa/RuntimeOfflinePage.js'
 import { UpdateAvailableToast } from './pwa/UpdateAvailableToast.js'
@@ -36,6 +37,10 @@ export const AppInner = () => {
   const [workersByWorkspaceId, setWorkersByWorkspaceId] = useWorkspaceWorkers(localPollIds)
   const [addDialogTrigger, setAddDialogTrigger] = useState(0)
   const [taskGraphOpen, setTaskGraphOpen] = useState(false)
+  const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab | null>(null)
+  useEffect(() => {
+    if (demoMode) setKnowledgeTab(null)
+  }, [demoMode])
   const toast = useToast()
   const { wizardOpen, closeWizard } = useFirstRunWizard(workspaces)
   const triggerAddDialog = useCallback(() => setAddDialogTrigger((v) => v + 1), [])
@@ -84,7 +89,10 @@ export const AppInner = () => {
   })
   const deleteWorkspace = useWorkspaceDelete({
     activeWorkspaceId,
-    onActiveDeleted: () => setTaskGraphOpen(false),
+    onActiveDeleted: () => {
+      setTaskGraphOpen(false)
+      setKnowledgeTab(null)
+    },
     selectWorkspace,
     setWorkersByWorkspaceId,
     setWorkspaces,
@@ -116,6 +124,16 @@ export const AppInner = () => {
       <MainLayout
         hideTopbarActions={!eff.effectiveActiveWorkspace}
         onToggleTaskGraph={() => setTaskGraphOpen((value) => !value)}
+        {...(!demoMode
+          ? {
+              onToggleMemory: () =>
+                setKnowledgeTab((value) => (value === 'memory' ? null : 'memory')),
+              onToggleWorkflows: () =>
+                setKnowledgeTab((value) => (value === 'workflows' ? null : 'workflows')),
+            }
+          : {})}
+        memoryOpen={knowledgeTab === 'memory'}
+        workflowsOpen={knowledgeTab === 'workflows'}
         openTaskCount={openTaskCount}
         topbarActions={<OpenWorkspaceButton workspace={eff.effectiveActiveWorkspace} />}
         taskGraphOpen={taskGraphOpen}
@@ -168,12 +186,15 @@ export const AppInner = () => {
           wizardOpen={wizardOpen}
           onAddWorkspace={triggerAddDialog}
           onCloseTaskGraph={() => setTaskGraphOpen(false)}
+          onCloseKnowledge={() => setKnowledgeTab(null)}
           onCloseWizard={closeWizard}
           onCreateWorkspace={wsCreate.createNewWorkspace}
           onTryDemo={enableDemo}
           taskGraphOpen={taskGraphOpen}
+          knowledgeTab={knowledgeTab}
           tasksFile={tasksFile}
           workspacePath={eff.effectiveActiveWorkspace?.path ?? null}
+          workspaceId={demoMode ? null : (activeWorkspaceId ?? null)}
           workers={activeWorkers}
           onSelectOwner={handleSelectOwner}
         />

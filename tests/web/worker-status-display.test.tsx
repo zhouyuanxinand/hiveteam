@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { TeamListItem } from '../../src/shared/types.js'
@@ -42,6 +42,48 @@ describe('worker status presentation', () => {
     expect(screen.getByRole('status')).toHaveTextContent('idle')
     expect(screen.getByTestId('worker-card-idle-worker')).toHaveAttribute('data-status', 'idle')
     expect(screen.queryByLabelText('Start ember-check-23')).toBeNull()
+  })
+
+  test('worker card shows pending dispatch activity without inventing a fourth status', () => {
+    render(
+      <WorkerCard
+        hasRun
+        onClick={vi.fn()}
+        worker={worker({ pendingTaskCount: 2, status: 'idle' })}
+      />
+    )
+
+    const statuses = screen.getAllByRole('status')
+    expect(statuses[0]).toHaveTextContent('idle')
+    expect(screen.getByText('2 pending dispatches')).toBeInTheDocument()
+  })
+
+  test('worker name is edited directly inside its card', async () => {
+    const onRenameWorker = vi.fn().mockResolvedValue({ error: null })
+    render(
+      <WorkersPane
+        onAddWorkerClick={vi.fn()}
+        onDeleteWorker={vi.fn()}
+        onOpenWorker={vi.fn()}
+        onRenameWorker={onRenameWorker}
+        onStartWorker={vi.fn()}
+        startingWorkerId={null}
+        terminalRuns={[]}
+        workers={[worker()]}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('worker-card-rename-worker-1'))
+    const input = screen.getByTestId('worker-card-rename-input-worker-1')
+    fireEvent.change(input, { target: { value: 'ember-renamed' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(onRenameWorker).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'worker-1' }),
+        'ember-renamed'
+      )
+    })
   })
 
   test('workers pane groups idle running PTYs separately from active work', () => {

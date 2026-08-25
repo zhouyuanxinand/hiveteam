@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 
 import type { TeamListItem } from '../../src/shared/types.js'
+import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import type { useTasksFile } from './tasks/useTasksFile.js'
 import type { WorkspaceCreateInput } from './workspace/workspace-create-input.js'
 
@@ -19,18 +20,26 @@ const AddWorkspaceDialog = lazy(() =>
 const FirstRunWizard = lazy(() =>
   import('./wizard/FirstRunWizard.js').then((module) => ({ default: module.FirstRunWizard }))
 )
+const WorkspaceKnowledgeDrawer = lazy(() =>
+  import('./knowledge/WorkspaceKnowledgeDrawer.js').then((module) => ({
+    default: module.WorkspaceKnowledgeDrawer,
+  }))
+)
 
 type AppOverlaysProps = {
   addDialogTrigger: number
   onAddWorkspace: () => void
   onCloseTaskGraph: () => void
   onCloseWizard: (shouldMarkSeen?: boolean) => void
+  onCloseKnowledge: () => void
   onCreateWorkspace: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
   onTryDemo: () => void
   taskGraphOpen: boolean
+  knowledgeTab: KnowledgeTab | null
   tasksFile: TasksFileApi
   wizardOpen: boolean
   workspacePath: string | null
+  workspaceId: string | null
   /** Workspace's active worker roster — feeds the §6.6.2 chip resolution. */
   workers?: readonly TeamListItem[]
   /** Cross-pane jump on chip click (§6.6.6). */
@@ -44,12 +53,15 @@ export const AppOverlays = ({
   onAddWorkspace,
   onCloseTaskGraph,
   onCloseWizard,
+  onCloseKnowledge,
   onCreateWorkspace,
   onTryDemo,
   taskGraphOpen,
+  knowledgeTab,
   tasksFile,
   wizardOpen,
   workspacePath,
+  workspaceId,
   workers,
   onSelectOwner,
   connectionStale,
@@ -68,6 +80,16 @@ export const AppOverlays = ({
           {...(workers ? { workers } : {})}
           {...(onSelectOwner ? { onSelectOwner } : {})}
           {...(connectionStale !== undefined ? { connectionStale } : {})}
+        />
+      </Suspense>
+    ) : null}
+    {workspaceId && knowledgeTab ? (
+      <Suspense fallback={null}>
+        <WorkspaceKnowledgeDrawer
+          initialTab={knowledgeTab}
+          onClose={onCloseKnowledge}
+          open
+          workspaceId={workspaceId}
         />
       </Suspense>
     ) : null}

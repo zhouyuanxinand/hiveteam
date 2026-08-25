@@ -1,4 +1,4 @@
-import { ListChecks } from 'lucide-react'
+import { Brain, ListChecks, Workflow } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useI18n } from '../i18n.js'
@@ -13,8 +13,12 @@ type TopbarProps = {
   actions?: ReactNode
   hideActions?: boolean
   onToggleTaskGraph?: () => void
+  onToggleMemory?: () => void
+  onToggleWorkflows?: () => void
   openTaskCount?: number
   taskGraphOpen?: boolean
+  memoryOpen?: boolean
+  workflowsOpen?: boolean
   version?: string
 }
 
@@ -22,8 +26,12 @@ export const Topbar = ({
   actions,
   hideActions = false,
   onToggleTaskGraph,
+  onToggleMemory,
+  onToggleWorkflows,
   openTaskCount = 0,
   taskGraphOpen = false,
+  memoryOpen = false,
+  workflowsOpen = false,
   version = APP_VERSION,
 }: TopbarProps) => {
   const { t } = useI18n()
@@ -58,6 +66,38 @@ export const Topbar = ({
           <>
             {actions}
             <RemoteAccessButton />
+            {onToggleMemory ? (
+              <Tooltip label={t('memory.title')}>
+                <button
+                  type="button"
+                  onClick={onToggleMemory}
+                  aria-pressed={memoryOpen}
+                  aria-label={t('memory.title')}
+                  className="topbar-knowledge-button"
+                  data-active={memoryOpen ? 'true' : undefined}
+                  data-testid="topbar-memory"
+                >
+                  <Brain size={13} aria-hidden />
+                  <span>{t('memory.tab')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
+            {onToggleWorkflows ? (
+              <Tooltip label={t('workflows.title')}>
+                <button
+                  type="button"
+                  onClick={onToggleWorkflows}
+                  aria-pressed={workflowsOpen}
+                  aria-label={t('workflows.title')}
+                  className="topbar-knowledge-button"
+                  data-active={workflowsOpen ? 'true' : undefined}
+                  data-testid="topbar-workflows"
+                >
+                  <Workflow size={13} aria-hidden />
+                  <span>{t('workflows.tab')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
             {onToggleTaskGraph ? (
               <Tooltip label={taskGraphTooltip}>
                 <button

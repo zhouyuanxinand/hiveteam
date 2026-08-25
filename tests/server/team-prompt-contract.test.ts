@@ -61,9 +61,14 @@ describe('team prompt contract', () => {
     }
 
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+    store.memory.create(workspace.id, {
+      body: '实现登录必须保留现有 session cookie 兼容性。',
+      kind: 'decision',
+      tags: ['auth'],
+    })
     store.configureAgentLaunch(workspace.id, worker.id, {
-      command: '/bin/bash',
-      args: ['-lc', `"${process.execPath}" "${workerScript}"`],
+      command: process.execPath,
+      args: [workerScript],
     })
 
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
@@ -75,12 +80,16 @@ describe('team prompt contract', () => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       const output = run?.output.replace(/\r\n/g, '\n')
       expect(output).toContain('@Orchestrator')
-      expect(output).toContain(`你的角色：${worker.description}`)
+      expect(output?.replace(/\s/g, '')).toContain(
+        `你的角色：${worker.description}`.replace(/\s/g, '')
+      )
       expect(output).toContain(`执行 \`team report "<result>" --dispatch ${dispatch.id}\``)
       expect(output).toContain(`dispatch_id: ${dispatch.id}`)
       expect(output).not.toContain('--success')
       expect(output).not.toContain('--failed')
       expect(output).toContain('实现登录')
+      expect(output).toContain('<hive-memory context="dispatch">')
+      expect(output).toContain('必须保留现有 session cookie 兼容性')
       // Task body is followed by a <hive-system-reminder> tail carrying the
       // dispatch_id-bound report syntax — this is what re-anchors the worker
       // identity after an internal /compact.
@@ -135,12 +144,19 @@ describe('team prompt contract', () => {
     }
 
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+    store.memory.create(workspace.id, {
+      body: 'All authentication changes must preserve backwards compatibility.',
+      kind: 'decision',
+      tags: ['auth'],
+    })
     store.configureAgentLaunch(workspace.id, worker.id, { command: 'claude', args: [] })
 
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       expect(run?.output).toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).toContain('<hive-memory context="startup">')
+      expect(run?.output).toContain('preserve backwards compatibility')
       expect(run?.output).toContain('SUBMITTED')
     }, 4000)
 

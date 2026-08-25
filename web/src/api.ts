@@ -1,5 +1,11 @@
 import type { OpenTargetId, OpenWorkspaceErrorCode } from '../../src/shared/open-targets.js'
 import type {
+  TeamMemoryEntry,
+  TeamMemoryKind,
+  TeamMemoryScope,
+  TeamMemoryStatus,
+} from '../../src/shared/team-memory.js'
+import type {
   AgentSummary,
   TeamListItem,
   TeamListItemPayload,
@@ -8,7 +14,14 @@ import type {
   WorkspaceSummary,
 } from '../../src/shared/types.js'
 
-export type { OpenTargetId, OpenWorkspaceErrorCode }
+export type {
+  OpenTargetId,
+  OpenWorkspaceErrorCode,
+  TeamMemoryEntry,
+  TeamMemoryKind,
+  TeamMemoryScope,
+  TeamMemoryStatus,
+}
 
 const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
   id: payload.id,
@@ -562,6 +575,149 @@ export const listWorkers = async (workspaceId: string): Promise<TeamListItem[]> 
 
   const payload = (await response.json()) as TeamListItemPayload[]
   return payload.map(fromPayload)
+}
+
+interface TeamMemoryPayload {
+  body: string
+  confidence: number
+  created_at: number
+  created_by_agent_id: string | null
+  created_by_agent_name: string | null
+  disabled: boolean
+  id: string
+  kind: TeamMemoryKind
+  last_injected_at: number | null
+  pinned: boolean
+  scope: TeamMemoryScope
+  source: TeamMemoryEntry['source']
+  status: TeamMemoryStatus
+  tags: string[]
+  updated_at: number
+  workspace_id: string | null
+}
+
+const fromTeamMemoryPayload = (payload: TeamMemoryPayload): TeamMemoryEntry => ({
+  body: payload.body,
+  confidence: payload.confidence,
+  createdAt: payload.created_at,
+  createdByAgentId: payload.created_by_agent_id,
+  createdByAgentName: payload.created_by_agent_name,
+  disabled: payload.disabled,
+  id: payload.id,
+  kind: payload.kind,
+  lastInjectedAt: payload.last_injected_at,
+  pinned: payload.pinned,
+  scope: payload.scope,
+  source: payload.source,
+  status: payload.status,
+  tags: payload.tags,
+  updatedAt: payload.updated_at,
+  workspaceId: payload.workspace_id,
+})
+
+export const listTeamMemory = async (
+  workspaceId: string,
+  input: { query?: string; status?: TeamMemoryStatus } = {}
+): Promise<TeamMemoryEntry[]> => {
+  const query = new URLSearchParams({ limit: '50' })
+  if (input.query?.trim()) query.set('query', input.query.trim())
+  if (input.status) query.set('status', input.status)
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory?${query}`)
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to load team memory'))
+  return ((await response.json()) as TeamMemoryPayload[]).map(fromTeamMemoryPayload)
+}
+
+export const createTeamMemory = async (
+  workspaceId: string,
+  input: { body: string; kind: TeamMemoryKind; scope: TeamMemoryScope; tags: string[] }
+): Promise<TeamMemoryEntry> => {
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory`, {
+    body: JSON.stringify(input),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to save team memory'))
+  return fromTeamMemoryPayload((await response.json()) as TeamMemoryPayload)
+}
+
+export const updateTeamMemory = async (
+  workspaceId: string,
+  memoryId: string,
+  input: Partial<{
+    body: string
+    disabled: boolean
+    kind: TeamMemoryKind
+    pinned: boolean
+    scope: TeamMemoryScope
+    status: TeamMemoryStatus
+    tags: string[]
+  }>
+): Promise<TeamMemoryEntry> => {
+  const response = await apiFetch(
+    `/api/ui/workspaces/${workspaceId}/memory/${encodeURIComponent(memoryId)}`,
+    {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PATCH',
+    }
+  )
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to update team memory'))
+  }
+  return fromTeamMemoryPayload((await response.json()) as TeamMemoryPayload)
+}
+
+export const getTeamMemorySettings = async (workspaceId: string): Promise<{ enabled: boolean }> => {
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/settings`)
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load memory settings'))
+  }
+  return (await response.json()) as { enabled: boolean }
+}
+
+export const setTeamMemoryEnabled = async (
+  workspaceId: string,
+  enabled: boolean
+): Promise<void> => {
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/settings`, {
+    body: JSON.stringify({ enabled }),
+    headers: { 'content-type': 'application/json' },
+    method: 'PUT',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to update memory settings'))
+  }
+}
+
+export interface WorkflowDefinition {
+  description: string
+  id: string
+  name: string
+  path: string
+  updatedAt: number
+}
+
+interface WorkflowDefinitionPayload {
+  description: string
+  id: string
+  name: string
+  path: string
+  updated_at: number
+}
+
+export const listWorkspaceWorkflows = async (
+  workspaceId: string
+): Promise<WorkflowDefinition[]> => {
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/workflows`)
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to load workflows'))
+  const payload = (await response.json()) as { workflows: WorkflowDefinitionPayload[] }
+  return payload.workflows.map((workflow) => ({
+    description: workflow.description,
+    id: workflow.id,
+    name: workflow.name,
+    path: workflow.path,
+    updatedAt: workflow.updated_at,
+  }))
 }
 
 export const listCommandPresets = async (): Promise<CommandPreset[]> => {

@@ -22,6 +22,7 @@ interface AgentRunStarterInput {
   tokenRegistry: AgentTokenRegistry
   getCommandPreset: (id: string) => CommandPresetRecord | undefined
   getAgent: ((workspaceId: string, agentId: string) => AgentSummary | undefined) | undefined
+  getStartupMemoryDigest?: (workspaceId: string, agent: AgentSummary) => string
   restartPolicy: RestartPolicy
 }
 
@@ -35,6 +36,7 @@ export const createAgentRunStarter =
     tokenRegistry,
     getCommandPreset,
     getAgent,
+    getStartupMemoryDigest,
     restartPolicy,
   }: AgentRunStarterInput) =>
   async (
@@ -151,7 +153,16 @@ export const createAgentRunStarter =
           agent &&
           isInteractiveAgentCommand(startConfig.interactiveCommand ?? startConfig.command)
         ) {
-          postStartWriter(run.runId, buildAgentStartupInstructions({ agent, workspace }))
+          postStartWriter(
+            run.runId,
+            buildAgentStartupInstructions({
+              agent,
+              ...(getStartupMemoryDigest
+                ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent) }
+                : {}),
+              workspace,
+            })
+          )
         }
       } catch {
         // The agent may have exited before post-start guidance could be written.

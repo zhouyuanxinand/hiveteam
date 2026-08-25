@@ -17,8 +17,9 @@ import { applySchemaVersion19 } from './sqlite-schema-v19.js'
 import { applySchemaVersion20 } from './sqlite-schema-v20.js'
 import { applySchemaVersion21 } from './sqlite-schema-v21.js'
 import { applySchemaVersion22 } from './sqlite-schema-v22.js'
+import { applySchemaVersion23 } from './sqlite-schema-v23.js'
 
-export const CURRENT_SCHEMA_VERSION = 22
+export const CURRENT_SCHEMA_VERSION = 23
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -309,5 +310,16 @@ export const initializeRuntimeDatabase = (db: Database) => {
   if (!appliedVersions.has(22)) {
     applySchemaVersion22(db)
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(22, Date.now())
+  }
+
+  if (!appliedVersions.has(23)) {
+    applySchemaVersion23(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(23, Date.now())
+  } else {
+    // Published Hive builds used v23 before Team Memory arrived in v26.
+    // Keep this idempotent bootstrap so a database moving to HiveTeam still
+    // receives the compatible memory tables without depending on official
+    // later-version migrations.
+    applySchemaVersion23(db)
   }
 }
