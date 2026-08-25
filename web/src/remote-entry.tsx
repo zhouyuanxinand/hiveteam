@@ -15,6 +15,7 @@ const root = createRoot(container)
 
 const openHive = async () => {
   ;(window as Window & { __HIVE_REMOTE_MODE__?: boolean }).__HIVE_REMOTE_MODE__ = true
+  document.documentElement.dataset.hiveRemote = 'true'
   document.body.dataset.hiveRemote = 'true'
   installRemoteTransport(client)
   const { App } = await import('./app.js')

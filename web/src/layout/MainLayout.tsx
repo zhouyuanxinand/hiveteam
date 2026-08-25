@@ -32,7 +32,7 @@ export const MainLayout = ({
 
   return (
     <div
-      className="flex h-screen w-full flex-col overflow-hidden"
+      className="main-layout flex h-screen w-full flex-col overflow-hidden"
       style={{ background: 'var(--bg-0)', color: 'var(--text-primary)' }}
     >
       <Topbar
@@ -42,7 +42,7 @@ export const MainLayout = ({
         openTaskCount={openTaskCount}
         taskGraphOpen={taskGraphOpen}
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="main-layout-body flex min-h-0 flex-1">
         <aside
           aria-label={t('layout.sidebarAria')}
           className="workspace-sidebar relative flex shrink-0 flex-col"
@@ -67,7 +67,9 @@ export const MainLayout = ({
             onKeyDown={sidebarResize.onResizeKeyDown}
           />
         </aside>
-        <section className="relative flex min-w-0 flex-1">{children}</section>
+        <section className="main-content relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          {children}
+        </section>
       </div>
     </div>
   )

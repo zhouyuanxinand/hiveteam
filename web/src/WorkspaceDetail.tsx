@@ -254,11 +254,14 @@ export const WorkspaceDetail = ({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col" style={{ background: 'var(--bg-2)' }}>
+    <div
+      className="workspace-detail flex min-h-0 min-w-0 flex-1 flex-col"
+      style={{ background: 'var(--bg-2)' }}
+    >
       <WorkspaceNotifications terminalRuns={terminalRuns} workers={workers} workspace={workspace} />
-      <div ref={split.containerRef} className="relative flex min-h-0 flex-1">
+      <div ref={split.containerRef} className="workspace-pane-split relative flex min-h-0 flex-1">
         <div
-          className="flex min-w-[480px] shrink-0 flex-col"
+          className="orchestrator-pane-shell flex min-w-[480px] shrink-0 flex-col"
           style={{ width: orchWidth }}
           data-testid="orchestrator-pane-shell"
         >
@@ -291,7 +294,7 @@ export const WorkspaceDetail = ({
           onPointerDown={split.beginDrag}
           onKeyDown={split.onKeyDown}
         />
-        <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="workers-pane-shell relative flex min-w-0 flex-1 flex-col">
           <WorkersPane
             autoResumeBusy={autoResumeBusy}
             autoResumeOnRestart={autoResumeOnRestart}

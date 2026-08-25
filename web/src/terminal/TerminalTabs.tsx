@@ -41,7 +41,7 @@ export const TerminalTabs = ({
     <div
       role="tablist"
       aria-label={t('terminalPanel.tablistAria')}
-      className="scrollbar-thin flex h-9 min-h-9 w-full items-stretch overflow-x-auto"
+      className="terminal-tabs scrollbar-thin flex h-9 min-h-9 w-full items-stretch overflow-x-auto"
       style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}
       data-testid="terminal-tab-strip"
     >

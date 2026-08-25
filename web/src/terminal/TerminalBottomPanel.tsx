@@ -48,7 +48,7 @@ export const TerminalBottomPanel = ({
     // biome-ignore lint/a11y/noStaticElementInteractions: panel container hosts a Cmd+W keyboard shortcut for closing the active terminal tab
     <div
       data-testid="terminal-bottom-panel"
-      className="relative flex shrink-0 flex-col"
+      className="terminal-bottom-panel relative flex min-w-0 max-w-full shrink-0 flex-col overflow-hidden"
       style={{
         height: resize.height,
         background: 'var(--bg-1)',
@@ -90,7 +90,10 @@ export const TerminalBottomPanel = ({
         onNewShell={onNewShell}
         newShellPending={newShellPending}
       />
-      <div className="min-h-0 flex-1" style={{ background: 'var(--bg-crust)' }}>
+      <div
+        className="terminal-bottom-panel__body min-h-0 min-w-0 flex-1 overflow-hidden"
+        style={{ background: 'var(--bg-crust)' }}
+      >
         {active ? (
           <ActiveTabBody
             tab={active}

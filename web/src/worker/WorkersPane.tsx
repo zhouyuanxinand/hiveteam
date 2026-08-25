@@ -107,54 +107,60 @@ export const WorkersPane = ({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col" style={{ background: 'var(--bg-2)' }}>
+    <div
+      className="workers-pane flex min-h-0 min-w-0 flex-1 flex-col"
+      style={{ background: 'var(--bg-2)' }}
+    >
       <div
-        className="flex shrink-0 flex-col gap-1 px-4 pt-3 pb-2.5"
+        className="workers-pane-header flex shrink-0 flex-col gap-1 px-4 pt-3 pb-2.5"
         style={{
           boxShadow: 'inset 0 -1px 0 var(--border)',
         }}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="workers-pane-header__row flex items-center gap-2.5">
           <span className="text-lg font-semibold text-pri">{t('worker.teamMembers')}</span>
           <span className="mono inline-flex min-w-7 items-center justify-center rounded bg-3 px-2.5 py-1 text-base leading-none text-sec">
             {workers.length}
           </span>
-          <div className="flex-1" />
-          {autoResumeOnRestart !== undefined && onAutoResumeChange ? (
-            <label className="mr-1 inline-flex items-center gap-1.5 text-xs text-sec">
-              <input
-                type="checkbox"
-                checked={autoResumeOnRestart}
-                disabled={autoResumeBusy}
-                onChange={(event) => onAutoResumeChange(event.target.checked)}
-                aria-label={t('worker.autoResumeAria')}
-                data-testid="workspace-auto-resume"
-              />
-              <span>{t('worker.autoResume')}</span>
-            </label>
-          ) : null}
-          {shellTerminalAvailable ? (
+          <div className="workers-pane-header__actions ml-auto flex items-center gap-1.5">
+            {autoResumeOnRestart !== undefined && onAutoResumeChange ? (
+              <label className="workers-pane-auto-resume mr-1 inline-flex items-center gap-1.5 text-xs text-sec">
+                <input
+                  type="checkbox"
+                  checked={autoResumeOnRestart}
+                  disabled={autoResumeBusy}
+                  onChange={(event) => onAutoResumeChange(event.target.checked)}
+                  aria-label={t('worker.autoResumeAria')}
+                  data-testid="workspace-auto-resume"
+                />
+                <span>{t('worker.autoResume')}</span>
+              </label>
+            ) : null}
+            {shellTerminalAvailable ? (
+              <button
+                type="button"
+                onClick={onOpenShellTerminal}
+                className="workers-pane-action icon-btn icon-btn--tertiary"
+                aria-label={t('shellTerminal.openAria')}
+                data-testid="open-workspace-shell"
+              >
+                <Terminal size={14} aria-hidden />
+                <span className="workers-pane-action__label">{t('shellTerminal.open')}</span>
+              </button>
+            ) : null}
             <button
               type="button"
-              onClick={onOpenShellTerminal}
-              className="icon-btn icon-btn--tertiary"
-              aria-label={t('shellTerminal.openAria')}
-              data-testid="open-workspace-shell"
+              onClick={onAddWorkerClick}
+              className="workers-pane-action icon-btn icon-btn--primary"
+              data-testid="add-worker-trigger"
             >
-              <Terminal size={14} aria-hidden /> {t('shellTerminal.open')}
+              <UserPlus size={14} aria-hidden />
+              <span className="workers-pane-action__label">{t('addWorker.create')}</span>
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onAddWorkerClick}
-            className="icon-btn icon-btn--primary"
-            data-testid="add-worker-trigger"
-          >
-            <UserPlus size={14} aria-hidden /> {t('addWorker.create')}
-          </button>
+          </div>
         </div>
         {workers.length > 0 ? (
-          <div className="flex items-center gap-3 text-xs text-ter">
+          <div className="workers-pane-summary flex flex-wrap items-center gap-3 text-xs text-ter">
             <span className="inline-flex items-center gap-1.5">
               <span className="status-dot status-dot--working" aria-hidden />
               <span className="text-sec">{summary.working}</span> {t('common.running')}

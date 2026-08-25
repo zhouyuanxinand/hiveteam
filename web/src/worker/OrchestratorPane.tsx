@@ -145,7 +145,7 @@ export const OrchestratorPane = ({
   onStart,
 }: OrchestratorPaneProps) => (
   <div
-    className="relative flex h-full w-full min-w-0 flex-col"
+    className="orchestrator-pane relative flex h-full w-full min-w-0 flex-col"
     style={{
       background: 'var(--bg-crust)',
       borderRight: '1px solid var(--border)',

@@ -211,7 +211,7 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title }: TerminalViewPro
   const { containerRef, error, status } = useTerminalRun(runId, inputProfile)
   const statusKey = STATUS_KEYS[status]
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
+    <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
       {error ? (
         <p
@@ -229,7 +229,7 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title }: TerminalViewPro
       <div
         data-testid={`terminal-${runId}`}
         ref={containerRef}
-        className="bg-crust h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden"
+        className="terminal-view__container bg-crust h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden"
       />
     </div>
   )

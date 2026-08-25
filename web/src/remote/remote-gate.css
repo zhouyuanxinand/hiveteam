@@ -278,40 +278,233 @@
   }
 }
 
-/* The desktop Hive tree is intentionally reused after the secure handshake.
-   Give it a narrow, touch-friendly frame on phones: the compact sidebar keeps
-   workspace avatars available while leaving the content and terminal pane the
-   majority of the viewport. */
+/* Mobile adaptation for the reused Hive tree. The desktop layout is a split
+   workspace with a permanently wide orchestrator pane. On a phone that is not
+   a scaled-down version of the same experience: it becomes a compact avatar
+   rail plus a vertical orchestrator/team flow, while terminal text is fitted
+   to the available width by xterm's existing ResizeObserver. */
 @media (max-width: 760px) {
-  body[data-hive-remote] .workspace-sidebar {
-    width: 64px !important;
+  html[data-hive-remote] .main-layout {
+    height: 100dvh !important;
+    min-height: 100dvh;
   }
 
-  body[data-hive-remote] .workspace-sidebar-resizer {
+  html[data-hive-remote] .topbar {
+    height: 48px;
+    gap: 8px;
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-left: max(8px, env(safe-area-inset-left));
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .topbar-brand {
+    flex: 0 1 auto;
+    gap: 6px;
+  }
+
+  html[data-hive-remote] .topbar-brand-version,
+  html[data-hive-remote] .topbar-update {
     display: none;
   }
 
-  body[data-hive-remote] header {
-    padding-right: 9px;
-    padding-left: 9px;
+  html[data-hive-remote] .topbar-spacer {
+    flex: 1 1 0%;
+    min-width: 4px;
   }
 
-  body[data-hive-remote] header > div:first-child > span:nth-of-type(2),
-  body[data-hive-remote] header > div:first-child > div {
-    display: none;
-  }
-
-  body[data-hive-remote] button[data-testid='topbar-remote'] {
-    display: none;
-  }
-
-  body[data-hive-remote] header > div:last-child {
-    min-width: 0;
+  html[data-hive-remote] .topbar-actions {
+    flex: 0 1 auto;
+    max-width: calc(100vw - 76px);
+    gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  body[data-hive-remote] header > div:last-child::-webkit-scrollbar {
+  html[data-hive-remote] .topbar-actions::-webkit-scrollbar {
     display: none;
+  }
+
+  html[data-hive-remote] .topbar-actions > * {
+    flex-shrink: 0;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-remote'] {
+    display: none;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-open-workspace'] {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-open-workspace'] > span {
+    display: none;
+  }
+
+  html[data-hive-remote]
+    .topbar-actions
+    [data-testid='topbar-open-workspace-chevron'],
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'],
+  html[data-hive-remote] .topbar-actions .topbar-language-toggle,
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-settings'] {
+    height: 40px;
+  }
+
+  html[data-hive-remote]
+    .topbar-actions
+    [data-testid='topbar-open-workspace-chevron'] {
+    width: 28px;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'] {
+    min-width: 40px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'] > span,
+  html[data-hive-remote] .topbar-actions .topbar-language-label {
+    display: none;
+  }
+
+  html[data-hive-remote] .topbar-actions .topbar-language-toggle {
+    min-width: 40px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-settings'] {
+    min-width: 40px;
+  }
+
+  html[data-hive-remote] .main-layout-body,
+  html[data-hive-remote] .main-content {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .workspace-sidebar {
+    width: 64px !important;
+    flex: 0 0 64px !important;
+  }
+
+  html[data-hive-remote] .workspace-sidebar-resizer {
+    display: none;
+  }
+
+  html[data-hive-remote] .workspace-sidebar .ws-avatar-cell {
+    min-height: 44px;
+  }
+
+  html[data-hive-remote] .workspace-sidebar .ws-add--inline {
+    width: 40px;
+    height: 40px;
+  }
+
+  html[data-hive-remote] .workspace-pane-split {
+    width: 100%;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .orchestrator-pane-shell {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0;
+    flex: 0 0 clamp(220px, 42%, 420px) !important;
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .orchestrator-pane-shell .orchestrator-pane {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border);
+  }
+
+  html[data-hive-remote] .workers-pane-shell {
+    width: 100% !important;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .pane-splitter {
+    display: none;
+  }
+
+  html[data-hive-remote] .workers-pane {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .workers-pane-header {
+    padding: 10px 10px 8px;
+  }
+
+  html[data-hive-remote] .workers-pane-header__row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  html[data-hive-remote] .workers-pane-header__actions {
+    gap: 4px;
+  }
+
+  html[data-hive-remote] .workers-pane-auto-resume > span {
+    display: none;
+  }
+
+  html[data-hive-remote] .workers-pane-action {
+    min-width: 40px;
+    height: 40px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  html[data-hive-remote] .workers-pane-action__label {
+    display: none;
+  }
+
+  html[data-hive-remote] .workers-pane-summary {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  html[data-hive-remote] .workers-pane-body {
+    min-width: 0;
+    overflow-x: hidden;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  html[data-hive-remote] .worker-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  html[data-hive-remote] .terminal-bottom-panel,
+  html[data-hive-remote] .terminal-bottom-panel__body,
+  html[data-hive-remote] .terminal-view,
+  html[data-hive-remote] .terminal-view__container,
+  html[data-hive-remote] .xterm {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  html[data-hive-remote] .terminal-bottom-panel {
+    overflow: hidden;
+  }
+
+  html[data-hive-remote] .terminal-tabs {
+    min-width: 0;
   }
 }

@@ -41,13 +41,13 @@ export const Topbar = ({
       : t('topbar.showTodo')
   return (
     <header
-      className="flex h-11 shrink-0 items-center px-4"
+      className="topbar flex h-11 shrink-0 items-center px-4"
       style={{
         background: 'var(--bg-0)',
         borderBottom: '1px solid var(--border)',
       }}
     >
-      <div className="flex items-center gap-2">
+      <div className="topbar-brand flex min-w-0 items-center gap-2">
         <img
           src="/logo.png"
           alt=""
@@ -55,10 +55,13 @@ export const Topbar = ({
           className="h-5 w-5 rounded-md"
           data-testid="topbar-logo"
         />
-        <span className="font-semibold text-pri">Hive</span>
-        <span className="text-ter text-xs tabular-nums">v{version}</span>
+        <span className="topbar-brand-name font-semibold text-pri">Hive</span>
+        <span className="topbar-brand-version text-ter text-xs tabular-nums">v{version}</span>
         {updateInfo ? (
-          <div className="flex items-center gap-2 text-xs" data-testid="topbar-update-badge">
+          <div
+            className="topbar-update flex items-center gap-2 text-xs"
+            data-testid="topbar-update-badge"
+          >
             <span
               className="rounded border px-2 py-0.5 font-medium"
               style={{
@@ -76,9 +79,9 @@ export const Topbar = ({
           </div>
         ) : null}
       </div>
-      <div className="flex-1" />
+      <div className="topbar-spacer min-w-0 flex-1" />
       {hideActions ? null : (
-        <div className="flex items-center gap-1">
+        <div className="topbar-actions flex min-w-0 items-center gap-1">
           {actions}
           <RemoteAccessButton />
           {onToggleTaskGraph ? (
