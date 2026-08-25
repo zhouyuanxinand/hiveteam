@@ -64,10 +64,11 @@ describe('app shell with real server', () => {
     const banner = screen.getByRole('banner')
     expect(banner).toHaveClass('h-11')
     expect(banner.textContent ?? '').toContain('Hive')
-    // Empty state hides Topbar actions so first-run users only see the brand
-    // and the central Welcome CTA.
+    // Workspace actions stay hidden until a workspace is selected, while the
+    // global theme toggle remains available in the topbar.
     expect(screen.queryByTestId('topbar-settings')).toBeNull()
     expect(screen.queryByTestId('topbar-blueprint')).toBeNull()
+    expect(screen.getByTestId('topbar-theme-toggle')).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByText('No Workspaces')).toBeInTheDocument()
@@ -149,7 +150,7 @@ describe('app shell with real server', () => {
     render(<App />)
     // Toast surfaces the failure (mid-session error path remains intact).
     await waitFor(() => {
-      expect(screen.getByTestId('toast')).toHaveTextContent(/could not reach hive runtime/i)
+      expect(screen.getByTestId('toast')).toHaveTextContent(/could not reach hiveteam runtime/i)
     })
     // Workspace area is replaced by the offline page, which exposes a retry
     // affordance the auto-reconnect timer also drives.

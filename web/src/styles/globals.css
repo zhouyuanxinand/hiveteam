@@ -189,6 +189,76 @@
   color-scheme: dark;
 }
 
+/* Light mode keeps the same semantic surface ladder and blue accent while
+   swapping the charcoal ramp for cool, neutral application surfaces. The
+   `--color-*` aliases are included because Tailwind utilities read from the
+   @theme variables, while older callsites use the shorter runtime aliases. */
+html[data-hive-theme='light'] {
+  color-scheme: light;
+
+  --color-bg-0: #f7f8fa;
+  --color-bg-1: #ffffff;
+  --color-bg-2: #eef1f5;
+  --color-bg-3: #e5e9ef;
+  --color-bg-crust: #e9edf2;
+  --color-charcoal-775: #eef1f5;
+  --color-charcoal-750: #e6eaf0;
+  --color-charcoal-700: #dce2e9;
+  --color-charcoal-650: #d2d9e2;
+  --color-charcoal-600: #c1cad5;
+  --color-border: #d9dee6;
+  --color-border-bright: #aeb8c5;
+  --color-text-primary: #17202a;
+  --color-text-secondary: #40505f;
+  --color-text-tertiary: #5c6b79;
+  --color-text-light: #5c6b79;
+  --color-text-extra-light: #71808e;
+  --color-text-inverted: #ffffff;
+  --color-text-danger: #b42318;
+  --color-accent: #3358d4;
+  --color-accent-hover: #2747b8;
+  --color-status-green: #2f855a;
+  --color-status-orange: #c05621;
+  --color-status-red: #c53030;
+  --color-status-blue: #3358d4;
+  --color-status-purple: #6b46c1;
+  --color-status-gold: #9a6700;
+  --color-bg-overlay: rgba(15, 23, 42, 0.42);
+  --color-bg-elevated: #ffffff;
+
+  --bg-0: #f7f8fa;
+  --bg-1: #ffffff;
+  --bg-2: #eef1f5;
+  --bg-3: #e5e9ef;
+  --bg-crust: #e9edf2;
+  --bg-overlay: rgba(15, 23, 42, 0.42);
+  --bg-elevated: #ffffff;
+  --charcoal-775: #eef1f5;
+  --charcoal-750: #e6eaf0;
+  --charcoal-700: #dce2e9;
+  --charcoal-650: #d2d9e2;
+  --charcoal-600: #c1cad5;
+  --border: #d9dee6;
+  --border-bright: #aeb8c5;
+  --text-primary: #17202a;
+  --text-secondary: #40505f;
+  --text-tertiary: #5c6b79;
+  --text-light: #5c6b79;
+  --text-extra-light: #71808e;
+  --text-inverted: #ffffff;
+  --text-danger: #b42318;
+  --accent: #3358d4;
+  --accent-hover: #2747b8;
+  --status-green: #2f855a;
+  --status-orange: #c05621;
+  --status-red: #c53030;
+  --status-blue: #3358d4;
+  --status-purple: #6b46c1;
+  --status-gold: #9a6700;
+  --ring-focus: rgba(51, 88, 212, 0.32);
+  --shadow-tint: 34 46 64;
+}
+
 /* Accent-tinted selection. 22% reads as highlighted without shouting. */
 ::selection {
   background: color-mix(in oklab, var(--accent) 22%, transparent);
@@ -276,9 +346,9 @@ html, body {
   cursor: pointer;
   position: relative;
 }
-.ws-row:hover { background: color-mix(in oklab, #ffffff 5%, transparent); }
+.ws-row:hover { background: color-mix(in oklab, var(--text-primary) 5%, transparent); }
 .ws-row.active {
-  background: color-mix(in oklab, #ffffff 7%, transparent);
+  background: color-mix(in oklab, var(--text-primary) 7%, transparent);
 }
 
 /* Sidebar inline delete (per-row) — 18% red wash + 50% red ring (inset, so

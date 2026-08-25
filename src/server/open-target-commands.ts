@@ -74,13 +74,13 @@ const windowsAttempts = (targetId: OpenTargetId, path: string): OpenAttempt[] =>
     case 'finder':
       return [{ command: 'explorer', args: [path] }]
     case 'vscode':
-      return [{ command: 'code', args: [path] }]
+      return [{ command: 'code.cmd', args: [path] }]
     case 'vscode-insiders':
-      return [{ command: 'code-insiders', args: [path] }]
+      return [{ command: 'code-insiders.cmd', args: [path] }]
     case 'cursor':
-      return [{ command: 'cursor', args: [path] }]
+      return [{ command: 'cursor.cmd', args: [path] }]
     case 'zed':
-      return [{ command: 'zed', args: [path] }]
+      return [{ command: 'zed.cmd', args: [path] }]
     default:
       return [{ command: 'explorer', args: [path] }]
   }
@@ -139,7 +139,15 @@ interface ExecFileError extends NodeJS.ErrnoException {
 
 const defaultRunOpenCommand: RunOpenCommand = (command, args, options) =>
   new Promise<SpawnResult>((resolve) => {
-    const child = execFile(command, args, options, (error, stdout, stderr) => {
+    // Node cannot spawn a Windows .cmd shim directly with execFile. Route it
+    // through cmd.exe as separate argv entries instead of shell:true, which
+    // would concatenate an arbitrary workspace path into a shell command.
+    const isWindowsCommandShim = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)
+    const executable = isWindowsCommandShim
+      ? (process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe')
+      : command
+    const childArgs = isWindowsCommandShim ? ['/d', '/c', command, ...args] : args
+    const child = execFile(executable, childArgs, options, (error, stdout, stderr) => {
       const errno = error as ExecFileError | null
       resolve({
         stderr: String(stderr ?? ''),

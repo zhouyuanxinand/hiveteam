@@ -7,6 +7,7 @@ import { RemoteAccessButton } from '../remote/RemoteAccessButton.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { APP_VERSION } from '../version.js'
 import { LanguageToggle } from './LanguageToggle.js'
+import { ThemeToggle } from './ThemeToggle.js'
 
 type TopbarProps = {
   actions?: ReactNode
@@ -52,31 +53,34 @@ export const Topbar = ({
         <span className="topbar-brand-version text-ter text-xs tabular-nums">v{version}</span>
       </div>
       <div className="topbar-spacer min-w-0 flex-1" />
-      {hideActions ? null : (
-        <div className="topbar-actions flex min-w-0 items-center gap-1">
-          {actions}
-          <RemoteAccessButton />
-          {onToggleTaskGraph ? (
-            <Tooltip label={taskGraphTooltip}>
-              <button
-                type="button"
-                onClick={onToggleTaskGraph}
-                aria-pressed={taskGraphOpen}
-                aria-label={taskGraphTooltip}
-                data-has-tasks={hasOpenTasks ? 'true' : undefined}
-                className="flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-xs font-medium text-ter transition-colors hover:bg-3 hover:text-pri focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                data-testid="topbar-blueprint"
-                style={{ borderColor: 'var(--border)', background: 'var(--bg-1)' }}
-              >
-                <ListChecks size={13} className={hasOpenTasks ? 'text-accent' : undefined} />
-                <span>{t('topbar.todo')}</span>
-              </button>
-            </Tooltip>
-          ) : null}
-          <LanguageToggle />
-          <NotificationSettingsButton />
-        </div>
-      )}
+      <div className="topbar-actions flex min-w-0 items-center gap-1">
+        {hideActions ? null : (
+          <>
+            {actions}
+            <RemoteAccessButton />
+            {onToggleTaskGraph ? (
+              <Tooltip label={taskGraphTooltip}>
+                <button
+                  type="button"
+                  onClick={onToggleTaskGraph}
+                  aria-pressed={taskGraphOpen}
+                  aria-label={taskGraphTooltip}
+                  data-has-tasks={hasOpenTasks ? 'true' : undefined}
+                  className="flex h-7 cursor-pointer items-center gap-1 rounded border px-2 text-xs font-medium text-ter transition-colors hover:bg-3 hover:text-pri focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+                  data-testid="topbar-blueprint"
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg-1)' }}
+                >
+                  <ListChecks size={13} className={hasOpenTasks ? 'text-accent' : undefined} />
+                  <span>{t('topbar.todo')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
+            <LanguageToggle />
+            <NotificationSettingsButton />
+          </>
+        )}
+        <ThemeToggle />
+      </div>
     </header>
   )
 }

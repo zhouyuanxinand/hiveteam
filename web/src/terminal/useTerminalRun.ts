@@ -2,6 +2,7 @@ import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { Terminal as XtermTerminal } from '@xterm/xterm'
 import { useEffect, useRef, useState } from 'react'
 
+import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
 import { createTerminalClient } from './terminal-client.js'
 import {
@@ -62,6 +63,7 @@ export const useTerminalRun = (
     let resizeObserver: ResizeObserver | undefined
     let resizeTimer: number | undefined
     let wheelFallbackDispose: (() => void) | undefined
+    let onThemeChange: (() => void) | undefined
     let helperTextarea: HTMLTextAreaElement | null = null
     let onCompositionStart: ((event: Event) => void) | undefined
     let onCompositionEnd: ((event: Event) => void) | undefined
@@ -79,10 +81,14 @@ export const useTerminalRun = (
       // shifts. Falls back to bg-crust's literal value if computed style is
       // unavailable (jsdom). Without this, xterm's canvas sat at #0f0f11 and
       // the wrapping container at #1b1b1b, so unfilled rows showed a seam.
-      const rootStyles =
-        typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
-      const bgCrust = rootStyles?.getPropertyValue('--bg-crust').trim() || '#0e0e0e'
-      const textPrimary = rootStyles?.getPropertyValue('--text-primary').trim() || '#ebebeb'
+      const readTerminalTheme = () => {
+        const rootStyles =
+          typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
+        return {
+          background: rootStyles?.getPropertyValue('--bg-crust').trim() || '#0e0e0e',
+          foreground: rootStyles?.getPropertyValue('--text-primary').trim() || '#ebebeb',
+        }
+      }
       const nextTerminal = new xtermModule.Terminal({
         allowProposedApi: true,
         convertEol: false,
@@ -91,10 +97,7 @@ export const useTerminalRun = (
         letterSpacing: 0,
         lineHeight: 1,
         scrollback: 10_000,
-        theme: {
-          background: bgCrust,
-          foreground: textPrimary,
-        },
+        theme: readTerminalTheme(),
       })
       const nextFitAddon = new fitModule.FitAddon()
       nextTerminal.loadAddon(nextFitAddon)
@@ -105,6 +108,10 @@ export const useTerminalRun = (
       nextFitAddon.fit()
       terminal = nextTerminal
       fitAddon = nextFitAddon
+      onThemeChange = () => {
+        nextTerminal.options.theme = readTerminalTheme()
+      }
+      window.addEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       wheelFallbackDispose = attachAlternateScreenWheelFallback({
         element: containerRef.current,
         profile: inputProfile,
@@ -260,6 +267,7 @@ export const useTerminalRun = (
     return () => {
       disposed = true
       if (onWindowResize) window.removeEventListener('resize', onWindowResize)
+      if (onThemeChange) window.removeEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       resizeObserver?.disconnect()
       if (resizeTimer) window.clearTimeout(resizeTimer)
       wheelFallbackDispose?.()

@@ -64,11 +64,11 @@ describe('getEffectiveOpenTargetId', () => {
     expect(getEffectiveOpenTargetId('zed', 'windows')).toBe('zed')
   })
 
-  test('platform-unsupported target falls back to finder, not vscode', () => {
-    // ghostty / terminal are mac-only — Windows/Linux should fall back to
-    // finder rather than vscode.
+  test('platform-unsupported target falls back to the platform default', () => {
+    // ghostty / terminal are mac-only — Linux uses Finder, while Windows now
+    // uses the direct VS Code action.
     expect(getEffectiveOpenTargetId('ghostty', 'linux')).toBe('finder')
-    expect(getEffectiveOpenTargetId('ghostty', 'windows')).toBe('finder')
+    expect(getEffectiveOpenTargetId('ghostty', 'windows')).toBe('vscode')
     expect(getEffectiveOpenTargetId('terminal', 'linux')).toBe('finder')
   })
 
@@ -194,16 +194,19 @@ describe('buildOpenAttempts — linux', () => {
 describe('buildOpenAttempts — windows', () => {
   const path = 'C:\\Users\\admin\\Code\\hive'
 
-  test('vscode/cursor/zed use their PATH-installed CLI binary', () => {
+  test('vscode/cursor/zed use their PATH-installed Windows command shims', () => {
     expect(buildOpenAttempts('vscode', path, 'windows')[0]).toEqual({
-      command: 'code',
+      command: 'code.cmd',
       args: [path],
     })
     expect(buildOpenAttempts('cursor', path, 'windows')[0]).toEqual({
-      command: 'cursor',
+      command: 'cursor.cmd',
       args: [path],
     })
-    expect(buildOpenAttempts('zed', path, 'windows')[0]).toEqual({ command: 'zed', args: [path] })
+    expect(buildOpenAttempts('zed', path, 'windows')[0]).toEqual({
+      command: 'zed.cmd',
+      args: [path],
+    })
   })
 
   test('finder maps to explorer on windows', () => {
@@ -360,11 +363,11 @@ describe('openWorkspace — input validation', () => {
 
   test('cross-platform drift falls back to platform default instead of failing', async () => {
     // User saved preference `ghostty` on a Mac, then ran Hive on Windows.
-    // Should resolve to finder + explorer.exe instead of returning 4xx.
+    // Should resolve to VS Code instead of returning 4xx.
     const calls: OpenAttempt[] = []
     const runCommand: RunOpenCommand = async (command, args) => {
       calls.push({ command, args })
-      return { ...fakeSpawnOk, status: 1 } // explorer always returns 1
+      return { ...fakeSpawnOk, status: 0 }
     }
     const result = await openWorkspace(
       { path: 'C:\\code', targetId: 'ghostty' },
@@ -372,9 +375,9 @@ describe('openWorkspace — input validation', () => {
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.effectiveTargetId).toBe('finder')
+      expect(result.effectiveTargetId).toBe('vscode')
     }
-    expect(calls[0]?.command).toBe('explorer')
+    expect(calls[0]?.command).toBe('code.cmd')
   })
 })
 

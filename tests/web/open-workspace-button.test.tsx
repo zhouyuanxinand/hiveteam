@@ -68,7 +68,7 @@ afterEach(() => {
 
 describe('OpenWorkspaceButton', () => {
   test('main click POSTs target_id to /api/workspaces/:id/open and skips toast on 200', async () => {
-    const calls = stubOpenFetch(() => json({ ok: true, effective_target_id: 'finder' }, 200))
+    const calls = stubOpenFetch(() => json({ ok: true, effective_target_id: 'vscode' }, 200))
 
     renderHarness(<OpenWorkspaceButton workspace={mkWorkspace()} />)
 
@@ -78,10 +78,25 @@ describe('OpenWorkspaceButton', () => {
 
     expect(calls[0]?.method).toBe('POST')
     expect(calls[0]?.url).toBe('/api/workspaces/ws-1/open')
-    expect(calls[0]?.body).toEqual({ target_id: 'finder' })
+    expect(calls[0]?.body).toEqual({ target_id: 'vscode' })
 
     // No error toast on success.
     expect(screen.queryByTestId('toaster')).toBeNull()
+  })
+
+  test('Windows uses VS Code for the direct Open action', async () => {
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      platform: 'Win32',
+      language: 'en-US',
+    })
+    const calls = stubOpenFetch(() => json({ ok: true, effective_target_id: 'vscode' }, 200))
+
+    renderHarness(<OpenWorkspaceButton workspace={mkWorkspace()} />)
+    fireEvent.click(screen.getByTestId('topbar-open-workspace'))
+
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]?.body).toEqual({ target_id: 'vscode' })
   })
 
   test('selecting Cursor via the chevron persists the preference and updates the next click payload', async () => {

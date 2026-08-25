@@ -54,8 +54,10 @@ export const getEffectiveOpenTargetId = (
   isOpenTargetSupported(targetId, platform) ? targetId : getDefaultOpenTargetIdForPlatform(platform)
 
 export const getDefaultOpenTargetIdForPlatform = (platform: OpenTargetPlatform): OpenTargetId => {
-  // `finder` exists for every platform and never fails closed.
-  if (platform === 'mac' || platform === 'windows' || platform === 'linux') return 'finder'
+  // On Windows the primary action should open the project in VS Code. The
+  // dropdown still exposes File Explorer when the user wants the folder view.
+  if (platform === 'windows') return 'vscode'
+  if (platform === 'mac' || platform === 'linux') return 'finder'
   return 'vscode'
 }
 
