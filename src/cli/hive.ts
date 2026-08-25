@@ -2,16 +2,17 @@
 
 import { once } from 'node:events'
 import { realpathSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { createAgentManager } from '../server/agent-manager.js'
 import { createApp } from '../server/app.js'
 import { readPackageVersion } from '../server/package-version.js'
+import { createRemoteTunnel } from '../server/remote-tunnel.js'
 import { createRuntimeStore, type RuntimeStore } from '../server/runtime-store.js'
 import { createVersionService, type VersionService } from '../server/version-service.js'
+import { resolveDataDir } from './hive-data-dir.js'
 import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
+import { runHiveRemoteCommand } from './hive-remote.js'
 import { runHiveUpdateCommand } from './hive-update.js'
 
 interface RunHiveCommandResult {
@@ -41,6 +42,7 @@ export const HIVE_USAGE = [
   '  -v, --version   Print the installed Hive version.',
   '',
   'Commands:',
+  '  remote         Link and manage remote access devices.',
   '  update          Upgrade Hive in place via `npm install -g`.',
 ].join('\n')
 
@@ -84,7 +86,7 @@ export const parseHivePort = (argv: string[]) => {
   return parsedPort ?? DEFAULT_HIVE_PORT
 }
 
-const resolveDataDir = () => process.env.HIVE_DATA_DIR || join(homedir(), '.config', 'hive')
+export { resolveDataDir }
 
 const maybePrintUpdateHint = async (versionService: VersionService) => {
   const info = await versionService.getVersionInfo()
@@ -152,6 +154,24 @@ export const runHiveCommand = async (
     throw new Error('Server did not bind to an inet port')
   }
 
+  const remoteTunnel = createRemoteTunnel({
+    loopbackPort: address.port,
+    config: app.store.remote.config,
+    deviceSessions: app.store.remote.sessions,
+    loopbackSecret: app.store.getRemoteTunnelSecret(),
+    audit: app.store.remote.audit,
+    pairing: app.store.remote.pairing,
+    onStatus: (event) => {
+      if (event.status === 'reconnecting') {
+        console.warn(
+          `[hive] remote tunnel reconnecting${event.nextRetryInMs === undefined ? '' : ` in ${event.nextRetryInMs}ms`}: ${event.reason ?? 'connection lost'}`
+        )
+      }
+    },
+  })
+  app.store.remote.setTunnel(remoteTunnel)
+  remoteTunnel.refresh()
+
   let closePromise: Promise<void> | null = null
   const close = async () => {
     if (closePromise) {
@@ -161,6 +181,7 @@ export const runHiveCommand = async (
     closePromise = (async () => {
       process.off('SIGTERM', gracefulShutdown)
       process.off('SIGINT', gracefulShutdown)
+      await remoteTunnel.close()
       await new Promise<void>((resolve, reject) => {
         app.server.close((error) => {
           if (error) {
@@ -172,6 +193,7 @@ export const runHiveCommand = async (
         })
       })
       await app.store.close()
+      app.store.remote.setTunnel(null)
     })()
 
     return closePromise
@@ -212,7 +234,14 @@ const isMainModule = process.argv[1]
 
 if (isMainModule) {
   const argv = process.argv.slice(2)
-  if (argv[0] === 'update') {
+  if (argv[0] === 'remote') {
+    runHiveRemoteCommand(argv.slice(1))
+      .then((code) => process.exit(code))
+      .catch((error) => {
+        console.error(error)
+        process.exit(1)
+      })
+  } else if (argv[0] === 'update') {
     runHiveUpdateCommand(argv.slice(1))
       .then((code) => process.exit(code))
       .catch((error) => {

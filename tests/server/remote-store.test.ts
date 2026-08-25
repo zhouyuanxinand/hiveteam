@@ -59,7 +59,7 @@ describe('remote persistence', () => {
       },
     })
     expect(config.isEnabled()).toBe(false)
-    expect(config.getGatewayUrl()).toBe('https://app.hivehq.dev')
+    expect(config.getGatewayUrl()).toBeNull()
     values.set('remote_enabled', 'true')
     expect(config.isEnabled()).toBe(true)
   })

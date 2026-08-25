@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import type { VersionInfo } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { NotificationSettingsButton } from '../notifications/NotificationSettingsButton.js'
+import { RemoteAccessButton } from '../remote/RemoteAccessButton.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { useVersionInfo } from '../useVersionInfo.js'
 import { APP_VERSION } from '../version.js'
@@ -79,6 +80,7 @@ export const Topbar = ({
       {hideActions ? null : (
         <div className="flex items-center gap-1">
           {actions}
+          <RemoteAccessButton />
           {onToggleTaskGraph ? (
             <Tooltip label={taskGraphTooltip}>
               <button

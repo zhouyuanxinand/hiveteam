@@ -142,6 +142,257 @@ export const getVersionInfo = async (): Promise<VersionInfo> => {
   }
 }
 
+export type RemoteConnectionStatus =
+  | 'disabled'
+  | 'loggedOut'
+  | 'connecting'
+  | 'online'
+  | 'reconnecting'
+  | 'revoked'
+
+export interface RemoteDevice {
+  createdAt: number
+  id: string
+  lastActive: number | null
+  name: string
+  revokedAt: number | null
+}
+
+export interface RemoteStatus {
+  connection: RemoteConnectionStatus
+  connected: boolean
+  daemonId: string | null
+  devices: number
+  enabled: boolean
+  gatewayUrl: string | null
+  loggedIn: boolean
+  status: RemoteConnectionStatus
+}
+
+export interface RemotePairingTicket {
+  code: string
+  expiresAt: number
+  pairingId: string
+  qr: string
+}
+
+export interface RemotePendingPairing {
+  deviceName: string | null
+  expiresAt: number
+  pairingId: string
+  sas: string
+}
+
+export interface RemoteAuditRecord {
+  action: string
+  byteCount: number | null
+  deviceId: string | null
+  endpoint: string | null
+  id: number
+  preview: string | null
+  rejectReason: string | null
+  result: string
+  ts: number
+  workspaceId: string | null
+}
+
+interface RemoteStatusPayload {
+  connection: RemoteConnectionStatus
+  connected: boolean
+  daemon_id: string | null
+  devices: number
+  enabled: boolean
+  gateway_url: string | null
+  logged_in: boolean
+  status: RemoteConnectionStatus
+}
+
+interface RemoteDevicePayload {
+  created_at: number
+  id: string
+  last_active: number | null
+  name: string
+  revoked_at: number | null
+}
+
+interface RemotePairingTicketPayload {
+  code: string
+  expires_at: number
+  pairing_id: string
+  qr: string
+}
+
+interface RemotePendingPairingPayload {
+  device_name: string | null
+  expires_at: number
+  pairing_id: string
+  sas: string
+}
+
+interface RemoteAuditRecordPayload {
+  action: string
+  byte_count: number | null
+  device_id: string | null
+  endpoint: string | null
+  id: number
+  preview: string | null
+  reject_reason: string | null
+  result: string
+  ts: number
+  workspace_id: string | null
+}
+
+const fromRemoteStatusPayload = (payload: RemoteStatusPayload): RemoteStatus => ({
+  connection: payload.connection,
+  connected: payload.connected,
+  daemonId: payload.daemon_id,
+  devices: payload.devices,
+  enabled: payload.enabled,
+  gatewayUrl: payload.gateway_url,
+  loggedIn: payload.logged_in,
+  status: payload.status,
+})
+
+const fromRemoteDevicePayload = (payload: RemoteDevicePayload): RemoteDevice => ({
+  createdAt: payload.created_at,
+  id: payload.id,
+  lastActive: payload.last_active,
+  name: payload.name,
+  revokedAt: payload.revoked_at,
+})
+
+const fromRemotePendingPairingPayload = (
+  payload: RemotePendingPairingPayload
+): RemotePendingPairing => ({
+  deviceName: payload.device_name,
+  expiresAt: payload.expires_at,
+  pairingId: payload.pairing_id,
+  sas: payload.sas,
+})
+
+export const getRemoteStatus = async (): Promise<RemoteStatus> => {
+  const response = await apiFetch('/api/remote/status', { mode: 'same-origin' })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load remote access status'))
+  }
+  return fromRemoteStatusPayload((await response.json()) as RemoteStatusPayload)
+}
+
+export const setRemoteEnabled = async (enabled: boolean): Promise<RemoteStatus> => {
+  const response = await apiFetch('/api/remote/enabled', {
+    body: JSON.stringify({ enabled }),
+    headers: { 'content-type': 'application/json' },
+    method: 'PUT',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to update remote access'))
+  }
+  const payload = (await response.json()) as {
+    connected: boolean
+    connection: RemoteConnectionStatus
+    enabled: boolean
+  }
+  const current = await getRemoteStatus()
+  return {
+    ...current,
+    connected: payload.connected,
+    connection: payload.connection,
+    enabled: payload.enabled,
+    status: payload.connection,
+  }
+}
+
+export const listRemoteDevices = async (includeRevoked = false): Promise<RemoteDevice[]> => {
+  const query = includeRevoked ? '?include_revoked=true' : ''
+  const response = await apiFetch(`/api/remote/devices${query}`, { mode: 'same-origin' })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load remote devices'))
+  }
+  return ((await response.json()) as RemoteDevicePayload[]).map(fromRemoteDevicePayload)
+}
+
+export const beginRemotePairing = async (): Promise<RemotePairingTicket> => {
+  const response = await apiFetch('/api/remote/pairings', {
+    method: 'POST',
+    mode: 'same-origin',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to create pairing code'))
+  }
+  const payload = (await response.json()) as RemotePairingTicketPayload
+  return {
+    code: payload.code,
+    expiresAt: payload.expires_at,
+    pairingId: payload.pairing_id,
+    qr: payload.qr,
+  }
+}
+
+export const listRemotePairings = async (): Promise<RemotePendingPairing[]> => {
+  const response = await apiFetch('/api/remote/pairings/pending', { mode: 'same-origin' })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load pending pairings'))
+  }
+  return ((await response.json()) as RemotePendingPairingPayload[]).map(
+    fromRemotePendingPairingPayload
+  )
+}
+
+export const confirmRemotePairing = async (
+  pairingId: string,
+  name?: string
+): Promise<RemoteDevice> => {
+  const response = await apiFetch(`/api/remote/pairings/${encodeURIComponent(pairingId)}/confirm`, {
+    body: JSON.stringify(name?.trim() ? { name: name.trim() } : {}),
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to confirm remote device'))
+  }
+  const payload = (await response.json()) as { device: RemoteDevicePayload }
+  return fromRemoteDevicePayload(payload.device)
+}
+
+export const rejectRemotePairing = async (pairingId: string): Promise<void> => {
+  const response = await apiFetch(`/api/remote/pairings/${encodeURIComponent(pairingId)}/reject`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to reject remote device'))
+  }
+}
+
+export const revokeRemoteDevice = async (deviceId: string): Promise<void> => {
+  const response = await apiFetch(`/api/remote/devices/${encodeURIComponent(deviceId)}/revoke`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to revoke remote device'))
+  }
+}
+
+export const getRemoteAudit = async (limit = 50): Promise<RemoteAuditRecord[]> => {
+  const response = await apiFetch(`/api/remote/audit?limit=${Math.max(1, Math.min(limit, 200))}`, {
+    mode: 'same-origin',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load remote audit'))
+  }
+  return ((await response.json()) as RemoteAuditRecordPayload[]).map((record) => ({
+    action: record.action,
+    byteCount: record.byte_count,
+    deviceId: record.device_id,
+    endpoint: record.endpoint,
+    id: record.id,
+    preview: record.preview,
+    rejectReason: record.reject_reason,
+    result: record.result,
+    ts: record.ts,
+    workspaceId: record.workspace_id,
+  }))
+}
+
 export interface OrchestratorStartResult {
   ok: boolean
   error: string | null

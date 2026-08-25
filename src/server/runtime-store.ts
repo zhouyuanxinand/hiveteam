@@ -7,8 +7,10 @@ import type { RecoveryMessage } from './message-log-store.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import type { RemoteConfigSource } from './remote-config-keys.js'
+import type { DeviceSessionProvider } from './remote-device-session.js'
 import type { RemoteDeviceStore } from './remote-device-store.js'
 import type { RemotePairing } from './remote-pairing.js'
+import type { RemoteTunnel } from './remote-tunnel.js'
 import {
   type AutoResumeResult,
   createRuntimeStoreLifecycle,
@@ -101,10 +103,15 @@ interface RuntimeStore {
     config: RemoteConfigSource
     devices: RemoteDeviceStore
     pairing: RemotePairing
+    sessions: DeviceSessionProvider
+    tunnel: RemoteTunnel | null
+    setTunnel: (tunnel: RemoteTunnel | null) => void
   }
   writeRunInput: (runId: string, input: Buffer | string) => void
   getUiToken: () => string
+  getRemoteTunnelSecret: () => string
   stopAgentRun: (runId: string) => void
+  validateRemoteTunnelSecret: (secret: string | undefined) => boolean
   validateAgentToken: (agentId: string, token: string | undefined) => boolean
   validateUiToken: (token: string | undefined) => boolean
 }
@@ -133,6 +140,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     }
     services.db.transaction(mutation)()
   }
+  let remoteTunnel: RemoteTunnel | null = null
   return {
     close: lifecycle.close,
     createWorkspace: (path, name) => {
@@ -222,12 +230,22 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       config: services.remoteConfig,
       devices: services.remoteDevices,
       pairing: services.remotePairing,
+      sessions: services.remoteSessions,
+      get tunnel() {
+        return remoteTunnel
+      },
+      setTunnel: (tunnel) => {
+        remoteTunnel = tunnel
+      },
     },
     writeRunInput: lifecycle.writeRunInput,
     getUiToken: () => services.uiAuth.getToken(),
+    getRemoteTunnelSecret: () => services.uiAuth.getRemoteTunnelSecret(),
     stopAgentRun: lifecycle.stopTerminalRun,
+    validateRemoteTunnelSecret: (secret) => services.uiAuth.validateRemoteTunnelSecret(secret),
     validateAgentToken: (agentId, token) =>
       services.agentRuntime.validateAgentToken(agentId, token),
-    validateUiToken: (token) => services.uiAuth.validate(token),
+    validateUiToken: (token) =>
+      services.uiAuth.validate(token) || services.uiAuth.validateRemoteTunnelSecret(token),
   }
 }

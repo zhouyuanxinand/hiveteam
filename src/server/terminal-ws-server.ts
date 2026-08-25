@@ -58,7 +58,11 @@ export const createTerminalWebSocketServer = (
       ? request.headers.cookie.join('; ')
       : request.headers.cookie
     const token = readCookie(cookieHeader, 'hive_ui_token')
-    return store.validateUiToken(token)
+    const remoteSecretHeader = request.headers['x-hive-remote-secret']
+    const remoteSecret = Array.isArray(remoteSecretHeader)
+      ? remoteSecretHeader[0]
+      : remoteSecretHeader
+    return store.validateUiToken(token) || store.validateUiToken(remoteSecret)
   }
 
   server.on('upgrade', (request, socket, head) => {

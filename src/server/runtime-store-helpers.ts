@@ -19,7 +19,12 @@ import {
   REMOTE_DAEMON_ID_KEY,
   type RemoteConfigSource,
 } from './remote-config-keys.js'
-import { createRemoteDeviceStore, type RemoteDeviceStore } from './remote-device-store.js'
+import type { DeviceSessionProvider } from './remote-device-session.js'
+import {
+  createPersistentDeviceSessionProvider,
+  createRemoteDeviceStore,
+  type RemoteDeviceStore,
+} from './remote-device-store.js'
 import { createRemotePairing, type RemotePairing } from './remote-pairing.js'
 import { createReportOutboxStore } from './report-outbox-store.js'
 import { openRuntimeDatabase } from './runtime-database.js'
@@ -45,6 +50,7 @@ export interface RuntimeStoreServices {
   remoteAudit: RemoteAuditStore
   remoteConfig: RemoteConfigSource
   remoteDevices: RemoteDeviceStore
+  remoteSessions: DeviceSessionProvider
   remotePairing: RemotePairing
   settings: ReturnType<typeof createSettingsStore>
   shellRuntime: ReturnType<typeof createWorkspaceShellRuntime>
@@ -100,6 +106,7 @@ export const createRuntimeStoreServices = (
   }
   const remoteConfig = createRemoteConfigSource({ get: settings.getAppState })
   const remoteDevices = createRemoteDeviceStore(db)
+  const remoteSessions = createPersistentDeviceSessionProvider(remoteDevices)
   const remoteAudit = createRemoteAuditStore(db)
   const remotePairing = createRemotePairing({
     audit: remoteAudit,
@@ -180,6 +187,7 @@ export const createRuntimeStoreServices = (
     remoteAudit,
     remoteConfig,
     remoteDevices,
+    remoteSessions,
     remotePairing,
     settings,
     shellRuntime,

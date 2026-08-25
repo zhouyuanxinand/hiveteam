@@ -17,7 +17,7 @@ export interface RemoteConfigSource {
 
 export const createRemoteConfigSource = (store: RemoteAppStateReader): RemoteConfigSource => ({
   isEnabled: () => store.get(REMOTE_ENABLED_KEY)?.value === 'true',
-  getGatewayUrl: () => store.get(REMOTE_GATEWAY_URL_KEY)?.value ?? DEFAULT_GATEWAY_URL,
+  getGatewayUrl: () => store.get(REMOTE_GATEWAY_URL_KEY)?.value ?? null,
   getDaemonToken: () => store.get(REMOTE_DAEMON_TOKEN_KEY)?.value ?? null,
   getDaemonId: () => store.get(REMOTE_DAEMON_ID_KEY)?.value ?? null,
 })
