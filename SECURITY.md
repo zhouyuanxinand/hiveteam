@@ -7,13 +7,13 @@ hosted service and does not provide a multi-user security boundary.
 
 | Version | Supported |
 | --- | --- |
-| Latest npm release | Security fixes accepted during public preview. |
+| Latest checked-in build | Security fixes accepted during public preview. |
 | 2.x | Best-effort fixes while the public preview is active. |
 | Earlier versions | Not supported. |
 
 ## Reporting a Vulnerability
 
-Use GitHub private vulnerability reporting for `tt-a1i/hive` whenever it is
+Use GitHub private vulnerability reporting for `zhouyuanxinand/hiveteam` whenever it is
 available. Do not paste exploit details, tokens, terminal logs, private
 workspace paths, or reproduction scripts into a public issue.
 

@@ -1,44 +1,38 @@
 <p align="center">
-  <img src="./assets/logo.png" width="120" alt="Hive logo" />
+  <img src="./assets/logo.png" width="120" alt="HiveTeam logo" />
 </p>
 
-# Hive
+# HiveTeam
 
 <p align="center">
-  <img src="./assets/hive-hero.png" alt="Hive local-first multi-agent collaboration workspace hero image" />
+  <img src="./assets/hive-hero.png" alt="HiveTeam local-first multi-agent collaboration workspace hero image" />
 </p>
 
-**Run Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team.** Hive gives you one browser workbench where an
+**Run Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team.** HiveTeam gives you one browser workbench where an
 Orchestrator plans and delegates while workers implement, review, test,
 research, and report back — all as real PTY processes on your laptop.
 
-Use Hive when one agent is not enough, but a pile of terminal windows is not a workflow.
+Use HiveTeam when one agent is not enough, but a pile of terminal windows is not a workflow.
 
-[![npm](https://img.shields.io/npm/v/@tt-a1i/hive.svg)](https://www.npmjs.com/package/@tt-a1i/hive)
-[![ci](https://img.shields.io/github/actions/workflow/status/tt-a1i/hive/release.yml?branch=main&label=ci)](https://github.com/tt-a1i/hive/actions/workflows/release.yml)
-[![Website](https://img.shields.io/badge/website-hivehq.dev-5a8a8a.svg)](https://hivehq.dev)
+[![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#platform-support)
 
-🌐 **Website**: [hivehq.dev/en/](https://hivehq.dev/en/) · [中文](https://hivehq.dev/)
-
 English · [简体中文](./README.zh.md)
 
-> Hive is local-first, runs on `127.0.0.1`, and is intended for anyone who
-> already runs CLI agents. The latest stable release is on
-> [npm](https://www.npmjs.com/package/@tt-a1i/hive) and the badge above resolves
-> to it.
+> This repository is a source-controlled, self-hosted HiveTeam fork. It runs on
+> `127.0.0.1` by default and does not query npm or the original Hive release
+> channel for updates.
 >
-> This repository is Hive's public source baseline. User-facing releases are
-> distributed through npm; if you only want to install or upgrade Hive, prefer
-> the npm commands below.
+> Build and update it from this repository so the running code always matches
+> the commit you selected.
 
 <p align="center">
   <img src="./assets/hive-team-view.png" alt="Hive workbench with a 4-agent team — orchestrator dispatching while workers run" />
 </p>
 
-## Why Hive
+## Why HiveTeam
 
 CLI agents are powerful, but coordinating several of them manually is
 awkward:
@@ -107,11 +101,13 @@ Prerequisites:
 - At least one supported agent CLI installed, authenticated, and available on
   `PATH`.
 
-Install and start Hive:
+Clone, install, and start this fork:
 
 ```bash
-npm install -g @tt-a1i/hive
-hive
+git clone https://github.com/zhouyuanxinand/hiveteam.git
+cd hiveteam
+pnpm install
+pnpm dev
 ```
 
 If npm prints `npm warn allow-scripts` or `prebuild-install@7.1.3 deprecated`
@@ -123,23 +119,16 @@ Hive failed to install. The troubleshooting section below breaks them down.
 Open the printed local URL, usually `http://127.0.0.1:3000/`. Use
 `hive --port 4010` when you need a specific local port.
 
-To upgrade in place:
+To update the source-controlled build:
 
 ```bash
-hive update
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-`hive update` runs `npm install -g @tt-a1i/hive@latest` in place. Restart any
-in-flight Hive process to pick up the new version. If you installed Hive with
-pnpm or yarn, upgrade through the same package manager — otherwise the new
-npm copy will shadow your existing install.
-
-If your npm mirror has not synced the latest release yet, use the official
-registry directly:
-
-```bash
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
-```
+Restart the running Hive process after rebuilding. The compatibility command
+`hive update` is intentionally local-only and never installs from npm.
 
 Install Hive as an app (optional):
 
@@ -343,25 +332,20 @@ Start Hive with another local port:
 hive --port 4020
 ```
 
-**Version does not change after upgrading**
+**Source changes do not appear after pulling**
 
-Check the latest version on the official npm registry:
-
-```bash
-npm view @tt-a1i/hive version --registry=https://registry.npmjs.org
-```
-
-If you use a mirror or private npm registry, it may lag behind the official
-registry by minutes or hours. Upgrade directly from npmjs when you need the
-freshest release:
+Stop the running Hive process, pull the selected branch, rebuild, and start the
+local runtime again:
 
 ```bash
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm build
+node dist/src/cli/hive.js --port 4010
 ```
 
-After upgrading, stop the old `hive` process and run `hive --version` again.
-If it still prints an older version, check `which hive` / `where hive`; PATH
-usually points at another global install.
+If the command still points at a global install, check `which hive` / `where
+hive` and use the built `node dist/src/cli/hive.js` entry point explicitly.
 
 **Native package install fails**
 
@@ -378,7 +362,7 @@ When installation succeeds but npm prints warnings, use the source to decide:
 
 | warning | Source | What to do |
 | --- | --- | --- |
-| `allow-scripts @tt-a1i/hive` | Hive's postinstall fixes packaged native/PTY helper permissions. | Ignore after a successful install. |
+| `allow-scripts hiveteam` | Hive's postinstall fixes packaged native/PTY helper permissions. | Ignore after a successful install. |
 | `allow-scripts better-sqlite3` | SQLite native bindings download a prebuilt binary or build locally. | Ignore after success; check build tools if install fails. |
 | `allow-scripts node-pty` | Terminal PTY native bindings prepare the platform binary. | Ignore after success; check build tools if install fails. |
 | `allow-scripts esbuild` | esbuild verifies/selects the current platform binary. | Ignore after success. |
@@ -398,31 +382,25 @@ workspace. It starts from "This PC" and lets you enter drives such as `C:\` or
 `D:\`. If the target folder is not listed, expand the advanced path entry and
 paste the absolute path.
 
-**`hive update` on Windows fails with `ENOENT mkdir ... C:\Program`**
+**A global Hive command is still starting the old build on Windows**
 
-Older Hive versions could quote a global npm prefix with spaces incorrectly
-when running update. Upgrade manually:
-
-```powershell
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
-```
-
-If your global npm directory is not on the default PATH, check the prefix:
+Use the source build directly while developing this fork:
 
 ```powershell
-npm prefix -g
-where hive
+pnpm build
+node dist/src/cli/hive.js --port 4010
 ```
 
-Then confirm `where hive` points at the copy you just upgraded.
+Use `where hive` to find older global shims that may still be ahead of this
+repository in `PATH`.
 
 **Codex terminal cannot scroll on Windows**
 
-Upgrade to `2.0.2` or newer and restart Hive. Codex is a full-screen TUI, so it
-usually will not show a browser-native scrollbar; Hive translates wheel,
-PageUp, and PageDown input into terminal input Codex understands. Version
-2.0.2 fixes saved Windows launch commands that still point at
-`node.exe ...\@openai\codex\bin\codex.js`.
+Use the current HiveTeam source build and restart it. Codex is a full-screen
+TUI, so it usually will not show a browser-native scrollbar; HiveTeam translates
+wheel, PageUp, and PageDown input into terminal input Codex understands. The
+current source build includes the Windows launch-command fix for saved commands
+that still point at `node.exe ...\@openai\codex\bin\codex.js`.
 
 **Tasks file conflict banner appears**
 
@@ -463,19 +441,17 @@ node dist/src/cli/hive.js --port 4010
 The production server serves the built web UI directly. No Vite server is
 needed after `pnpm build`.
 
-## Published Package
+## Source-controlled build
 
-User installs and upgrades should follow
-[`@tt-a1i/hive` on npm](https://www.npmjs.com/package/@tt-a1i/hive). The public
-changelog records already-shipped user-facing changes; you do not need to build
-from this repository just to use Hive.
+This fork is intentionally maintained from Git. There is no official npm
+update channel in the application; pull the repository and rebuild when you
+choose to move to a newer commit.
 
 ## Status
 
-Hive is in alpha. The current npm release includes multi-CLI agent presets,
-Auto-staff, Workflows, team memory, PWA installation, and optional Remote
-access. This public repository remains the stable source baseline; the latest
-user-facing capability is reflected by the npm package and this README.
+Hive is in alpha. This repository includes multi-CLI agent presets, Auto-staff,
+Workflows, team memory, PWA installation, and optional Remote access. The
+checked-out commit is the source of truth for the running build.
 
 ## A different form factor: squad
 

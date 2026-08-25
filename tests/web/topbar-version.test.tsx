@@ -9,26 +9,12 @@ afterEach(() => {
   cleanup()
 })
 
-describe('Topbar version update hint', () => {
-  test('shows an update badge and install hint when a newer version is available', () => {
-    render(
-      <Topbar
-        hideActions
-        version="0.6.0-alpha.3"
-        versionInfo={{
-          currentVersion: '0.6.0-alpha.3',
-          installHint: 'npm install -g @tt-a1i/hive@latest',
-          latestVersion: '0.6.0-alpha.4',
-          packageName: '@tt-a1i/hive',
-          releaseUrl: 'https://www.npmjs.com/package/@tt-a1i/hive/v/0.6.0-alpha.4',
-          updateAvailable: true,
-        }}
-      />
-    )
+describe('Topbar local version display', () => {
+  test('shows the local version without an official update badge', () => {
+    render(<Topbar hideActions version="1.4.0" />)
 
     expect(screen.getByTestId('topbar-logo')).toHaveAttribute('src', '/logo.png')
-    expect(screen.getByTestId('topbar-update-badge')).toHaveTextContent('Update available')
-    expect(screen.getByText('v0.6.0-alpha.3 → v0.6.0-alpha.4')).toBeInTheDocument()
-    expect(screen.getByText('npm install -g @tt-a1i/hive@latest')).toBeInTheDocument()
+    expect(screen.getByText('v1.4.0')).toBeInTheDocument()
+    expect(screen.queryByTestId('topbar-update-badge')).not.toBeInTheDocument()
   })
 })

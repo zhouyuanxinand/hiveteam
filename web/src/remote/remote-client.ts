@@ -151,10 +151,10 @@ export const parsePairingText = (value: string): PairingPayload => {
       // The desktop copy action also includes the human-readable code line.
     }
   }
-  throw new Error('配对数据无效，请从桌面 Hive 的“复制配对数据”重新复制。')
+  throw new Error('配对数据无效，请从桌面 HiveTeam 的“复制配对数据”重新复制。')
 }
 
-const remoteError = (message: string) => new Error(`Hive remote: ${message}`)
+const remoteError = (message: string) => new Error(`HiveTeam remote: ${message}`)
 
 export class RemoteWebSocket extends EventTarget {
   static readonly CONNECTING = 0
@@ -313,7 +313,7 @@ export class RemoteClient {
             t: 'hello',
             devicePublicKey: toBase64Url(keyPair.publicKey),
             sessionSalt: toBase64Url(sessionSalt),
-            proposedName: proposedName.trim().slice(0, 80) || 'Hive mobile',
+            proposedName: proposedName.trim().slice(0, 80) || 'HiveTeam mobile',
           })
         )
       }
@@ -449,8 +449,8 @@ export class RemoteClient {
         }
       }
       socket.onerror = () => {
-        if (!opened) finish(remoteError('无法连接 Hive 设备通道。'))
-        else if (!settled) finish(remoteError('Hive 设备通道连接失败。'))
+        if (!opened) finish(remoteError('无法连接 HiveTeam 设备通道。'))
+        else if (!settled) finish(remoteError('HiveTeam 设备通道连接失败。'))
       }
       socket.onclose = () => {
         if (!opened) finish(remoteError('设备通道被拒绝，请重新配对。'))

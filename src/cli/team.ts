@@ -56,7 +56,7 @@ const describeFetchError = (baseUrl: string, error: unknown) => {
   const cause =
     error instanceof Error && error.cause instanceof Error ? ` (${error.cause.message})` : ''
   const message = error instanceof Error ? error.message : String(error)
-  return `Failed to reach Hive runtime at ${baseUrl}: ${message}${cause}. Check HIVE_PORT and make sure the Hive runtime is still running.`
+  return `Failed to reach HiveTeam runtime at ${baseUrl}: ${message}${cause}. Check HIVE_PORT and make sure the HiveTeam runtime is still running.`
 }
 
 const fetchRuntime = async (baseUrl: string, path: string, init: RequestInit) => {
@@ -354,7 +354,7 @@ export const runTeamCommand = async (argv: string[]) => {
     const payload = (await response.json()) as TeamReportResponse
     if (payload.forwarded === false && payload.forward_error) {
       console.error(
-        `Hive recorded the status update, but could not deliver it to Orchestrator in real time: ${payload.forward_error}`
+        `HiveTeam recorded the status update, but could not deliver it to Orchestrator in real time: ${payload.forward_error}`
       )
     }
     return
@@ -377,7 +377,7 @@ export const runTeamCommand = async (argv: string[]) => {
     const payload = (await response.json()) as TeamReportResponse
     if (payload.forwarded === false && payload.forward_error) {
       console.error(
-        `Hive recorded the report, but could not deliver it to Orchestrator in real time: ${payload.forward_error}`
+        `HiveTeam recorded the report, but could not deliver it to Orchestrator in real time: ${payload.forward_error}`
       )
     }
     return

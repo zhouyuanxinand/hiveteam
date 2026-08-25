@@ -47,12 +47,12 @@ const startServerWithVersionInfo = async () => {
     store,
     versionService: {
       getVersionInfo: async () => ({
-        current_version: '0.6.0-alpha.3',
-        install_hint: 'npm install -g @tt-a1i/hive@latest',
-        latest_version: '0.6.0-alpha.4',
-        package_name: '@tt-a1i/hive',
-        release_url: 'https://www.npmjs.com/package/@tt-a1i/hive/v/0.6.0-alpha.4',
-        update_available: true,
+        current_version: '1.4.0',
+        install_hint: 'git pull',
+        latest_version: '1.4.0',
+        package_name: 'hiveteam',
+        release_url: 'https://github.com/zhouyuanxinand/hiveteam',
+        update_available: false,
       }),
     },
   })
@@ -105,19 +105,19 @@ const requestWithHeaders = async (
 }
 
 describe('runtime http app', () => {
-  test('GET /api/version returns cached update metadata for the UI', async () => {
+  test('GET /api/version returns local-only version metadata', async () => {
     const { baseUrl } = await startServerWithVersionInfo()
 
     const response = await fetch(`${baseUrl}/api/version`)
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
-      current_version: '0.6.0-alpha.3',
-      install_hint: 'npm install -g @tt-a1i/hive@latest',
-      latest_version: '0.6.0-alpha.4',
-      package_name: '@tt-a1i/hive',
-      release_url: 'https://www.npmjs.com/package/@tt-a1i/hive/v/0.6.0-alpha.4',
-      update_available: true,
+      current_version: '1.4.0',
+      install_hint: 'git pull',
+      latest_version: '1.4.0',
+      package_name: 'hiveteam',
+      release_url: 'https://github.com/zhouyuanxinand/hiveteam',
+      update_available: false,
     })
   })
 

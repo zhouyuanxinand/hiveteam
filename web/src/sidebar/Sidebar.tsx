@@ -283,7 +283,7 @@ export const Sidebar = ({
           style={{ boxShadow: 'inset 0 1px 0 var(--border)' }}
         >
           <a
-            href="https://github.com/tt-a1i/hive"
+            href="https://github.com/zhouyuanxinand/hiveteam"
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t('sidebar.openRepository')}

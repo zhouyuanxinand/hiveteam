@@ -52,7 +52,7 @@ describe('RuntimeOfflinePage', () => {
     // Body and auto-reconnect strings are i18n-driven; assert they're present
     // by content match rather than testid (no testid on body copy).
     const root = screen.getByTestId('runtime-offline-page')
-    expect(root.textContent ?? '').toMatch(/Hive runtime/i)
+    expect(root.textContent ?? '').toMatch(/HiveTeam runtime/i)
     expect(root.textContent ?? '').toMatch(/auto-reconnect/i)
   })
 

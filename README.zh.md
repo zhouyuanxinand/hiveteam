@@ -1,37 +1,33 @@
 <p align="center">
-  <img src="./assets/logo.png" width="120" alt="Hive logo" />
+  <img src="./assets/logo.png" width="120" alt="HiveTeam logo" />
 </p>
 
-# Hive
+# HiveTeam
 
 <p align="center">
-  <img src="./assets/hive-hero.png" alt="Hive 本机多 agent 协作工作台" />
+  <img src="./assets/hive-hero.png" alt="HiveTeam 本机多 agent 协作工作台" />
 </p>
 
-**Hive 是浏览器里的 Agent 协作工作台——一群 Agent 在你本机各自开工，一个当 Orchestrator 派活、归总进展，其余各司其职。** Orchestrator 本身就是一个真实的 `agy` / `claude` / `codex` / `opencode` / `gemini` / `hermes` / `qwen` 进程——不是你、也不是脚本——它派单的 Worker 同样是真 CLI agent。所有 agent 都是本机真实的 PTY 进程，通过 Hive 注入到 shell 里的小型 `team` 协议互相通信，共享 `<workspace>/.hive/tasks.md` 这份 markdown 任务图。
+**HiveTeam 是浏览器里的 Agent 协作工作台——一群 Agent 在你本机各自开工，一个当 Orchestrator 派活、归总进展，其余各司其职。** Orchestrator 本身就是一个真实的 `agy` / `claude` / `codex` / `opencode` / `gemini` / `hermes` / `qwen` 进程——不是你、也不是脚本——它派单的 Worker 同样是真 CLI agent。所有 agent 都是本机真实的 PTY 进程，通过 HiveTeam 注入到 shell 里的小型 `team` 协议互相通信，共享 `<workspace>/.hive/tasks.md` 这份 markdown 任务图。
 
 写代码、做调研、起草文档、做翻译——凡是能拆给一群人协作的脑力活，都可以让一群 Agent 合伙干。
 
-[![npm](https://img.shields.io/npm/v/@tt-a1i/hive.svg)](https://www.npmjs.com/package/@tt-a1i/hive)
-[![ci](https://img.shields.io/github/actions/workflow/status/tt-a1i/hive/release.yml?branch=main&label=ci)](https://github.com/tt-a1i/hive/actions/workflows/release.yml)
-[![Website](https://img.shields.io/badge/website-hivehq.dev-5a8a8a.svg)](https://hivehq.dev)
+[![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#平台支持)
 
-🌐 **官网**：[hivehq.dev](https://hivehq.dev/)（[English](https://hivehq.dev/en/)）
-
 [English](./README.md) · 简体中文
 
-> Hive 是本机优先的工具，只监听 `127.0.0.1`，面向已经在用 CLI Agent 的人。最新稳定版本见 [npm](https://www.npmjs.com/package/@tt-a1i/hive)，上面的 badge 会指向它。
+> 这是一个由 Git 源码驱动的自托管 Hive 分支，默认只监听 `127.0.0.1`，不会查询 npm 或原版 Hive 的更新渠道。
 >
-> 本仓库是 Hive 的公开源码基线。面向用户的正式安装包以 npm 发布为准；如果你只是想安装或升级，请优先使用下面的 npm 命令。
+> 构建和更新都以你选中的 Git 提交为准，运行代码与源码保持一致。
 
 <p align="center">
   <img src="./assets/hive-team-view.png" alt="Hive 工作台：4 个 CLI Agent 团队，Orchestrator 派单、Worker 各自开工" />
 </p>
 
-## 为什么需要 Hive
+## 为什么需要 HiveTeam
 
 CLI Agent 各自都很强，但同时管几个就有点别扭：
 
@@ -79,30 +75,28 @@ Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在�
 - Node.js 22 或更新版本
 - 至少一个支持的 Agent CLI 已经安装好、登录过、在 `PATH` 上可调用
 
-安装并启动 Hive：
+克隆、安装并启动本分支：
 
 ```bash
-npm install -g @tt-a1i/hive
-hive
+git clone https://github.com/zhouyuanxinand/hiveteam.git
+cd hiveteam
+pnpm install
+pnpm dev
 ```
 
 安装时如果看到 `npm warn allow-scripts` 或 `prebuild-install@7.1.3 deprecated`，先看最后是否显示 `added ... packages`。这些 warning 多数来自 npm 对安装脚本的安全审查，以及 `node-pty` / `better-sqlite3` / `esbuild` 这类原生依赖的二进制安装链路；不代表 Hive 启动失败。下面的故障排查里有逐项解释。
 
 打开终端打印出来的本机地址，通常是 `http://127.0.0.1:3000/`。如果你想指定端口，可以用 `hive --port 4010`。
 
-升级到最新版本：
+更新源码驱动的构建：
 
 ```bash
-hive update
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-`hive update` 会在原位运行 `npm install -g @tt-a1i/hive@latest`，完事后重启 Hive 就能用上新版。如果当初是用 pnpm / yarn 装的 Hive，请用同一个包管理器升级，避免装出第二份。
-
-如果 npm 镜像还没同步最新版本，直接使用官方 registry：
-
-```bash
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
-```
+重建后重启正在运行的 Hive。兼容保留的 `hive update` 命令只会提示本地源码更新方式，不会从 npm 安装任何内容。
 
 把 Hive 装为应用（可选）：
 
@@ -239,21 +233,18 @@ Hive 是本机开发工具，**不是**托管服务。
 hive --port 4020
 ```
 
-**升级后版本没变**
+**拉取后源码变更没有生效**
 
-先确认当前 npm 官方源上的最新版本：
-
-```bash
-npm view @tt-a1i/hive version --registry=https://registry.npmjs.org
-```
-
-如果你使用的是国内镜像或公司私有 npm 源，它们可能晚几分钟到几小时才同步。可以直接走官方源升级：
+停止正在运行的 Hive，拉取目标分支、重建并重新启动本地 runtime：
 
 ```bash
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
+git pull origin main
+pnpm install --frozen-lockfile
+pnpm build
+node dist/src/cli/hive.js --port 4010
 ```
 
-升级后关闭旧的 `hive` 进程再重新运行 `hive --version`。如果仍然是旧版本，检查 `which hive` / `where hive`，通常是 PATH 里还有另一份全局安装。
+如果命令仍然启动全局安装的旧版本，检查 `which hive` / `where hive`，开发时可以直接使用上面的 `node dist/src/cli/hive.js`。
 
 **原生包构建失败**
 
@@ -265,7 +256,7 @@ Hive 依赖 `node-pty` 和 `better-sqlite3`，它们用原生二进制。确认 
 
 | warning | 来源 | 处理 |
 | --- | --- | --- |
-| `allow-scripts @tt-a1i/hive` | Hive 的 postinstall 会修正打包后的 native/PTY helper 权限。 | 安装成功后可忽略。 |
+| `allow-scripts hiveteam` | Hive 的 postinstall 会修正打包后的 native/PTY helper 权限。 | 安装成功后可忽略。 |
 | `allow-scripts better-sqlite3` | SQLite 原生绑定需要下载预编译二进制，失败时会本机构建。 | 安装成功后可忽略；失败再检查构建工具链。 |
 | `allow-scripts node-pty` | 终端 PTY 原生绑定需要准备平台二进制。 | 安装成功后可忽略；失败再检查构建工具链。 |
 | `allow-scripts esbuild` | esbuild 会校验/选择当前平台的二进制包。 | 安装成功后可忽略。 |
@@ -280,26 +271,20 @@ Hive 依赖 `node-pty` 和 `better-sqlite3`，它们用原生二进制。确认 
 
 Windows 版默认使用浏览器内的服务器文件系统浏览器来添加 Workspace，不再弹 PowerShell 原生目录选择器。浏览器会从“此电脑”开始列出可访问盘符，所以可以进入 `C:\`、`D:\` 等其他盘；如果目标目录不在浏览器列表里，可以展开“高级：粘贴路径”直接输入绝对路径。
 
-**Windows 上 `hive update` 报 `ENOENT mkdir ... C:\Program`**
+**Windows 上全局 Hive 命令仍然启动旧版本**
 
-这是旧版本在带空格的全局 npm prefix 上调用 update 时可能触发的路径转义问题。直接手动升级即可：
-
-```powershell
-npm install -g @tt-a1i/hive@latest --registry=https://registry.npmjs.org
-```
-
-如果你的 npm 全局目录不在默认 PATH 里，先看 prefix：
+开发本分支时直接使用源码构建：
 
 ```powershell
-npm prefix -g
-where hive
+pnpm build
+node dist/src/cli/hive.js --port 4010
 ```
 
-然后确认 `where hive` 指向的是刚升级的那份。
+使用 `where hive` 找出 PATH 中可能排在本仓库之前的旧全局 shim。
 
 **Codex 终端在 Windows 上无法滚动**
 
-先升级到 `2.0.2` 或更新版本并重启 Hive。Codex 这种全屏 TUI 本身通常不会显示浏览器原生滚动条，Hive 会把鼠标滚轮 / PageUp / PageDown 转成 Codex 能识别的终端输入；旧安装里如果保存过 `node.exe ...\@openai\codex\bin\codex.js` 这类启动命令，2.0.2 已修正对应识别。
+使用当前 HiveTeam 源码构建并重启。Codex 这种全屏 TUI 本身通常不会显示浏览器原生滚动条，HiveTeam 会把鼠标滚轮 / PageUp / PageDown 转成 Codex 能识别的终端输入；当前源码也包含对旧的 `node.exe ...\@openai\codex\bin\codex.js` 保存启动命令的识别修复。
 
 **Tasks 文件冲突 banner 出现**
 
@@ -335,13 +320,13 @@ node dist/src/cli/hive.js --port 4010
 
 Production 模式下 runtime 直接服务构建好的 web UI，不需要单独的 Vite。
 
-## 安装包
+## 源码驱动的构建
 
-用户安装和升级以 [npm 上的 `@tt-a1i/hive`](https://www.npmjs.com/package/@tt-a1i/hive) 为准。公开 changelog 只记录已经发布、用户可见的变化；如果你只是想用 Hive，不需要从本仓库构建。
+本分支刻意以 Git 源码为维护入口。应用中没有官方 npm 更新渠道；需要更新时拉取仓库并按自己的节奏重新构建。
 
 ## 状态
 
-Hive 目前处于 alpha 阶段，核心流程已可用。当前 npm 版本已经包含多 CLI agent 预设、自动组队、Workflows、团队记忆、PWA 安装和可选 Remote access。公开仓库保留稳定源码基线；面向用户的最新能力以 npm 包和本 README 为准。
+Hive 目前处于 alpha 阶段，核心流程已可用。本仓库包含多 CLI agent 预设、自动组队、Workflows、团队记忆、PWA 安装和可选 Remote access；当前检出的提交就是运行构建的唯一依据。
 
 ## 另一种形态：squad
 

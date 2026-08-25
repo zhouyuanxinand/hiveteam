@@ -87,7 +87,7 @@ describe('gateway relay server', () => {
     const dataDir = createTemporaryDirectory()
     const webDistDir = createTemporaryDirectory()
     mkdirSync(join(webDistDir, 'assets'))
-    writeFileSync(join(webDistDir, 'remote.html'), '<!doctype html><title>Hive Remote</title>')
+    writeFileSync(join(webDistDir, 'remote.html'), '<!doctype html><title>HiveTeam Remote</title>')
     writeFileSync(join(webDistDir, 'assets', 'remote.js'), 'console.log("hive")')
     const gateway = createGatewayServer({
       host: '127.0.0.1',
@@ -102,7 +102,7 @@ describe('gateway relay server', () => {
       const appResponse = await fetch(`http://${gateway.host}:${gateway.port}/app`)
       expect(appResponse.status).toBe(200)
       expect(appResponse.headers.get('content-type')).toContain('text/html')
-      expect(await appResponse.text()).toContain('Hive Remote')
+      expect(await appResponse.text()).toContain('HiveTeam Remote')
 
       const assetResponse = await fetch(`http://${gateway.host}:${gateway.port}/assets/remote.js`)
       expect(assetResponse.status).toBe(200)

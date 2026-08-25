@@ -33,7 +33,7 @@ describe('npm package tarball', () => {
     const [result] = JSON.parse(output) as PackResult[]
     const paths = result.files.map((file) => file.path)
 
-    expect(result.name).toBe('@tt-a1i/hive')
+    expect(result.name).toBe('hiveteam')
     expect(result.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
     expect(paths).toContain('dist/src/cli/hive.js')
     expect(paths).toContain('dist/src/cli/team.js')

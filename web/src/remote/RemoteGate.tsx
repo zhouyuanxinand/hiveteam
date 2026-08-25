@@ -13,14 +13,14 @@ const progressMessage = (progress: PairingProgress | null) => {
   if (!progress) return null
   if (progress.stage === 'connecting') return '正在连接配对通道…'
   if (progress.stage === 'awaiting-confirmation')
-    return '请在电脑 Hive 中核对并确认下面的 SAS 短码。'
-  return '设备已确认，正在打开 Hive…'
+    return '请在电脑 HiveTeam 中核对并确认下面的 SAS 短码。'
+  return '设备已确认，正在打开 HiveTeam…'
 }
 
 export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
   const [phase, setPhase] = useState<GatePhase>('checking')
   const [pairingText, setPairingText] = useState('')
-  const [deviceName, setDeviceName] = useState('Hive mobile')
+  const [deviceName, setDeviceName] = useState('HiveTeam mobile')
   const [progress, setProgress] = useState<PairingProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const launchStarted = useRef(false)
@@ -34,7 +34,7 @@ export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
     } catch (connectionError) {
       launchStarted.current = false
       setPhase('pair')
-      setError(connectionError instanceof Error ? connectionError.message : '无法连接 Hive。')
+      setError(connectionError instanceof Error ? connectionError.message : '无法连接 HiveTeam。')
     }
   }, [client, onConnected])
 
@@ -97,7 +97,7 @@ export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
           <span className="remote-gate-brand-mark" aria-hidden>
             H
           </span>
-          <span>Hive Remote</span>
+          <span>HiveTeam Remote</span>
         </div>
 
         <section className="remote-gate-card">
@@ -107,7 +107,7 @@ export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
               <h1 className="remote-gate-title">先登录自建网关</h1>
               <p className="remote-gate-copy">
                 手机页面需要网关登录会话，登录后才能建立配对通道。网关不会读取 Workspace
-                内容，数据仍由电脑上的 Hive 提供。
+                内容，数据仍由电脑上的 HiveTeam 提供。
               </p>
               {error ? <div className="remote-gate-error">{error}</div> : null}
               <a className="remote-gate-link" href="/">
@@ -117,9 +117,9 @@ export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
           ) : phase === 'checking' || phase === 'connecting' ? (
             <>
               <p className="remote-gate-eyebrow">Secure connection</p>
-              <h1 className="remote-gate-title">正在连接 Hive…</h1>
+              <h1 className="remote-gate-title">正在连接 HiveTeam…</h1>
               <div className="remote-gate-status">
-                正在通过加密设备通道连接电脑。首次连接需要在电脑 Hive 中确认设备。
+                正在通过加密设备通道连接电脑。首次连接需要在电脑 HiveTeam 中确认设备。
               </div>
               {error ? <div className="remote-gate-error">{error}</div> : null}
               {client.hasStoredDevice ? (
@@ -137,14 +137,16 @@ export const RemoteGate = ({ client, onConnected }: RemoteGateProps) => {
           ) : (
             <>
               <p className="remote-gate-eyebrow">Secure pairing</p>
-              <h1 className="remote-gate-title">连接你的 Hive 电脑</h1>
+              <h1 className="remote-gate-title">连接你的 HiveTeam 电脑</h1>
               <p className="remote-gate-copy">
-                配对完成后，手机会加载完整 Hive 界面，可以切换 Workspace、查看
+                配对完成后，手机会加载完整 HiveTeam 界面，可以切换 Workspace、查看
                 Team/Tasks，并打开成员终端。
               </p>
 
               <ol className="remote-gate-steps">
-                <li className="remote-gate-step">在电脑 Hive 的“远程访问”面板中点击“配对手机”。</li>
+                <li className="remote-gate-step">
+                  在电脑 HiveTeam 的“远程访问”面板中点击“配对手机”。
+                </li>
                 <li className="remote-gate-step">
                   点击“复制配对数据”，把复制的两行内容粘贴到这里。
                 </li>

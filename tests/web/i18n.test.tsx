@@ -8,15 +8,6 @@ import { Topbar } from '../../web/src/layout/Topbar.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
 import { WelcomePane } from '../../web/src/worker/WelcomePane.js'
 
-const versionInfo = {
-  currentVersion: '0.6.0-alpha.5',
-  installHint: 'npm install -g @tt-a1i/hive@latest',
-  latestVersion: '0.6.0-alpha.5',
-  packageName: '@tt-a1i/hive',
-  releaseUrl: 'https://www.npmjs.com/package/@tt-a1i/hive',
-  updateAvailable: false,
-}
-
 beforeEach(() => {
   window.localStorage.clear()
 })
@@ -31,15 +22,15 @@ describe('UI language switcher', () => {
   test('switches shell copy to Chinese and persists the choice', () => {
     render(
       <AppProviders>
-        <Topbar version="0.6.0-alpha.5" versionInfo={versionInfo} />
+        <Topbar version="0.6.0-alpha.5" />
         <WelcomePane onAddWorkspace={() => {}} />
       </AppProviders>
     )
 
-    expect(screen.getByText('Welcome to Hive')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to HiveTeam')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Switch language to 中文' }))
 
-    expect(screen.getByText('欢迎使用 Hive')).toBeInTheDocument()
+    expect(screen.getByText('欢迎使用 HiveTeam')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /添加第一个 Workspace/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '切换语言到 English' })).toBeInTheDocument()
     expect(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('zh')
@@ -51,13 +42,13 @@ describe('UI language switcher', () => {
     })
     render(
       <AppProviders>
-        <Topbar version="0.6.0-alpha.5" versionInfo={versionInfo} />
+        <Topbar version="0.6.0-alpha.5" />
         <WelcomePane onAddWorkspace={() => {}} />
       </AppProviders>
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch language to 中文' }))
 
-    expect(screen.getByText('欢迎使用 Hive')).toBeInTheDocument()
+    expect(screen.getByText('欢迎使用 HiveTeam')).toBeInTheDocument()
   })
 })

@@ -1,7 +1,7 @@
 {
-  "name": "@tt-a1i/hive",
+  "name": "hiveteam",
   "version": "1.4.0",
-  "description": "Run Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.",
+  "description": "HiveTeam runs Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "license": "BUSL-1.1",
@@ -17,12 +17,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tt-a1i/hive.git"
+    "url": "git+https://github.com/zhouyuanxinand/hiveteam.git"
   },
   "bugs": {
-    "url": "https://github.com/tt-a1i/hive/issues"
+    "url": "https://github.com/zhouyuanxinand/hiveteam/issues"
   },
-  "homepage": "https://github.com/tt-a1i/hive#readme",
+  "homepage": "https://github.com/zhouyuanxinand/hiveteam#readme",
   "engines": {
     "node": ">=22"
   },

@@ -9,7 +9,6 @@ import { createApp } from '../server/app.js'
 import { readPackageVersion } from '../server/package-version.js'
 import { createRemoteTunnel } from '../server/remote-tunnel.js'
 import { createRuntimeStore, type RuntimeStore } from '../server/runtime-store.js'
-import { createVersionService, type VersionService } from '../server/version-service.js'
 import { resolveDataDir } from './hive-data-dir.js'
 import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
 import { runHiveRemoteCommand } from './hive-remote.js'
@@ -19,10 +18,6 @@ interface RunHiveCommandResult {
   port: number
   close: () => Promise<void>
   store: RuntimeStore
-}
-
-type RunHiveCommandOptions = {
-  versionService?: VersionService
 }
 
 type ListenError = Error & {
@@ -43,7 +38,7 @@ export const HIVE_USAGE = [
   '',
   'Commands:',
   '  remote         Link and manage remote access devices.',
-  '  update          Upgrade Hive in place via `npm install -g`.',
+  '  update          Explain how to update this source-controlled build.',
 ].join('\n')
 
 export const handleHiveInfoCommand = (argv: string[]) => {
@@ -88,14 +83,6 @@ export const parseHivePort = (argv: string[]) => {
 
 export { resolveDataDir }
 
-const maybePrintUpdateHint = async (versionService: VersionService) => {
-  const info = await versionService.getVersionInfo()
-  if (!info.update_available) return
-  console.log(
-    `Hive update available: ${info.current_version} -> ${info.latest_version}. Run: ${info.install_hint}`
-  )
-}
-
 const isListenError = (error: unknown): error is ListenError =>
   error instanceof Error && typeof (error as ListenError).code === 'string'
 
@@ -121,19 +108,14 @@ const formatListenError = (error: unknown, requestedPort: number) => {
   return error
 }
 
-export const runHiveCommand = async (
-  argv: string[],
-  options: RunHiveCommandOptions = {}
-): Promise<RunHiveCommandResult> => {
+export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResult> => {
   const port = parseHivePort(argv)
   const dataDir = resolveDataDir()
-  const versionService = options.versionService ?? createVersionService()
   const app = createApp({
     store: createRuntimeStore({
       agentManager: createAgentManager(),
       dataDir,
     }),
-    versionService,
   })
 
   try {
@@ -217,7 +199,6 @@ export const runHiveCommand = async (
   void app.store
     .autoResumeInterruptedAgents({ hivePort: String(address.port) })
     .catch((error) => console.error('[hive] auto-resume bootstrap failed', error))
-  void maybePrintUpdateHint(versionService).catch(() => {})
 
   return {
     port: address.port,

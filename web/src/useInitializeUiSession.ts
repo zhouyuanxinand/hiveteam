@@ -69,7 +69,7 @@ export const useInitializeUiSession = (
           // making "runtime down" indistinguishable from "no workspaces yet").
           setActiveWorkspaceId(null)
           if (onError) {
-            onError('Could not reach Hive runtime. Refresh once the runtime is back up.')
+            onError('Could not reach HiveTeam runtime. Refresh once the runtime is back up.')
           }
         }
         console.error('[hive] swallowed:initSession.bootstrap', error)

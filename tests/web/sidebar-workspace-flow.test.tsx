@@ -206,7 +206,7 @@ describe('Sidebar EmptyState CTA', () => {
 
   test('runtime-down state disables every New workspace entry point', () => {
     const onCreateClick = vi.fn()
-    const disabledReason = 'Could not reach Hive runtime'
+    const disabledReason = 'Could not reach HiveTeam runtime'
 
     const { unmount } = renderSidebar({
       ...emptyProps,

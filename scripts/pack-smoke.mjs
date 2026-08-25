@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -72,7 +72,8 @@ try {
     stdio: 'inherit',
   })
 
-  const packageRoot = join(tempDir, 'node_modules', '@tt-a1i', 'hive')
+  const packageName = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name
+  const packageRoot = join(tempDir, 'node_modules', ...packageName.split('/'))
   const hiveBin = join(tempDir, 'node_modules', '.bin', binLinkName('hive'))
   const teamBin = join(tempDir, 'node_modules', '.bin', 'team')
   const teamCmdBin = join(tempDir, 'node_modules', '.bin', 'team.cmd')

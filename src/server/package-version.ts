@@ -2,26 +2,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const PACKAGE_NAME = '@tt-a1i/hive'
-
-/**
- * Canonical argv for the upgrade command. Sharing one source between the
- * server's install hint (`version-service.ts`) and the CLI upgrade path
- * (`hive-update.ts`) keeps the two from drifting if the package name ever
- * moves.
- */
-export const INSTALL_COMMAND_ARGS = ['install', '-g', `${PACKAGE_NAME}@latest`] as const
-
-export const INSTALL_COMMAND_DISPLAY = `npm ${INSTALL_COMMAND_ARGS.join(' ')}`
-
-/**
- * Windows ships npm as `npm.cmd` (a batch shim); Node's `child_process.spawn`
- * will not resolve `.cmd` without `shell: true` or an explicit suffix, so the
- * default `'npm'` produces ENOENT on Windows. Use this helper any time you
- * spawn npm directly.
- */
-export const getNpmCommand = (platform: NodeJS.Platform = process.platform): string =>
-  platform === 'win32' ? 'npm.cmd' : 'npm'
+export const PACKAGE_NAME = 'hiveteam'
+export const PROJECT_REPOSITORY_URL = 'https://github.com/zhouyuanxinand/hiveteam'
 
 export const readPackageVersion = () => {
   let dir = dirname(fileURLToPath(import.meta.url))

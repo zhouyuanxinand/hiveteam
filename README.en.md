@@ -1,4 +1,4 @@
-# Hive English README
+# HiveTeam English README
 
 The English README is now the default GitHub entry point:
 
