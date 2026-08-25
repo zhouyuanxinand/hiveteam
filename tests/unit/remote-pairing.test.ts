@@ -1,8 +1,34 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, test } from 'vitest'
 import { createRemotePairing } from '../../src/server/remote-pairing.js'
-import { generateDeviceKeyPair } from '../../src/shared/remote-crypto.js'
+import { fromBase64Url, generateDeviceKeyPair } from '../../src/shared/remote-crypto.js'
+import { PAIRING_CODE_SECRET_CONTEXT } from '../../src/shared/remote-pairing-code.js'
 
 describe('remote pairing', () => {
+  test('derives the default pairing secret from the displayed code', () => {
+    const pairing = createRemotePairing({
+      audit: { enqueue: () => {} } as never,
+      deviceStore: {
+        insert: () => {
+          throw new Error('not expected')
+        },
+      } as never,
+      getDaemonId: () => 'daemon-1',
+      getGatewayUrl: () => 'https://gateway.example.test',
+      randomPairingCode: () => 'ABCD1234EFGH',
+      setTimer: () => ({}) as never,
+      clearTimer: () => {},
+    })
+
+    const ticket = pairing.beginPairing()
+    const payload = JSON.parse(ticket.qr) as { pairingSecret: string }
+    const expected = new Uint8Array(
+      createHash('sha256').update(PAIRING_CODE_SECRET_CONTEXT).update('ABCD1234EFGH').digest()
+    )
+
+    expect(fromBase64Url(payload.pairingSecret)).toEqual(expected)
+  })
+
   test('requires desktop confirmation before persisting a device', () => {
     const auditEvents: unknown[] = []
     const inserted: unknown[] = []

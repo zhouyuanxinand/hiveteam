@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { randomBytes } from '@noble/ciphers/utils.js'
 
 import {
@@ -12,7 +12,11 @@ import {
   SESSION_SALT_LEN,
   toBase64Url,
 } from '../shared/remote-crypto.js'
-import { generatePairingCode } from '../shared/remote-pairing-code.js'
+import {
+  generatePairingCode,
+  normalizePairingCode,
+  PAIRING_CODE_SECRET_CONTEXT,
+} from '../shared/remote-pairing-code.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import type { RemoteDeviceRecord, RemoteDeviceStore } from './remote-device-store.js'
 
@@ -24,6 +28,14 @@ export type PairingState =
   | 'expired'
 
 export const PAIRING_TTL_MS = 5 * 60 * 1000
+
+const pairingSecretFromCode = (code: string): Uint8Array => {
+  const normalized = normalizePairingCode(code)
+  if (!normalized) throw new RangeError('invalid pairing code')
+  return new Uint8Array(
+    createHash('sha256').update(PAIRING_CODE_SECRET_CONTEXT).update(normalized).digest()
+  )
+}
 
 export type PairingRejectReason =
   | 'pairing_expired'
@@ -110,7 +122,9 @@ export const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
   const now = deps.now ?? (() => Date.now())
   const ttlMs = deps.ttlMs ?? PAIRING_TTL_MS
   const newDaemonKeyPair = deps.newDaemonKeyPair ?? generateDeviceKeyPair
-  const randomPairingSecret = deps.randomPairingSecret ?? (() => randomBytes(PAIRING_SECRET_LEN))
+  // The phone derives the same secret from the displayed pairing code. Keep the
+  // dependency override for deterministic tests and compatible embedding callers.
+  const randomPairingSecret = deps.randomPairingSecret
   const randomPairingCode = deps.randomPairingCode ?? (() => generatePairingCode(randomBytes))
   const newId = deps.newId ?? randomUUID
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
@@ -141,14 +155,15 @@ export const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
       const daemonId = deps.getDaemonId()
       if (!gatewayUrl || !daemonId) throw new Error('Remote access is not initialized')
       const pairingId = newId()
-      const pairingSecret = randomPairingSecret()
+      const code = randomPairingCode()
+      const pairingSecret = randomPairingSecret?.() ?? pairingSecretFromCode(code)
       if (pairingSecret.length !== PAIRING_SECRET_LEN) {
         throw new RangeError(`pairing secret must be ${PAIRING_SECRET_LEN} bytes`)
       }
       const expiresAt = now() + ttlMs
       const ticket: PairingTicket = {
         pairingId,
-        code: randomPairingCode(),
+        code,
         expiresAt,
         qr: encodePairingPayload({
           v: REMOTE_CRYPTO_VERSION,
