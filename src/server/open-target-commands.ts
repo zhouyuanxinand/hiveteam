@@ -1,4 +1,6 @@
 import { type ExecFileOptions, execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 import {
   getDefaultOpenTargetIdForPlatform,
@@ -127,6 +129,153 @@ interface SpawnResult {
   spawnError: NodeJS.ErrnoException | null
 }
 
+type WindowsCommandMetadata = {
+  appExecutables: readonly string[]
+  productDirectories: readonly string[]
+}
+
+/**
+ * Windows GUI installers normally put these shims on PATH, but Hive may be
+ * started by a shortcut, a service, or an older shell whose PATH predates the
+ * editor installation. Keep the app names here rather than accepting a path
+ * from the web client, then resolve the launcher from PATH, standard install
+ * locations, or the Windows App Paths registry.
+ */
+const WINDOWS_COMMAND_METADATA: Record<string, WindowsCommandMetadata> = {
+  'code.cmd': {
+    appExecutables: ['Code.exe'],
+    productDirectories: ['Microsoft VS Code'],
+  },
+  'code-insiders.cmd': {
+    appExecutables: ['Code - Insiders.exe'],
+    productDirectories: ['Microsoft VS Code Insiders'],
+  },
+  'cursor.cmd': {
+    appExecutables: ['Cursor.exe'],
+    productDirectories: ['Cursor'],
+  },
+  'zed.cmd': {
+    appExecutables: ['Zed.exe'],
+    productDirectories: ['Zed'],
+  },
+}
+
+const WINDOWS_LOOKUP_OPTIONS: ExecFileOptions = {
+  windowsHide: true,
+  timeout: 1500,
+  maxBuffer: 64 * 1024,
+}
+
+const isWindowsCommandShim = (command: string): boolean =>
+  process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)
+
+const isExistingFile = (path: string): boolean => {
+  try {
+    return existsSync(path)
+  } catch {
+    return false
+  }
+}
+
+const getWindowsPathCandidates = (command: string): string[] => {
+  const pathEntries = (process.env.PATH ?? '')
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => join(entry, command))
+
+  const metadata = WINDOWS_COMMAND_METADATA[command]
+  if (!metadata) return pathEntries
+
+  const standardCandidates = metadata.productDirectories.flatMap((productDirectory) => {
+    const roots = [
+      process.env.LOCALAPPDATA
+        ? join(process.env.LOCALAPPDATA, 'Programs', productDirectory)
+        : null,
+      process.env.ProgramW6432 ? join(process.env.ProgramW6432, productDirectory) : null,
+      process.env.ProgramFiles ? join(process.env.ProgramFiles, productDirectory) : null,
+      process.env['ProgramFiles(x86)']
+        ? join(process.env['ProgramFiles(x86)'], productDirectory)
+        : null,
+    ].filter((root): root is string => root !== null)
+    return roots.map((root) => join(root, 'bin', command))
+  })
+
+  return [...pathEntries, ...standardCandidates]
+}
+
+const findExistingWindowsCommand = (candidates: readonly string[]): string | null => {
+  for (const candidate of candidates) {
+    if (isExistingFile(candidate)) return candidate
+  }
+  return null
+}
+
+const findWindowsCommandWithWhere = async (command: string): Promise<string | null> =>
+  new Promise((resolve) => {
+    execFile('where.exe', [command], WINDOWS_LOOKUP_OPTIONS, (_error, stdout) => {
+      const candidates = String(stdout ?? '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+      resolve(findExistingWindowsCommand(candidates))
+    })
+  })
+
+const findWindowsAppExecutableFromRegistry = async (
+  appExecutable: string
+): Promise<string | null> => {
+  const registryRoots = [
+    'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths',
+    'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths',
+  ]
+
+  for (const registryRoot of registryRoots) {
+    const key = `${registryRoot}\\${appExecutable}`
+    const value = await new Promise<string | null>((resolve) => {
+      execFile('reg.exe', ['query', key, '/ve'], WINDOWS_LOOKUP_OPTIONS, (_error, stdout) => {
+        const match = String(stdout ?? '').match(
+          /^\s*\([^)]*\)\s+REG_(?:SZ|EXPAND_SZ)\s+(.+?)\s*$/im
+        )
+        resolve(match?.[1]?.trim().replace(/^"|"$/g, '') ?? null)
+      })
+    })
+    if (value && isExistingFile(value)) return value
+  }
+  return null
+}
+
+/**
+ * Resolve a Windows command shim without trusting that the Hive process was
+ * launched with the user's interactive PATH. The returned value is still a
+ * fixed launcher discovered from the machine; no workspace input participates
+ * in the lookup.
+ */
+export const resolveWindowsCommandShim = async (command: string): Promise<string> => {
+  if (!isWindowsCommandShim(command)) return command
+
+  const fromKnownLocations = findExistingWindowsCommand(getWindowsPathCandidates(command))
+  if (fromKnownLocations) return fromKnownLocations
+
+  const fromWhere = await findWindowsCommandWithWhere(command)
+  if (fromWhere) return fromWhere
+
+  const metadata = WINDOWS_COMMAND_METADATA[command]
+  if (metadata) {
+    for (const appExecutable of metadata.appExecutables) {
+      const appPath = await findWindowsAppExecutableFromRegistry(appExecutable)
+      if (!appPath) continue
+      const shimPath = join(dirname(appPath), 'bin', command)
+      if (isExistingFile(shimPath)) return shimPath
+    }
+  }
+
+  // Let cmd.exe produce the normal, actionable error if the application is
+  // genuinely unavailable. classifyFailure converts it into the localized
+  // "add the CLI to PATH" message instead of hiding the original stderr.
+  return command
+}
+
 export type RunOpenCommand = (
   command: string,
   args: string[],
@@ -138,27 +287,32 @@ interface ExecFileError extends NodeJS.ErrnoException {
 }
 
 const defaultRunOpenCommand: RunOpenCommand = (command, args, options) =>
-  new Promise<SpawnResult>((resolve) => {
-    // Node cannot spawn a Windows .cmd shim directly with execFile. Route it
-    // through cmd.exe as separate argv entries instead of shell:true, which
-    // would concatenate an arbitrary workspace path into a shell command.
-    const isWindowsCommandShim = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)
-    const executable = isWindowsCommandShim
+  (async () => {
+    // Node cannot spawn a Windows .cmd shim directly with execFile. Resolve
+    // the shim first, then route it through cmd.exe as separate argv entries
+    // instead of shell:true, which would concatenate an arbitrary workspace
+    // path into a shell command.
+    const windowsCommandShim = isWindowsCommandShim(command)
+    const resolvedCommand = windowsCommandShim ? await resolveWindowsCommandShim(command) : command
+    const executable = windowsCommandShim
       ? (process.env.ComSpec ?? process.env.COMSPEC ?? 'cmd.exe')
-      : command
-    const childArgs = isWindowsCommandShim ? ['/d', '/c', command, ...args] : args
-    const child = execFile(executable, childArgs, options, (error, stdout, stderr) => {
-      const errno = error as ExecFileError | null
-      resolve({
-        stderr: String(stderr ?? ''),
-        stdout: String(stdout ?? ''),
-        status: typeof errno?.code === 'number' ? errno.code : (child.exitCode ?? 0),
-        signal: typeof errno?.signal === 'string' ? errno.signal : null,
-        spawnError:
-          errno && typeof errno.code === 'string' ? (errno as NodeJS.ErrnoException) : null,
+      : resolvedCommand
+    const childArgs = windowsCommandShim ? ['/d', '/c', resolvedCommand, ...args] : args
+
+    return new Promise<SpawnResult>((resolve) => {
+      const child = execFile(executable, childArgs, options, (error, stdout, stderr) => {
+        const errno = error as ExecFileError | null
+        resolve({
+          stderr: String(stderr ?? ''),
+          stdout: String(stdout ?? ''),
+          status: typeof errno?.code === 'number' ? errno.code : (child.exitCode ?? 0),
+          signal: typeof errno?.signal === 'string' ? errno.signal : null,
+          spawnError:
+            errno && typeof errno.code === 'string' ? (errno as NodeJS.ErrnoException) : null,
+        })
       })
     })
-  })
+  })()
 
 const APP_NOT_INSTALLED_PATTERNS = [
   /unable to find application/i,
@@ -167,9 +321,17 @@ const APP_NOT_INSTALLED_PATTERNS = [
   /application can'?t be found/i,
 ]
 
+const COMMAND_NOT_IN_PATH_PATTERNS = [
+  /is not recognized as an internal or external command/i,
+  /the system cannot find the path specified/i,
+]
+
 const classifyFailure = (result: SpawnResult): OpenWorkspaceErrorCode => {
   if (result.spawnError?.code === 'ENOENT') return 'command-not-in-path'
   const stderr = result.stderr.toLowerCase()
+  if (COMMAND_NOT_IN_PATH_PATTERNS.some((re) => re.test(stderr))) {
+    return 'command-not-in-path'
+  }
   if (APP_NOT_INSTALLED_PATTERNS.some((re) => re.test(stderr))) return 'app-not-installed'
   return 'unknown'
 }

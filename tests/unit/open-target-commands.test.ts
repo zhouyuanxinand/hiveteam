@@ -307,6 +307,23 @@ describe('openWorkspace — error classification', () => {
     }
   })
 
+  test('Windows cmd.exe command-not-found stderr surfaces as command-not-in-path', async () => {
+    const runCommand: RunOpenCommand = async () => ({
+      ...fakeSpawnOk,
+      status: 1,
+      stderr:
+        "'code.cmd' is not recognized as an internal or external command, operable program or batch file.",
+    })
+    const result = await openWorkspace(
+      { path: 'C:\\code', targetId: 'vscode' },
+      { platform: 'win32', runCommand }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errorCode).toBe('command-not-in-path')
+    }
+  })
+
   test('other non-zero failure falls through to unknown error', async () => {
     const runCommand: RunOpenCommand = async () => ({
       ...fakeSpawnOk,
