@@ -151,6 +151,7 @@ export const createAgentRunStarter =
           !startConfig.resumedSessionId &&
           !injectedRestartMessage &&
           agent &&
+          agent.role === 'orchestrator' &&
           isInteractiveAgentCommand(startConfig.interactiveCommand ?? startConfig.command)
         ) {
           postStartWriter(

@@ -12,6 +12,7 @@ interface OptimisticRunInput {
   runId: string
   status?: string
   terminalInputProfile?: TerminalInputProfile
+  threadId?: string | null
   workspaceId: string
 }
 
@@ -92,6 +93,7 @@ export const useOptimisticTerminalRuns = (
       runId,
       status = 'starting',
       terminalInputProfile = 'default',
+      threadId = null,
       workspaceId: targetWorkspaceId,
     }: OptimisticRunInput) => {
       const run: TerminalRunSummary = {
@@ -100,6 +102,7 @@ export const useOptimisticTerminalRuns = (
         run_id: runId,
         status,
         terminal_input_profile: terminalInputProfile,
+        thread_id: threadId,
       }
       setOptimisticRunsByWorkspaceId((current) => {
         const recordsWorkspaceShell = isWorkspaceShellRun(run, targetWorkspaceId)

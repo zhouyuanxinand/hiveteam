@@ -36,7 +36,7 @@ afterEach(() => {
 })
 
 describe('agent startup instructions', () => {
-  test('new orchestrator and worker runs receive team command guidance over real PTY stdin', async () => {
+  test('only a new orchestrator run receives startup guidance; an idle worker stays at its CLI prompt', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-agent-startup-instructions-'))
     const workspacePath = join(dataDir, 'workspace')
     const binDir = join(dataDir, 'bin')
@@ -157,14 +157,10 @@ describe('agent startup instructions', () => {
         })
         const body = (await response.json()) as { output: string }
         const output = body.output.replaceAll('IN:', '')
-        expect(output).toContain('[Hive 系统消息：启动说明]')
-        expect(output).toContain('你是 Alpha 的 Alice（coder）')
-        expect(output).toContain('完成任务后必须执行 `team report "<结论>"`')
-        expect(output).toContain('没有进行中的任务时，用 `team status "<当前状态>"`')
-        expect(output).not.toContain('--success')
-        expect(output).not.toContain('--failed')
-        expect(output).not.toContain('team send <worker-name>')
-        expect(output).toContain('SUBMITTED')
+        expect(output).toContain('❯ ')
+        expect(output).not.toContain('[Hive 系统消息：启动说明]')
+        expect(output).not.toContain('你是 Alpha 的 Alice（coder）')
+        expect(output).not.toContain('SUBMITTED')
       }, 6000)
     } finally {
       await hive.close()

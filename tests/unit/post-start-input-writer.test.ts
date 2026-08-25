@@ -201,6 +201,19 @@ describe('post-start input writer', () => {
     expect(manager.writeInput).toHaveBeenCalledWith('run-1', 'payload\r')
   })
 
+  test('ignores whitespace-only post-start input for interactive and non-interactive commands', async () => {
+    const manager = {
+      getRun: vi.fn(() => ({ output: 'Welcome back\n❯ ', status: 'running' })),
+      writeInput: vi.fn(),
+    }
+
+    createPostStartInputWriter(manager as never, 'claude')('run-1', ' \n\t ')
+    await createAwaitablePostStartInputWriter(manager as never, process.execPath)('run-1', ' \n\t ')
+
+    expect(manager.getRun).not.toHaveBeenCalled()
+    expect(manager.writeInput).not.toHaveBeenCalled()
+  })
+
   test('skips non-interactive post-start input after the run exits', () => {
     const manager = {
       getRun: vi.fn(() => ({ output: '', status: 'exited' })),

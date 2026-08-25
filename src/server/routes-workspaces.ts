@@ -300,6 +300,10 @@ export const workspaceRoutes: RouteDefinition[] = [
       requireUiTokenFromRequest(request, store.validateUiToken)
 
       const body = await readJsonBody<UserInputBody>(request)
+      if (typeof body.text !== 'string' || body.text.trim().length === 0) {
+        sendJson(response, 400, { error: 'User input cannot be empty' })
+        return
+      }
       store.recordUserInput(workspaceId, `${workspaceId}:orchestrator`, body.text)
       sendJson(response, 202, { ok: true })
     }
@@ -335,7 +339,10 @@ export const workspaceRoutes: RouteDefinition[] = [
       const run = await store.startAgent(workspaceId, agentId, {
         hivePort: getRuntimePort(request),
       })
-      sendJson(response, 201, { run_id: run.runId })
+      const threadId =
+        store.listTerminalRuns(workspaceId).find((terminalRun) => terminalRun.run_id === run.runId)
+          ?.thread_id ?? null
+      sendJson(response, 201, { run_id: run.runId, thread_id: threadId })
     }
   ),
 ]

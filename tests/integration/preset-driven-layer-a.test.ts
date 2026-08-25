@@ -275,8 +275,8 @@ const startWorkerViaHttp = async (
     body: JSON.stringify({ hive_port: port }),
   })
   expect(response.status).toBe(201)
-  const payload = (await response.json()) as { run_id: string }
-  return { runId: payload.run_id }
+  const payload = (await response.json()) as { run_id: string; thread_id?: string | null }
+  return { runId: payload.run_id, threadId: payload.thread_id ?? null }
 }
 
 const getRunViaHttp = async (baseUrl: string, cookie: string, runId: string) => {
@@ -401,6 +401,7 @@ describe('preset-driven Layer A', () => {
       writeFileSync(join(workspacePath, '.expect-yolo'), '1\n')
 
       const secondRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
+      expect(secondRun.threadId).toBe(sessionId)
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(state.status).toBe('running')

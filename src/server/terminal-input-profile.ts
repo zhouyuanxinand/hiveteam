@@ -9,6 +9,8 @@ export interface TerminalRunSummary {
   agent_name: string
   run_id: string
   status: string
+  /** Native CLI session/thread reused when this agent is restarted. */
+  thread_id?: string | null
   terminal_input_profile: TerminalInputProfile
 }
 

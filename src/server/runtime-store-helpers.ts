@@ -43,6 +43,7 @@ import { createWorkspaceStore } from './workspace-store.js'
 
 export interface RuntimeStoreServices {
   agentRunStore: ReturnType<typeof createAgentRunStore>
+  agentSessionStore: ReturnType<typeof createAgentSessionStore>
   agentRuntime: ReturnType<typeof createAgentRuntime>
   interruptedRuns: InterruptedAgentRun[]
   db: ReturnType<typeof openRuntimeDatabase>
@@ -139,6 +140,7 @@ export const createRuntimeStoreServices = (
   }
   const restartPolicy = buildRuntimeRestartPolicy({
     agentRunStore,
+    dispatchLedgerStore,
     messageLogStore,
     tasksFileService,
     workspaceStore,
@@ -183,6 +185,7 @@ export const createRuntimeStoreServices = (
 
   return {
     agentRunStore,
+    agentSessionStore,
     agentRuntime,
     interruptedRuns,
     db,
@@ -435,6 +438,7 @@ export const createRuntimeStoreLifecycle = ({
             agent_name: agent.name,
             run_id: run.runId,
             status: run.status,
+            thread_id: services.agentSessionStore.getLastSessionId(workspaceId, agent.id) ?? null,
             terminal_input_profile: resolveTerminalInputProfile(launchConfig),
           },
         ]

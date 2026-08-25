@@ -154,10 +154,9 @@ describe('team prompt contract', () => {
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('[Hive 系统消息：启动说明]')
-      expect(run?.output).toContain('<hive-memory context="startup">')
-      expect(run?.output).toContain('preserve backwards compatibility')
-      expect(run?.output).toContain('SUBMITTED')
+      expect(run?.output).toContain('❯ ')
+      expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).not.toContain('SUBMITTED')
     }, 4000)
 
     await store.dispatchTaskByWorkerName(workspace.id, 'Alice', '实现登录', {
@@ -169,7 +168,7 @@ describe('team prompt contract', () => {
       expect(run?.output).toContain('\u001b[200~[Hive 系统消息：来自 @Orchestrator 的派单]')
       expect(run?.output).toContain('实现登录')
       expect(run?.output).toContain('\u001b[201~')
-      expect(run?.output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+      expect(run?.output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -227,8 +226,9 @@ describe('team prompt contract', () => {
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('[Hive 系统消息：启动说明]')
-      expect(run?.output).toContain('SUBMITTED')
+      expect(run?.output).toContain('❯ ')
+      expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).not.toContain('SUBMITTED')
     }, 4000)
 
     await store.dispatchTaskByWorkerName(workspace.id, 'Alice', '实现登录', {

@@ -189,6 +189,7 @@ export const createAwaitablePostStartInputWriter = (
 ): ((runId: string, text: string) => Promise<void>) => {
   if (!isInteractiveAgentCommand(command)) {
     return (runId, text) => {
+      if (text.trim().length === 0) return Promise.resolve()
       try {
         if (!writeIfRunWritable(agentManager, runId, `${text}\r`)) {
           return Promise.reject(createRunInactiveError(runId))
@@ -200,8 +201,9 @@ export const createAwaitablePostStartInputWriter = (
     }
   }
 
-  return (runId, text) =>
-    new Promise<void>((resolve, reject) => {
+  return (runId, text) => {
+    if (text.trim().length === 0) return Promise.resolve()
+    return new Promise<void>((resolve, reject) => {
       const startedAt = Date.now()
 
       const tryWrite = () => {
@@ -246,6 +248,7 @@ export const createAwaitablePostStartInputWriter = (
 
       tryWrite()
     })
+  }
 }
 
 export const createPostStartInputWriter = (
@@ -254,11 +257,13 @@ export const createPostStartInputWriter = (
 ): ((runId: string, text: string) => void) => {
   if (!isInteractiveAgentCommand(command)) {
     return (runId, text) => {
+      if (text.trim().length === 0) return
       writeIfRunWritable(agentManager, runId, `${text}\r`)
     }
   }
 
   return (runId, text) => {
+    if (text.trim().length === 0) return
     const startedAt = Date.now()
     let isInitialAttempt = true
     const tryWrite = () => {

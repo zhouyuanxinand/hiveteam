@@ -36,6 +36,16 @@ describe('user input recovery', () => {
       })
       const workspace = (await workspaceResponse.json()) as { id: string; name: string }
 
+      const blankInputResponse = await fetch(
+        `${baseUrl}/api/workspaces/${workspace.id}/user-input`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: uiCookie },
+          body: JSON.stringify({ text: '   ' }),
+        }
+      )
+      expect(blankInputResponse.status).toBe(400)
+
       const inputResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/user-input`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },

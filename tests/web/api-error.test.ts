@@ -61,6 +61,7 @@ describe('api error messages', () => {
 
     await expect(startAgentRun('workspace-1', 'workspace-1:orchestrator')).resolves.toEqual({
       runId: 'run-after-session-refresh',
+      threadId: null,
     })
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -97,7 +98,10 @@ describe('api error messages', () => {
         startAgentRun('workspace-1', 'workspace-1:orchestrator'),
         startAgentRun('workspace-1', 'worker-a'),
       ])
-    ).resolves.toEqual([{ runId: 'run-1' }, { runId: 'run-2' }])
+    ).resolves.toEqual([
+      { runId: 'run-1', threadId: null },
+      { runId: 'run-2', threadId: null },
+    ])
 
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/ui/session')).toHaveLength(1)
     expect(fetchMock).toHaveBeenCalledTimes(5)

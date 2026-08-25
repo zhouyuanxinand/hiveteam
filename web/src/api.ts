@@ -492,15 +492,15 @@ export const deleteWorkspace = async (workspaceId: string): Promise<void> => {
 export const startAgentRun = async (
   workspaceId: string,
   agentId: string
-): Promise<{ runId: string }> => {
+): Promise<{ runId: string; threadId: string | null }> => {
   const response = await apiFetch(`/api/workspaces/${workspaceId}/agents/${agentId}/start`, {
     method: 'POST',
   })
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, 'Failed to start agent run'))
   }
-  const body = (await response.json()) as { run_id: string }
-  return { runId: body.run_id }
+  const body = (await response.json()) as { run_id: string; thread_id?: string | null }
+  return { runId: body.run_id, threadId: body.thread_id ?? null }
 }
 
 export const stopAgentRun = async (runId: string): Promise<void> => {
@@ -744,6 +744,8 @@ export interface TerminalRunSummary {
   agent_name: string
   run_id: string
   status: string
+  /** Native CLI session/thread id; stable across process restarts when supported. */
+  thread_id?: string | null
   terminal_input_profile?: TerminalInputProfile
 }
 

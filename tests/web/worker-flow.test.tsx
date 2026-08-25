@@ -195,15 +195,14 @@ describe('worker flow with real server', () => {
     expect(card).toBeInTheDocument()
     expect(within(card).getByText('Alice')).toBeInTheDocument()
     expect(within(card).getByText('Coder')).toBeInTheDocument()
-    expect(within(card).getByText('idle')).toBeInTheDocument()
+    expect(within(card).getByText('stopped')).toBeInTheDocument()
     // Add Member affordance now lives only in the WorkersPane header (the
     // dashed in-grid Add Member tile was redundant and visually misleading).
     expect(screen.getByTestId('add-worker-trigger')).toHaveTextContent('Add Member')
 
-    const workerRun = serverContext?.store
-      .listTerminalRuns(workspaceId)
-      .find((run) => run.agent_name === 'Alice')
-    expect(workerRun?.run_id).toEqual(expect.any(String))
+    expect(
+      serverContext?.store.listTerminalRuns(workspaceId).find((run) => run.agent_name === 'Alice')
+    ).toBeUndefined()
 
     // Verify clicking the card opens the worker detail modal, matching the
     // released member-window behavior, instead of moving workers into the
@@ -212,7 +211,12 @@ describe('worker flow with real server', () => {
     const modal = await screen.findByTestId('worker-modal')
     expect(within(modal).getByTestId('worker-modal-terminal-slot')).toBeInTheDocument()
     expect(screen.queryByTestId('terminal-bottom-panel')).toBeNull()
+    fireEvent.click(within(modal).getByTestId('worker-start-empty'))
     await waitFor(() => {
+      const workerRun = serverContext?.store
+        .listTerminalRuns(workspaceId)
+        .find((run) => run.agent_name === 'Alice')
+      expect(workerRun?.run_id).toEqual(expect.any(String))
       expect(document.getElementById(`worker-pty-${workerRun?.run_id}`)).not.toBeNull()
     })
     fireEvent.click(within(modal).getByLabelText('Close worker detail'))
@@ -396,6 +400,7 @@ describe('worker flow with real server', () => {
     const modal = await screen.findByTestId('worker-modal')
     expect(within(modal).getByTestId('worker-modal-terminal-slot')).toBeInTheDocument()
     expect(screen.queryByTestId('terminal-bottom-panel')).toBeNull()
+    fireEvent.click(within(modal).getByTestId('worker-start-empty'))
     await waitFor(() => {
       expect(document.querySelector('[id^="worker-pty-"]')).not.toBeNull()
     })

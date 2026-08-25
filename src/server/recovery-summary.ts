@@ -1,5 +1,6 @@
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 
+import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { getHiveTeamRules } from './hive-team-guidance.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import { wrapSystemMessage } from './system-message.js'
@@ -39,7 +40,7 @@ const getOpenTaskTargets = (agent: AgentSummary, workers: AgentSummary[]) =>
   agent.role === 'orchestrator' ? workers : [agent]
 
 const formatOpenTasks = (
-  messages: RecoveryMessage[],
+  dispatches: readonly DispatchRecord[],
   agent: AgentSummary,
   workers: AgentSummary[]
 ) => {
@@ -47,18 +48,16 @@ const formatOpenTasks = (
     (target) => target.role !== 'orchestrator'
   )
   const targetIds = new Set(targetAgents.map((target) => target.id))
-  const queues = new Map<string, Array<Extract<RecoveryMessage, { type: 'send' }>>>()
+  const queues = new Map<string, DispatchRecord[]>()
 
-  for (const message of messages) {
-    if (message.type === 'send' && targetIds.has(message.to)) {
-      const queue = queues.get(message.to) ?? []
-      queue.push(message)
-      queues.set(message.to, queue)
-      continue
-    }
-
-    if (message.type === 'report' && targetIds.has(message.from)) {
-      queues.get(message.from)?.shift()
+  for (const dispatch of dispatches) {
+    if (
+      (dispatch.status === 'queued' || dispatch.status === 'submitted') &&
+      targetIds.has(dispatch.toAgentId)
+    ) {
+      const queue = queues.get(dispatch.toAgentId) ?? []
+      queue.push(dispatch)
+      queues.set(dispatch.toAgentId, queue)
     }
   }
 
@@ -91,15 +90,15 @@ const getTaskSectionTitle = (agent: AgentSummary) =>
 
 export const buildRecoverySummary = ({
   agent,
-  allTaskMessages,
   messages,
+  openDispatches,
   tasksContent,
   workers,
   workspace,
 }: {
   agent: AgentSummary
-  allTaskMessages?: RecoveryMessage[]
   messages: RecoveryMessage[]
+  openDispatches: readonly DispatchRecord[]
   tasksContent: string
   workers: AgentSummary[]
   workspace: WorkspaceSummary
@@ -116,7 +115,7 @@ export const buildRecoverySummary = ({
       ...formatTaskEvents(messages, agent),
       '',
       '## 当前未完成任务',
-      ...formatOpenTasks(allTaskMessages ?? messages, agent, workers),
+      ...formatOpenTasks(openDispatches, agent, workers),
       '',
       `## 当前 ${TASKS_RELATIVE_PATH} 状态`,
       tasksContent.slice(0, TASKS_HEAD_LIMIT) || '(空)',

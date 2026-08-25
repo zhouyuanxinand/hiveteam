@@ -1,7 +1,7 @@
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
-import { ConflictError } from './http-errors.js'
+import { BadRequestError, ConflictError } from './http-errors.js'
 import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
 import {
@@ -216,6 +216,9 @@ export const createTeamOperations = ({
     text: string,
     input: DispatchTaskInput = {}
   ) => {
+    if (text.trim().length === 0) {
+      throw new BadRequestError('Task text cannot be empty')
+    }
     const message = createSendMessage(workspaceId, workerId, text, input.fromAgentId)
     const messageHandle = insertMessage(message)
     let dispatch: DispatchRecord | undefined
@@ -298,6 +301,9 @@ export const createTeamOperations = ({
       return dispatchTask(workspaceId, worker.id, text, input)
     },
     recordUserInput(workspaceId: string, orchestratorId: string, text: string) {
+      if (text.trim().length === 0) {
+        throw new BadRequestError('User input cannot be empty')
+      }
       workspaceStore.getAgent(workspaceId, orchestratorId)
       agentRuntime.writeUserInputPrompt(workspaceId, text)
       insertMessage(createUserInputMessage(workspaceId, orchestratorId, text))

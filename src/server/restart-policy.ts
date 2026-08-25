@@ -31,12 +31,12 @@ export const createRestartPolicy = ({
   getWorkspaceSnapshot,
   insertMessage,
   listAgentRuns,
+  listOpenDispatches,
   listMessagesForRecovery,
   readTasks,
 }: RestartPolicyInput): RestartPolicy => ({
   injectPostStartMessage({ agentId, runId, startConfig, workspace, writeToRun }) {
     const previousRun = findPreviousRun(listAgentRuns(agentId), runId)
-    if (!previousRun) return false
 
     const snapshot = getWorkspaceSnapshot(workspace.id)
     const agent = snapshot.agents.find((item) => item.id === agentId)
@@ -45,13 +45,33 @@ export const createRestartPolicy = ({
       (item) => item.role !== 'orchestrator' && item.id !== agentId
     )
     const tasksContent = readTasks(snapshot.summary.path)
+    const openDispatches = listOpenDispatches(workspace.id).filter(
+      (dispatch) => dispatch.status === 'queued' || dispatch.status === 'submitted'
+    )
+    const relevantDispatches =
+      agent.role === 'orchestrator'
+        ? openDispatches.filter((dispatch) =>
+            workers.some((worker) => worker.id === dispatch.toAgentId)
+          )
+        : openDispatches.filter((dispatch) => dispatch.toAgentId === agent.id)
 
     if (startConfig.resumedSessionId) return true
 
+    // A worker must not receive a synthetic "continue" prompt merely because
+    // it had an old run. Queued dispatches are replayed by the lifecycle after
+    // startup; submitted dispatches are the only worker work that needs a
+    // recovery summary here. This makes cancelled/reported historical sends
+    // inert and keeps an idle member at its native CLI prompt.
+    if (agent.role !== 'orchestrator') {
+      if (!relevantDispatches.some((dispatch) => dispatch.status === 'submitted')) return false
+    } else if (!previousRun) {
+      return false
+    }
+
     const text = buildRecoverySummary({
       agent,
-      allTaskMessages: listMessagesForRecovery(workspace.id, 0),
       messages: listMessagesForRecovery(workspace.id, Date.now() - RECOVERY_WINDOW_MS),
+      openDispatches: relevantDispatches,
       tasksContent,
       workers,
       workspace,

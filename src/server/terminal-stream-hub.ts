@@ -193,7 +193,20 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         },
       })
       socket.on('message', (raw, isBinary) => {
-        store.writeRunInput(runId, normalizeTerminalInput(raw, isBinary))
+        try {
+          store.writeRunInput(runId, normalizeTerminalInput(raw, isBinary))
+        } catch (error) {
+          // A terminal can exit between the browser's keystroke and this
+          // message handler. Report the stale input to that socket instead of
+          // letting a normal PTY race crash the whole Hive runtime.
+          if (socket.readyState === socket.OPEN) {
+            socket.send(
+              serializeTerminalError(
+                error instanceof Error ? error.message : 'Terminal input failed'
+              )
+            )
+          }
+        }
       })
       socket.on('close', () => {
         if (viewer.ioSocket === socket) viewer.ioSocket = null

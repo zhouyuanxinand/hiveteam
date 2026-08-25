@@ -23,6 +23,7 @@ interface UseWorkerActionsInput {
     agentName: string
     runId: string
     terminalInputProfile?: TerminalInputProfile
+    threadId?: string | null
     workspaceId: string
   }) => void
   setWorkersByWorkspaceId: React.Dispatch<React.SetStateAction<Record<string, TeamListItem[]>>>
@@ -58,7 +59,10 @@ export const useWorkerActions = ({
       if (!activeWorkspaceId) return { error: 'No active workspace', runId: null }
       const startupClean = startupCommand.trim()
       const result = await createWorker(activeWorkspaceId, {
-        autostart: true,
+        // Creating a member must not open a native CLI conversation before
+        // the Orchestrator has a dispatch. A real dispatch starts a stopped
+        // worker on demand; users can still start it explicitly from the card.
+        autostart: false,
         command_preset_id: commandPresetId || null,
         description: roleDescription.trim(),
         model: model?.trim() || null,
@@ -111,6 +115,7 @@ export const useWorkerActions = ({
           agentId: workerId,
           agentName: workerId,
           runId: result.runId,
+          threadId: result.threadId,
           workspaceId: activeWorkspaceId,
         })
         // No optimistic status patch: server is authoritative (working iff

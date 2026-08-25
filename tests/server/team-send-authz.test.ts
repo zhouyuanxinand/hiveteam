@@ -3,6 +3,21 @@ import { describe, expect, test } from 'vitest'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 
 describe('team send authorization', () => {
+  test('rejects whitespace-only dispatch text before starting a worker', async () => {
+    const store = createRuntimeStore()
+    const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
+    const alice = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+
+    await expect(store.dispatchTaskByWorkerName(workspace.id, 'Alice', ' \t ')).rejects.toThrow(
+      'Task text cannot be empty'
+    )
+
+    expect(store.getWorker(workspace.id, alice.id)).toMatchObject({
+      pendingTaskCount: 0,
+      status: 'stopped',
+    })
+  })
+
   test('dispatchTaskByWorkerName leaves state unchanged when worker has no launch config', async () => {
     const store = createRuntimeStore()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')

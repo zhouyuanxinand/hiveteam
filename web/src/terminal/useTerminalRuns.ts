@@ -20,6 +20,7 @@ const areTerminalRunsEqual = (a: TerminalRunSummary[], b: TerminalRunSummary[]):
       run.agent_name === other.agent_name &&
       run.run_id === other.run_id &&
       run.status === other.status &&
+      run.thread_id === other.thread_id &&
       run.terminal_input_profile === other.terminal_input_profile
     )
   })

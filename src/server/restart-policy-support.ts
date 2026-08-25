@@ -1,5 +1,6 @@
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 import type { PersistedAgentRun } from './agent-run-store.js'
+import type { DispatchRecord } from './dispatch-ledger-store.js'
 import type { MessageLogHandle, MessageLogRecord, RecoveryMessage } from './message-log-store.js'
 
 export interface RestartPolicyInput {
@@ -10,6 +11,7 @@ export interface RestartPolicyInput {
   }
   insertMessage: (record: MessageLogRecord) => MessageLogHandle
   listAgentRuns: (agentId: string) => PersistedAgentRun[]
+  listOpenDispatches: (workspaceId: string) => DispatchRecord[]
   listMessagesForRecovery: (workspaceId: string, sinceMs: number) => RecoveryMessage[]
   readTasks: (workspacePath: string) => string
 }
