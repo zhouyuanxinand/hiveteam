@@ -27,6 +27,30 @@ describe('remote persistence', () => {
     db.close()
   })
 
+  test('revokes all live devices when the daemon identity changes', () => {
+    const db = new BetterSqlite3(':memory:')
+    initializeRuntimeDatabase(db)
+    const devices = createRemoteDeviceStore(db)
+    devices.insert({
+      id: 'device-1',
+      name: 'Phone',
+      keys: { d2p: new Uint8Array([1]), p2d: new Uint8Array([2]) },
+      devicePublicKey: new Uint8Array([3]),
+    })
+    devices.insert({
+      id: 'device-2',
+      name: 'Tablet',
+      keys: { d2p: new Uint8Array([4]), p2d: new Uint8Array([5]) },
+      devicePublicKey: new Uint8Array([6]),
+    })
+
+    expect(devices.revokeAll(1234)).toBe(2)
+    expect(devices.list()).toEqual([])
+    expect(devices.list(true)).toHaveLength(2)
+    expect(devices.revokeAll(5678)).toBe(0)
+    db.close()
+  })
+
   test('supports the legacy remote device schema used by Hive 2.1.19', () => {
     const db = new BetterSqlite3(':memory:')
     db.exec(`

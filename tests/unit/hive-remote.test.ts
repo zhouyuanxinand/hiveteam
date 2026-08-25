@@ -68,6 +68,34 @@ describe('hive remote CLI', () => {
     expect(config.values.get('remote_enabled')).toBe('true')
   })
 
+  test('revokes paired devices when login returns a new daemon identity', async () => {
+    const config = createConfig({ remote_daemon_id: 'old-daemon' })
+    const output: string[] = []
+    let revoked = 0
+    const code = await runHiveRemoteCommand(['login'], {
+      config,
+      deviceStore: {
+        list: () => [],
+        revoke: () => false,
+        revokeAll: () => {
+          revoked += 2
+          return 2
+        },
+      },
+      client: {
+        requestCode: async () => ({ code: 'ABCD', expiresAt: 2000, pollIntervalMs: 1 }),
+        exchangeToken: async () => ({ daemonId: 'new-daemon', daemonToken: 'secret-token' }),
+      },
+      now: () => 1000,
+      sleep: async () => {},
+      log: (line) => output.push(line),
+    })
+
+    expect(code).toBe(0)
+    expect(revoked).toBe(2)
+    expect(output.join('\n')).toContain('paired device(s) were revoked')
+  })
+
   test('status and logout never print or retain the token', async () => {
     const config = createConfig({
       remote_enabled: 'true',

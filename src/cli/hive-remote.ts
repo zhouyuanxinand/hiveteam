@@ -45,6 +45,7 @@ export interface RemoteConfigStore {
 export interface RemoteDeviceListStore {
   list(includeRevoked?: boolean): RemoteDeviceRecord[]
   revoke(deviceId: string, now?: number): boolean
+  revokeAll?(now?: number): number
 }
 
 export interface DaemonCodeResponse {
@@ -160,7 +161,8 @@ const runLogin = async (
   client: GatewayClient,
   now: () => number,
   sleep: (ms: number) => Promise<void>,
-  log: (line: string) => void
+  log: (line: string) => void,
+  onDaemonIdentityChange?: () => number
 ) => {
   const gatewayUrl =
     readGatewayFlag(argv) ?? readConfig(store, REMOTE_GATEWAY_URL_KEY) ?? DEFAULT_GATEWAY_URL
@@ -191,10 +193,18 @@ const runLogin = async (
       continue
     }
     if (token) {
+      const previousDaemonId = readConfig(store, REMOTE_DAEMON_ID_KEY)
+      const daemonIdentityChanged = previousDaemonId !== null && previousDaemonId !== token.daemonId
+      const revokedDeviceCount = daemonIdentityChanged ? (onDaemonIdentityChange?.() ?? 0) : 0
       store.set(REMOTE_GATEWAY_URL_KEY, gatewayUrl)
       store.set(REMOTE_DAEMON_ID_KEY, token.daemonId)
       store.set(REMOTE_DAEMON_TOKEN_KEY, token.daemonToken)
       store.set(REMOTE_ENABLED_KEY, 'true')
+      if (revokedDeviceCount > 0) {
+        log(
+          `The daemon identity changed; ${revokedDeviceCount} paired device(s) were revoked. Pair the phone again from Settings → Remote access.`
+        )
+      }
       log('This machine is linked. Remote access is now enabled.')
       log('Restart Hive to connect the remote tunnel.')
       return 0
@@ -290,23 +300,31 @@ export const runHiveRemoteCommand = async (
   const client = options.client ?? defaultGatewayClient
   const now = options.now ?? Date.now
   const sleep = options.sleep ?? defaultSleep
-  let close: (() => void) | undefined
+  const closes: Array<() => void> = []
   const resolveConfig = () => {
     if (options.config) return options.config
     const opened = openConfigStore()
-    close = opened.close
+    closes.push(opened.close)
     return opened.store
   }
   const resolveDevices = () => {
     if (options.deviceStore) return options.deviceStore
     const opened = openDeviceStore()
-    close = opened.close
+    closes.push(opened.close)
     return opened.store
   }
   try {
     switch (subcommand) {
       case 'login':
-        return await runLogin(rest, resolveConfig(), client, now, sleep, log)
+        return await runLogin(
+          rest,
+          resolveConfig(),
+          client,
+          now,
+          sleep,
+          log,
+          () => resolveDevices().revokeAll?.() ?? 0
+        )
       case 'status':
         return runStatus(resolveConfig(), log)
       case 'logout':
@@ -324,6 +342,6 @@ export const runHiveRemoteCommand = async (
     error(cause instanceof Error ? cause.message : String(cause))
     return 1
   } finally {
-    close?.()
+    for (const close of closes.reverse()) close()
   }
 }

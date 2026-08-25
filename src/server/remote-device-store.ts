@@ -70,6 +70,7 @@ export interface RemoteDeviceStore {
   list(includeRevoked?: boolean): RemoteDeviceRecord[]
   get(deviceId: string): RemoteDeviceRecord | null
   revoke(deviceId: string, now?: number): boolean
+  revokeAll(now?: number): number
   touchActive(deviceId: string, now?: number): void
 }
 
@@ -176,6 +177,14 @@ export const createRemoteDeviceStore = (db: Database): RemoteDeviceStore => {
         )
         .run(now, deviceId)
       return result.changes > 0
+    },
+    revokeAll(now = Date.now()) {
+      const result = db
+        .prepare(
+          'UPDATE remote_devices SET revoked_at = COALESCE(revoked_at, ?), last_active = last_active WHERE revoked_at IS NULL'
+        )
+        .run(now)
+      return result.changes
     },
     touchActive(deviceId, now = Date.now()) {
       db.prepare(
