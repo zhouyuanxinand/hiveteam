@@ -42,11 +42,27 @@ const normalizePreview = (preview: string | null | undefined) =>
 export const createRemoteAuditStore = (db: Database) => {
   const pending: Array<{ event: RemoteAuditEvent; ts: number }> = []
   let drain: Promise<void> | null = null
+  const auditColumns = new Set(
+    (db.prepare('PRAGMA table_info(remote_audit)').all() as Array<{ name: string }>).map(
+      (column) => column.name
+    )
+  )
+  const deviceColumn = auditColumns.has('device_id')
+    ? 'device_id'
+    : auditColumns.has('remote_device_id')
+      ? 'remote_device_id'
+      : null
+
+  if (!deviceColumn) throw new Error('remote_audit table has no device identifier column')
+
   const insert = db.prepare(
     `INSERT INTO remote_audit (
-       device_id, ts, workspace_id, action, endpoint, result, reject_reason, byte_count, preview
+       ${deviceColumn}, ts, workspace_id, action, endpoint, result, reject_reason, byte_count, preview
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
+  const select = `SELECT id, ${deviceColumn} AS device_id, ts, workspace_id, action,
+    endpoint, result, reject_reason, byte_count, preview
+    FROM remote_audit`
 
   const drainPending = async () => {
     if (drain) return drain
@@ -87,12 +103,12 @@ export const createRemoteAuditStore = (db: Database) => {
     },
     list(limit = 100) {
       return db
-        .prepare('SELECT * FROM remote_audit ORDER BY id DESC LIMIT ?')
+        .prepare(`${select} ORDER BY id DESC LIMIT ?`)
         .all(Math.max(1, Math.min(limit, 1000))) as RemoteAuditRecord[]
     },
     listForDevice(deviceId: string, limit = 100) {
       return db
-        .prepare('SELECT * FROM remote_audit WHERE device_id = ? ORDER BY id DESC LIMIT ?')
+        .prepare(`${select} WHERE ${deviceColumn} = ? ORDER BY id DESC LIMIT ?`)
         .all(deviceId, Math.max(1, Math.min(limit, 1000))) as RemoteAuditRecord[]
     },
   }

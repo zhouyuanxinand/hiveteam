@@ -27,6 +27,38 @@ describe('remote persistence', () => {
     db.close()
   })
 
+  test('supports the legacy remote device schema used by Hive 2.1.19', () => {
+    const db = new BetterSqlite3(':memory:')
+    db.exec(`
+      CREATE TABLE remote_devices (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        key_d2p TEXT NOT NULL,
+        key_p2d TEXT NOT NULL,
+        device_pubkey TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_active INTEGER,
+        revoked_at INTEGER
+      )
+    `)
+
+    const devices = createRemoteDeviceStore(db)
+    devices.insert({
+      id: 'legacy-device',
+      name: 'Legacy phone',
+      keys: { d2p: new Uint8Array([1, 2]), p2d: new Uint8Array([3, 4]) },
+      devicePublicKey: new Uint8Array([5, 6]),
+    })
+
+    expect(devices.getLiveSession('legacy-device')).toMatchObject({
+      deviceId: 'legacy-device',
+      keys: { d2p: new Uint8Array([1, 2]), p2d: new Uint8Array([3, 4]) },
+      devicePublicKey: new Uint8Array([5, 6]),
+    })
+    expect(devices.list()).toHaveLength(1)
+    db.close()
+  })
+
   test('queues bounded audit previews and flushes them deterministically', async () => {
     const db = new BetterSqlite3(':memory:')
     initializeRuntimeDatabase(db)
@@ -46,6 +78,38 @@ describe('remote persistence', () => {
         byte_count: 20,
         preview: 'x'.repeat(120),
       },
+    ])
+    db.close()
+  })
+
+  test('writes and reads the legacy remote audit device column', async () => {
+    const db = new BetterSqlite3(':memory:')
+    db.exec(`
+      CREATE TABLE remote_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        remote_device_id TEXT,
+        ts INTEGER NOT NULL,
+        workspace_id TEXT,
+        action TEXT NOT NULL,
+        endpoint TEXT,
+        result TEXT NOT NULL,
+        reject_reason TEXT,
+        byte_count INTEGER,
+        preview TEXT
+      )
+    `)
+
+    const audit = createRemoteAuditStore(db)
+    audit.enqueue({
+      action: 'http',
+      deviceId: 'legacy-device',
+      endpoint: '/api/remote/status',
+      result: 'ok',
+    })
+    await audit.flush()
+
+    expect(audit.listForDevice('legacy-device')).toMatchObject([
+      { device_id: 'legacy-device', endpoint: '/api/remote/status' },
     ])
     db.close()
   })
