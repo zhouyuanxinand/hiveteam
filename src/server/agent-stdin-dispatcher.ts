@@ -48,11 +48,13 @@ export const buildWorkerDispatchPayload = (
   workerDescription: string,
   dispatchId: string,
   text: string,
-  memoryDigest?: string
+  memoryDigest?: string,
+  sessionBindingMarker?: string
 ): string => {
   const lines = [
     `[Hive 系统消息：来自 @${fromAgentName} 的派单]`,
     '',
+    ...(sessionBindingMarker ? [sessionBindingMarker, ''] : []),
     `你的角色：${workerDescription}`,
     '',
     '你必须遵守：',
@@ -208,7 +210,8 @@ export const createAgentStdinDispatcher = ({
           workerDescription,
           dispatchId,
           text,
-          getDispatchMemoryDigest?.(workspaceId, workerId, text)
+          getDispatchMemoryDigest?.(workspaceId, workerId, text),
+          `Hive session binding: workspace_id=${workspaceId}; agent_id=${workerId}`
         ),
         { requireActiveRun: true }
       )

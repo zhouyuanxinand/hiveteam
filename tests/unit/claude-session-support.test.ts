@@ -276,6 +276,39 @@ describe('claude session support', () => {
     })
   })
 
+  test('withPresetResumeArgs skips a Codex session owned by another writer', () => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-project-with-active-writer'
+    const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
+    writeCodexSession(codexHome, cwd, sessionId)
+    mkdirSync(join(codexHome, 'thread-writer-locks'), { recursive: true })
+    writeFileSync(join(codexHome, 'thread-writer-locks', `${sessionId}.lock`), '')
+    const invalidSessionIds: string[] = []
+
+    const result = withPresetResumeArgs(
+      {
+        command: 'codex',
+        args: [],
+      },
+      {
+        resumeArgsTemplate: 'resume {session_id}',
+        sessionIdCapture: {
+          source: 'codex_session_jsonl_dir',
+          pattern: '~/.codex/sessions/**/*.jsonl',
+        },
+        yoloArgsTemplate: null,
+      },
+      sessionId,
+      cwd,
+      undefined,
+      (invalidSessionId) => invalidSessionIds.push(invalidSessionId)
+    )
+
+    expect(result).toMatchObject({ args: [] })
+    expect(result).not.toHaveProperty('resumedSessionId')
+    expect(invalidSessionIds).toEqual([sessionId])
+  })
+
   test('withPresetResumeArgs skips resume when capture source is unsupported', () => {
     const config = {
       command: 'claude',

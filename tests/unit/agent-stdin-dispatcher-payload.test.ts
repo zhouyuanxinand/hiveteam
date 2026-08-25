@@ -91,6 +91,20 @@ describe('buildWorkerDispatchPayload', () => {
     expect(payload).toContain('add error handling to login.ts')
   })
 
+  test('can bind a real worker dispatch to its Hive session identity', () => {
+    const marker = 'Hive session binding: workspace_id=workspace-1; agent_id=worker-1'
+    const payload = buildWorkerDispatchPayload(
+      'orchestrator-1',
+      'Coder',
+      'disp-42',
+      'add error handling to login.ts',
+      undefined,
+      marker
+    )
+
+    expect(payload).toContain(marker)
+  })
+
   test('appends the worker reminder tail with the dispatch_id interpolated', () => {
     const payload = buildWorkerDispatchPayload('orchestrator-1', 'Coder', 'disp-77', 'task body')
     expect(payload).toContain(buildWorkerReminderTail('disp-77'))

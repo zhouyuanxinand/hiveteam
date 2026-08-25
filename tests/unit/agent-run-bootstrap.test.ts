@@ -73,4 +73,53 @@ describe('agent run bootstrap', () => {
     })
     expect(bootstrap.sessionCaptureSnapshot).toBeUndefined()
   })
+
+  test('clears a Codex session pointer when the session belongs to another agent', () => {
+    const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
+    const codexRoot = mkdtempSync(join(tmpdir(), 'hive-agent-bootstrap-bound-codex-'))
+    tempDirs.push(codexRoot)
+    const workspacePath = join(codexRoot, 'workspace')
+    mkdirSync(workspacePath, { recursive: true })
+    const codexHome = join(codexRoot, '.codex')
+    process.env.CODEX_HOME = codexHome
+    const sessionDir = join(codexHome, 'sessions', '2026', '04', '30')
+    mkdirSync(sessionDir, { recursive: true })
+    writeFileSync(
+      join(sessionDir, `rollout-${sessionId}.jsonl`),
+      `${JSON.stringify({ payload: { cwd: workspacePath, id: sessionId } })}\n你是 Workspace 的 Alice（coder）。\n`
+    )
+    let cleared = false
+    const bootstrap = buildAgentRunBootstrap(
+      {
+        id: 'workspace-1',
+        name: 'Workspace',
+        path: workspacePath,
+      },
+      'agent-1',
+      {
+        args: [],
+        command: 'codex',
+        commandPresetId: 'codex',
+      },
+      {
+        clearLastSessionId: () => {
+          cleared = true
+        },
+        getLastSessionId: () => sessionId,
+        setLastSessionId: () => {},
+      },
+      (id) => (id === 'codex' ? codexPreset : undefined),
+      {
+        description: 'Coder',
+        id: 'agent-1',
+        name: 'Alice',
+        role: 'coder',
+      }
+    )
+
+    expect(cleared).toBe(true)
+    expect(bootstrap.startConfig.resumedSessionId).toBeUndefined()
+    expect(bootstrap.startConfig.args).toEqual([])
+    expect(bootstrap.sessionCaptureSnapshot?.knownSessionIds).toEqual(new Set())
+  })
 })

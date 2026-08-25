@@ -78,5 +78,8 @@ describe('restart policy dispatch filtering', () => {
     const submitted = runPolicy([dispatch('submitted', 'submitted task')])
     expect(submitted.handled).toBe(true)
     expect(submitted.writes[0]).toContain('submitted task')
+    expect(submitted.writes[0]).toContain(
+      'Hive session binding: workspace_id=workspace-1; agent_id=worker-1'
+    )
   })
 })

@@ -12,6 +12,11 @@ const PASTE_ACK_CHECK_INTERVAL_MS = 50
 const PASTE_ACK_SETTLE_DELAY_MS = 100
 const PASTE_ACK_TIMEOUT_MS = 3000
 const COMMANDS_WITH_BRACKETED_PASTE = new Set(['claude', 'codex', 'opencode'])
+// biome-ignore lint/complexity/useRegexLiterals: build the ANSI matcher from escaped text to avoid literal control characters.
+const ANSI_CONTROL_SEQUENCE = new RegExp(
+  '\\u001b(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007]*(?:\\u0007|\\u001b\\\\))',
+  'gu'
+)
 
 export const toBracketedPasteSubmission = (text: string) => `\u001b[200~${text}\u001b[201~`
 
@@ -30,9 +35,10 @@ const hasGeminiPromptReady = (output: string) => /\bType your message\b/u.test(o
 
 export const hasInteractivePromptReady = (output: string, command = '') => {
   const commandName = getCommandName(command)
+  const normalizedOutput = output.replace(ANSI_CONTROL_SEQUENCE, '')
   return (
-    /(?:^|[\r\n])\s*[❯›]\s*/u.test(output) ||
-    (commandName === 'gemini' && hasGeminiPromptReady(output))
+    /(?:^|[\r\n])\s*[❯›]\s*/u.test(normalizedOutput) ||
+    (commandName === 'gemini' && hasGeminiPromptReady(normalizedOutput))
   )
 }
 

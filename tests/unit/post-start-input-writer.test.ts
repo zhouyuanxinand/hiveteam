@@ -15,6 +15,7 @@ describe('post-start input writer', () => {
   test('recognizes interactive TUI prompts', () => {
     expect(hasInteractivePromptReady('booting\n❯ ')).toBe(true)
     expect(hasInteractivePromptReady('booting\n› ')).toBe(true)
+    expect(hasInteractivePromptReady('\u001b[1m\r\n› \u001b[0m', 'codex')).toBe(true)
     expect(
       hasInteractivePromptReady('Gemini CLI\n* Type your message or @path/to/file', 'gemini')
     ).toBe(true)

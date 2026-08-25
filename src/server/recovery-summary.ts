@@ -1,5 +1,6 @@
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 
+import { buildAgentSessionBindingMarker } from './agent-startup-instructions.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { getHiveTeamRules } from './hive-team-guidance.js'
 import type { RecoveryMessage } from './message-log-store.js'
@@ -106,6 +107,7 @@ export const buildRecoverySummary = ({
   wrapSystemMessage(
     [
       `你是 ${workspace.name} 的 ${agent.name}（${agent.role}）。`,
+      buildAgentSessionBindingMarker({ agent, workspace }),
       '你刚被 Hive 重启了，且无法通过原生 session resume 恢复。下面是接力上下文。',
       '',
       '## 最近 1 小时与 user 的对话',

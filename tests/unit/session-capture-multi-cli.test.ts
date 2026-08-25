@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import {
   doesCapturedSessionExist,
+  isCapturedSessionWriterActive,
   snapshotSessionIdsForCapture,
 } from '../../src/server/session-capture.js'
 import { readCodexSessionFirstLine } from '../../src/server/session-capture-codex.js'
@@ -57,6 +58,46 @@ describe('multi-CLI session capture', () => {
     )
     expect(doesCapturedSessionExist(cwd, capture, sessionId)).toBe(true)
     expect(doesCapturedSessionExist(join(codexHome, 'other'), capture, sessionId)).toBe(false)
+  })
+
+  test('only reuses Codex sessions bound to the Hive agent', () => {
+    const codexHome = makeTempDir('hive-codex-bound-session')
+    const cwd = join(codexHome, 'workspace')
+    mkdirSync(cwd, { recursive: true })
+    process.env.CODEX_HOME = codexHome
+    const sessionDir = join(codexHome, 'sessions', '2026', '04', '30')
+    mkdirSync(sessionDir, { recursive: true })
+    const boundSessionId = '019dc277-0e8e-75c1-9794-94929426288e'
+    const foreignSessionId = '019dc277-0e8e-75c1-9794-949294262899'
+    const marker = 'Hive session binding: workspace_id=workspace-1; agent_id=agent-1'
+    const header = (id: string) => JSON.stringify({ payload: { cwd, id }, type: 'session_meta' })
+
+    writeFileSync(
+      join(sessionDir, `rollout-bound-${boundSessionId}.jsonl`),
+      `${header(boundSessionId)}\n${JSON.stringify({ text: marker })}\n`
+    )
+    writeFileSync(
+      join(sessionDir, `rollout-foreign-${foreignSessionId}.jsonl`),
+      `${header(foreignSessionId)}\n${JSON.stringify({ originator: 'Codex Desktop' })}\n`
+    )
+
+    const capture = {
+      pattern: join(codexHome, 'sessions', '**', '*.jsonl'),
+      source: 'codex_session_jsonl_dir' as const,
+    }
+    const discriminator = { contentIncludes: marker }
+
+    expect(snapshotSessionIdsForCapture(cwd, capture, discriminator)?.knownSessionIds).toEqual(
+      new Set([boundSessionId])
+    )
+    expect(doesCapturedSessionExist(cwd, capture, boundSessionId, discriminator)).toBe(true)
+    expect(doesCapturedSessionExist(cwd, capture, foreignSessionId, discriminator)).toBe(false)
+
+    const locksDir = join(codexHome, 'thread-writer-locks')
+    mkdirSync(locksDir, { recursive: true })
+    writeFileSync(join(locksDir, `${foreignSessionId}.lock`), '')
+    expect(isCapturedSessionWriterActive(capture, foreignSessionId)).toBe(true)
+    expect(isCapturedSessionWriterActive(capture, boundSessionId)).toBe(false)
   })
 
   test('reads only the bounded Codex jsonl header line instead of decoding the full rollout', () => {

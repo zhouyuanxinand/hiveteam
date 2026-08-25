@@ -52,14 +52,16 @@ const resolveLaunchPreset = (
 
 const createSessionCaptureDiscriminator = (
   workspace: WorkspaceSummary,
-  agent: AgentSummary | undefined
+  agent: AgentSummary | undefined,
+  codexSessionCapture = false
 ) => {
   if (!agent) return undefined
+  const contentIncludes = [buildAgentSessionBindingMarker({ agent, workspace })]
+  if (!codexSessionCapture) {
+    contentIncludes.push(buildAgentLegacyIdentityMarker({ agent, workspace }))
+  }
   return {
-    contentIncludes: [
-      buildAgentSessionBindingMarker({ agent, workspace }),
-      buildAgentLegacyIdentityMarker({ agent, workspace }),
-    ],
+    contentIncludes,
   }
 }
 
@@ -72,7 +74,12 @@ export const buildAgentRunBootstrap = (
   agent?: AgentSummary
 ) => {
   const preset = resolveLaunchPreset(config, getCommandPreset)
-  const discriminator = createSessionCaptureDiscriminator(workspace, agent)
+  const capture = config.sessionIdCapture ?? preset?.sessionIdCapture
+  const discriminator = createSessionCaptureDiscriminator(
+    workspace,
+    agent,
+    capture?.source === 'codex_session_jsonl_dir'
+  )
   const startConfig = withPresetResumeArgs(
     config,
     preset,

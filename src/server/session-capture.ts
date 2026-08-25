@@ -8,6 +8,7 @@ import {
   captureCodexSessionId,
   getCodexHome,
   hasCodexSession,
+  isCodexSessionWriterActive,
   snapshotCodexSessionIds,
 } from './session-capture-codex.js'
 import {
@@ -89,8 +90,9 @@ export const snapshotSessionIdsForCapture = (
     const codexHome = getCodexHome(capture.pattern)
     return {
       env: { CODEX_HOME: codexHome },
-      knownSessionIds: snapshotCodexSessionIds(cwd, codexHome),
+      knownSessionIds: snapshotCodexSessionIds(cwd, codexHome, discriminator),
       root: codexHome,
+      ...(discriminator ? { discriminator } : {}),
     }
   }
   if (capture.source === 'gemini_session_json_dir') {
@@ -142,7 +144,8 @@ export const captureSessionIdForCapture = async (
       onCapture,
       timeoutMs,
       intervalMs,
-      snapshot.root
+      snapshot.root,
+      snapshot.discriminator
     )
   }
   if (capture.source === 'gemini_session_json_dir') {
@@ -177,7 +180,7 @@ export const doesCapturedSessionExist = (
     return hasClaudeSessionFile(cwd, sessionId, capture.pattern, discriminator)
   }
   if (capture.source === 'codex_session_jsonl_dir') {
-    return hasCodexSession(cwd, sessionId, capture.pattern)
+    return hasCodexSession(cwd, sessionId, capture.pattern, discriminator)
   }
   if (capture.source === 'gemini_session_json_dir') {
     return hasGeminiSession(cwd, sessionId, capture.pattern)
@@ -187,3 +190,11 @@ export const doesCapturedSessionExist = (
   }
   return false
 }
+
+export const isCapturedSessionWriterActive = (
+  capture: SessionIdCaptureConfig | null | undefined,
+  sessionId: string
+) =>
+  capture?.source === 'codex_session_jsonl_dir'
+    ? isCodexSessionWriterActive(sessionId, capture.pattern)
+    : false

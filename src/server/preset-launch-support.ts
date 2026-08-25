@@ -1,7 +1,11 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
 import type { SessionCaptureSnapshot } from './session-capture.js'
-import { doesCapturedSessionExist, supportsNativeSessionExistenceCheck } from './session-capture.js'
+import {
+  doesCapturedSessionExist,
+  isCapturedSessionWriterActive,
+  supportsNativeSessionExistenceCheck,
+} from './session-capture.js'
 
 type BoundPreset = Pick<
   CommandPresetRecord,
@@ -75,6 +79,12 @@ export const withPresetResumeArgs = (
     supportsNativeSessionExistenceCheck(sessionIdCapture) &&
     !doesCapturedSessionExist(cwd, sessionIdCapture, lastSessionId, discriminator)
   ) {
+    onInvalidSessionId?.(lastSessionId)
+    return nextConfig
+  }
+  if (sessionIdCapture && isCapturedSessionWriterActive(sessionIdCapture, lastSessionId)) {
+    // A writer lock means another process currently owns this native session.
+    // Reusing it would make Codex fail with "already has an active writer".
     onInvalidSessionId?.(lastSessionId)
     return nextConfig
   }
