@@ -1,18 +1,36 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 
 const root = process.cwd()
 const tempDir = mkdtempSync(join(tmpdir(), 'hive-pack-smoke-'))
 let packedFile
 const binLinkName = (name) => (process.platform === 'win32' ? `${name}.cmd` : name)
 const runtimeStartTimeoutMs = process.platform === 'win32' ? 60_000 : 5_000
+const activeNodeDir = dirname(process.execPath)
+const activeNpmCli = join(activeNodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
 
-const runNpm = (args, options = {}) =>
-  process.platform === 'win32'
-    ? execFileSync('cmd.exe', ['/d', '/s', '/c', 'npm', ...args], options)
-    : execFileSync('npm', args, options)
+const withActiveNodeEnv = (env = {}) => {
+  const mergedEnv = { ...process.env, ...env }
+  mergedEnv.PATH = [activeNodeDir, mergedEnv.PATH].filter(Boolean).join(delimiter)
+  return mergedEnv
+}
+
+const withActiveNodeOptions = (options = {}) => ({
+  ...options,
+  env: withActiveNodeEnv(options.env),
+})
+
+const runNpm = (args, options = {}) => {
+  if (existsSync(activeNpmCli)) {
+    return execFileSync(process.execPath, [activeNpmCli, ...args], withActiveNodeOptions(options))
+  }
+
+  return process.platform === 'win32'
+    ? execFileSync('cmd.exe', ['/d', '/s', '/c', 'npm', ...args], withActiveNodeOptions(options))
+    : execFileSync('npm', args, withActiveNodeOptions(options))
+}
 
 const removePath = (path) => {
   rmSync(path, {
@@ -89,12 +107,11 @@ try {
   if (!existsSync(internalTeamCmd)) throw new Error('Internal dist/bin/team.cmd is missing')
 
   const child = spawn(hiveBin, ['--port', '0'], {
-    env: {
-      ...process.env,
+    env: withActiveNodeEnv({
       HIVE_DATA_DIR: join(tempDir, 'data'),
       HIVE_ORCHESTRATOR_COMMAND: internalTeamLauncher,
       HIVE_ORCHESTRATOR_ARGS_JSON: JSON.stringify(['list']),
-    },
+    }),
     shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   })

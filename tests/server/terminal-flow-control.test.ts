@@ -9,6 +9,7 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTerminalOutputFlow, FLOW_CONTROL } from '../../src/server/terminal-flow-control.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -177,9 +178,8 @@ describe('terminal flow control', () => {
       const cookie = await getUiCookie(server.baseUrl)
       const workspace = await createWorkspace(server.baseUrl, cookie, workspacePath)
       const worker = await createWorker(server.baseUrl, cookie, workspace.id)
-      await configureAgent(server.baseUrl, cookie, workspace.id, worker.id, '/bin/bash', [
-        '-lc',
-        `stty -echo; exec ${process.execPath} ${script}`,
+      await configureAgent(server.baseUrl, cookie, workspace.id, worker.id, process.execPath, [
+        script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
       const viewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
@@ -221,7 +221,10 @@ describe('terminal flow control', () => {
       script,
       [
         `const chunks = ${JSON.stringify([chunkA, chunkB, chunkC])};`,
-        'setTimeout(() => { for (const chunk of chunks) process.stdout.write(chunk) }, 20)',
+        // Leave enough time for the viewer sockets to attach on Windows,
+        // where a Node child can start before the HTTP start response has
+        // finished returning.
+        'setTimeout(() => { for (const chunk of chunks) process.stdout.write(chunk) }, 1000)',
         'setInterval(() => {}, 1000)',
       ].join('\n')
     )
@@ -238,10 +241,16 @@ describe('terminal flow control', () => {
       const viewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
 
       await waitFor(() => {
-        expect(viewer.messageEvents).toHaveLength(1)
-        expect(viewer.outputs.join('')).toContain(chunkA)
-        expect(viewer.outputs.join('')).toContain(chunkB)
-        expect(viewer.outputs.join('')).toContain(chunkC)
+        // Windows PTY backends send an initial cursor-reset frame when a
+        // viewer attaches. It is not part of the batched process output.
+        const meaningfulMessages = viewer.messageEvents.filter(
+          (message) => normalizePtyText(message).length > 0
+        )
+        const output = normalizePtyText(viewer.outputs.join(''))
+        expect(meaningfulMessages).toHaveLength(1)
+        expect(output).toContain(chunkA)
+        expect(output).toContain(chunkB)
+        expect(output).toContain(chunkC)
       })
 
       viewer.io.close()
@@ -428,6 +437,9 @@ describe('terminal flow control', () => {
       client.close()
       await new Promise<void>((resolve) => wss.close(() => resolve()))
       manager.stopRun(run.runId)
+      await waitFor(() => {
+        expect(manager.getRun(run.runId).status).toMatch(/^(exited|error)$/u)
+      })
     }
   }, 15000)
 })

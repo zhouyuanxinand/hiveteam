@@ -42,46 +42,51 @@ const setupHive = async (): Promise<HiveContext> => {
 
   process.env.HIVE_DATA_DIR = dataDir
   const hive = await runHiveCommand(['--port', '0'])
-  const baseUrl = `http://127.0.0.1:${hive.port}`
-  const uiCookie = await getUiCookie(baseUrl)
+  try {
+    const baseUrl = `http://127.0.0.1:${hive.port}`
+    const uiCookie = await getUiCookie(baseUrl)
 
-  const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: workspacePath }),
-  })
-  const workspace = (await workspaceResponse.json()) as { id: string }
-  const orchestratorId = `${workspace.id}:orchestrator`
-
-  const workerResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/workers`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ name: 'Alice', role: 'coder' }),
-  })
-  const worker = (await workerResponse.json()) as { id: string; name: string }
-
-  for (const agentId of [orchestratorId, worker.id]) {
-    await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/config`, {
+    const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: uiCookie },
-      body: JSON.stringify({
-        command: '/bin/bash',
-        args: ['-lc', `"${process.execPath}" "${passiveScript}"`],
-      }),
+      body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: workspacePath }),
     })
-    await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/start`, {
+    const workspace = (await workspaceResponse.json()) as { id: string }
+    const orchestratorId = `${workspace.id}:orchestrator`
+
+    const workerResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/workers`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: uiCookie },
-      body: JSON.stringify({ hive_port: String(hive.port) }),
+      body: JSON.stringify({ name: 'Alice', role: 'coder' }),
     })
-  }
+    const worker = (await workerResponse.json()) as { id: string; name: string }
 
-  return {
-    baseUrl,
-    hive,
-    orchestratorId,
-    worker,
-    workspaceId: workspace.id,
+    for (const agentId of [orchestratorId, worker.id]) {
+      await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/config`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: uiCookie },
+        body: JSON.stringify({
+          command: process.execPath,
+          args: [passiveScript],
+        }),
+      })
+      await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/start`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: uiCookie },
+        body: JSON.stringify({ hive_port: String(hive.port) }),
+      })
+    }
+
+    return {
+      baseUrl,
+      hive,
+      orchestratorId,
+      worker,
+      workspaceId: workspace.id,
+    }
+  } catch (error) {
+    await hive.close()
+    throw error
   }
 }
 

@@ -97,7 +97,7 @@ export const RoleTemplatePicker = ({
   selectedTemplateId,
 }: {
   customTemplates: RoleTemplate[]
-  disabledReason?: string
+  disabledReason?: string | undefined
   onDeleteTemplate: (templateId: string) => Promise<void> | void
   onSelect: (templateId: string | null) => void
   selectedTemplateId: string | null
@@ -297,7 +297,7 @@ export const RoleInstructionsField = ({
   roleDescription: string
   templateBusy: boolean
   workerRole: WorkerRole
-  writeDisabledReason?: string
+  writeDisabledReason?: string | undefined
 }) => {
   const { t } = useI18n()
   const [instructionsOpen, setInstructionsOpen] = useState(false)
@@ -568,6 +568,7 @@ const AgentCliPickerInner = ({
         <CliBindingField
           command={selectedPreset.command}
           displayName={selectedPreset.displayName}
+          installHint={selectedPreset.installHint}
           onChange={onStartupCommandChange}
           testId="agent-cli-binding-path"
           value={startupCommand}
@@ -586,7 +587,7 @@ export const ModelField = ({
   command: string
   displayName: string
   model?: string
-  onChange?: (value: string) => void
+  onChange?: ((value: string) => void) | undefined
 }) => {
   const { t } = useI18n()
   if (!onChange) return null

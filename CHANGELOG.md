@@ -2,6 +2,26 @@
 
 All notable user-facing changes will be documented in this file.
 
+## 2.1.19 - 2026-07-22
+
+HiveTeam release for the self-hosted fork.
+
+- Adds one-click scenario teams from ready-made presets, with an install guide
+  when the selected CLI is missing.
+- Routes Dream team-memory cleanup through a reviewable Orchestrator flow with
+  submit-only authority and one-click rollback.
+- Adds an Activity center with copyable team reports and diagnostics, plus a
+  visual dispatch pulse from Orchestrator to workers.
+- Makes dispatch delivery durable: queued work is replayed on worker start,
+  failures remain visible to the sender, and `team list` exposes unfinished
+  dispatches.
+- Improves remote/mobile large uploads and terminal scrolling for wrapped or
+  older Windows CLI launch commands.
+- Hardens prompt and workflow metadata boundaries against instruction
+  injection and clarifies protocol and onboarding errors.
+- Keeps update metadata local to HiveTeam; no official Hive update channel is
+  used.
+
 ## 2.0.2 - 2026-06-10
 
 Windows Codex terminal scrolling fix.

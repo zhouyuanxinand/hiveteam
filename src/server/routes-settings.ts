@@ -57,6 +57,9 @@ const serializeCommandPreset = (preset: {
     is_builtin: preset.isBuiltin,
     supports_model: supportsModelSelection(preset.command),
     available,
+    install_hint: available
+      ? null
+      : `Install the standalone ${preset.displayName} CLI, then add "${preset.command}" to PATH or bind its executable path.`,
   }
 }
 

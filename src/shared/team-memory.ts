@@ -49,6 +49,49 @@ export interface CreateTeamMemoryInput {
   tags?: string[]
 }
 
+export type TeamMemoryDreamStatus = 'review' | 'submitted' | 'rolled_back'
+
+export type TeamMemoryDreamExecutionStatus = 'queued' | 'requested' | 'completed' | 'failed'
+
+export type TeamMemoryDreamReviewStatus = 'queued' | 'completed' | 'failed'
+
+export interface TeamMemoryDreamSuggestion {
+  body: string
+  kind: TeamMemoryKind
+  scope: TeamMemoryScope
+  sourceMemoryIds: string[]
+  tags: string[]
+}
+
+export interface TeamMemoryDreamRun {
+  createdAt: number
+  createdMemoryIds: string[]
+  executionError: string | null
+  executionStatus: TeamMemoryDreamExecutionStatus
+  id: string
+  orchestratorRunId: string | null
+  rolledBackAt: number | null
+  status: TeamMemoryDreamStatus
+  submittedAt: number | null
+  reviews: TeamMemoryDreamReview[]
+  suggestions: TeamMemoryDreamSuggestion[]
+  workspaceId: string
+}
+
+export interface TeamMemoryDreamReview {
+  artifacts: string[]
+  createdAt: number
+  dispatchId: string
+  dreamId: string
+  id: string
+  reviewText: string | null
+  status: TeamMemoryDreamReviewStatus
+  suggestions: TeamMemoryDreamSuggestion[]
+  updatedAt: number
+  workerId: string
+  workspaceId: string
+}
+
 export const isTeamMemoryKind = (value: unknown): value is TeamMemoryKind =>
   typeof value === 'string' && (teamMemoryKinds as readonly string[]).includes(value)
 

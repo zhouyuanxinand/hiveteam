@@ -104,8 +104,8 @@ describe('GET /api/fs/probe', () => {
     expect(body.is_dir).toBe(true)
     expect(body.is_git_repository).toBe(true)
     expect(body.suggested_name).toBe('my-app')
-    // current_branch may be null on stripped-down test .git dirs; accept null or 'main'
-    expect([null, 'main']).toContain(body.current_branch)
+    // Git may report the configured branch name, or fall back to the platform default.
+    expect([null, 'main', 'master']).toContain(body.current_branch)
   })
 
   test('returns ok=false for paths outside the sandbox', async () => {

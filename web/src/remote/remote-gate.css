@@ -349,7 +349,6 @@
     .topbar-actions
     [data-testid='topbar-open-workspace-chevron'],
   html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'],
-  html[data-hive-remote] .topbar-actions .topbar-language-toggle,
   html[data-hive-remote] .topbar-actions .topbar-theme-toggle,
   html[data-hive-remote] .topbar-actions [data-testid='topbar-settings'] {
     height: 40px;
@@ -368,16 +367,8 @@
     padding-left: 0;
   }
 
-  html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'] > span,
-  html[data-hive-remote] .topbar-actions .topbar-language-label {
+  html[data-hive-remote] .topbar-actions [data-testid='topbar-blueprint'] > span {
     display: none;
-  }
-
-  html[data-hive-remote] .topbar-actions .topbar-language-toggle {
-    min-width: 40px;
-    justify-content: center;
-    padding-right: 0;
-    padding-left: 0;
   }
 
   html[data-hive-remote] .topbar-actions .topbar-theme-toggle {

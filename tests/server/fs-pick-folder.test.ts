@@ -105,7 +105,24 @@ describe('pickFolder — platform dispatch', () => {
     expect(calls[0]?.command).toBe('powershell.exe')
     expect(calls[0]?.args).toContain('-STA')
     expect(calls[0]?.args.join(' ')).toContain('FolderBrowserDialog')
+    expect(calls[0]?.args.join(' ')).toContain('ToBase64String')
     expect(calls[0]?.timeout).toBeUndefined()
+  })
+
+  test('win32: decodes a Unicode folder path from the ASCII base64 envelope', async () => {
+    const unicodeDir = join(outsideRoot, '桌面', 'all-agentic-architectures')
+    mkdirSync(unicodeDir, { recursive: true })
+    const encodedPath = Buffer.from(unicodeDir, 'utf8').toString('base64')
+    const runCommand: RunPickCommand = async () => ({
+      ...emptySpawn,
+      stdout: `HIVE_PICKER_PATH_BASE64:${encodedPath}\r\n`,
+    })
+
+    const result = await pickFolder({ platform: 'win32', runCommand })
+
+    expect(result.error).toBeNull()
+    expect(result.path).toBe(unicodeDir)
+    expect(result.probe).toEqual(expect.objectContaining({ exists: true, is_dir: true, ok: true }))
   })
 
   test('win32: PowerShell cancel exits without an error', async () => {

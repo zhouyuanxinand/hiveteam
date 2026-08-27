@@ -18,7 +18,7 @@ describe('team send authorization', () => {
     })
   })
 
-  test('dispatchTaskByWorkerName leaves state unchanged when worker has no launch config', async () => {
+  test('keeps a failed dispatch visible when worker has no launch config', async () => {
     const store = createRuntimeStore()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
     const alice = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
@@ -33,7 +33,14 @@ describe('team send authorization', () => {
     expect(store.listWorkers(workspace.id)).toContainEqual(
       expect.objectContaining({
         id: alice.id,
-        pendingTaskCount: 0,
+        pendingTaskCount: 1,
+      })
+    )
+    expect(store.listDispatches(workspace.id)).toContainEqual(
+      expect.objectContaining({
+        status: 'failed',
+        text: 'Implement login',
+        toAgentId: alice.id,
       })
     )
   })

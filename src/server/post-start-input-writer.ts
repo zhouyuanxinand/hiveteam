@@ -110,16 +110,27 @@ const submitPastedInteractiveInput = (
     }
 
     const elapsed = Date.now() - pastedAt
+    // The PTY can buffer the paste before the child process observes it. For
+    // bracketed-paste CLIs, start the minimum submit delay at the
+    // acknowledgement instead of at pty.write(); otherwise Windows WinPTY
+    // can deliver the final Enter before the CLI has finished accepting the
+    // pasted payload.
+    const submitDelayElapsed =
+      Date.now() - (acknowledgedAt === null ? pastedAt : acknowledgedAt) >= minDelay
     const ackSettled =
       acknowledgedAt !== null && Date.now() - acknowledgedAt >= PASTE_ACK_SETTLE_DELAY_MS
-    if ((ackSettled && elapsed >= minDelay) || elapsed >= PASTE_ACK_TIMEOUT_MS) {
+    if ((ackSettled && submitDelayElapsed) || elapsed >= PASTE_ACK_TIMEOUT_MS) {
       submit()
       return
     }
     setTimeout(trySubmit, PASTE_ACK_CHECK_INTERVAL_MS)
   }
 
-  setTimeout(trySubmit, minDelay)
+  // Start watching for the acknowledgement immediately. The submit delay is
+  // measured from the acknowledgement once it arrives; waiting minDelay
+  // before the first observation would add a second minDelay to every
+  // acknowledged paste on WinPTY.
+  setTimeout(trySubmit, waitForPasteAck ? PASTE_ACK_CHECK_INTERVAL_MS : minDelay)
 }
 
 /**
@@ -177,16 +188,22 @@ const submitPastedInteractiveInputAwaitable = (
       }
 
       const elapsed = Date.now() - pastedAt
+      const submitDelayElapsed =
+        Date.now() - (acknowledgedAt === null ? pastedAt : acknowledgedAt) >= minDelay
       const ackSettled =
         acknowledgedAt !== null && Date.now() - acknowledgedAt >= PASTE_ACK_SETTLE_DELAY_MS
-      if ((ackSettled && elapsed >= minDelay) || elapsed >= PASTE_ACK_TIMEOUT_MS) {
+      if ((ackSettled && submitDelayElapsed) || elapsed >= PASTE_ACK_TIMEOUT_MS) {
         submit()
         return
       }
       setTimeout(trySubmit, PASTE_ACK_CHECK_INTERVAL_MS)
     }
 
-    setTimeout(trySubmit, minDelay)
+    // Start watching for the acknowledgement immediately. The submit delay is
+    // measured from the acknowledgement once it arrives; waiting minDelay
+    // before the first observation would add a second minDelay to every
+    // acknowledged paste on WinPTY.
+    setTimeout(trySubmit, waitForPasteAck ? PASTE_ACK_CHECK_INTERVAL_MS : minDelay)
   })
 
 export const createAwaitablePostStartInputWriter = (

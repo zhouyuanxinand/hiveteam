@@ -1,10 +1,10 @@
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
+import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -58,9 +58,9 @@ const readConfiguredPresetId = (dataDir: string, workspaceId: string, agentId: s
 const writeFakeClaude = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'claude')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'claude',
     `#!/usr/bin/env node
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -69,7 +69,9 @@ import { join } from 'node:path'
 const args = process.argv.slice(2)
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '11111111-1111-4111-8111-111111111111'
-const encoded = process.cwd().replace(/[\\/:\\s]/g, '-')
+const encoded = [...process.cwd()]
+  .map((char) => [32, 47, 58, 92].includes(char.charCodeAt(0)) ? '-' : char)
+  .join('')
 const projectsRoot = process.env.HIVE_CLAUDE_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects')
 const projectDir = join(projectsRoot, encoded)
 const expectFreshMarker = join(process.cwd(), '.expect-fresh')
@@ -78,7 +80,8 @@ const expectYoloMarker = join(process.cwd(), '.expect-yolo')
 const expectNoYoloMarker = join(process.cwd(), '.expect-no-yolo')
 mkdirSync(projectDir, { recursive: true })
 const sessionPath = join(projectDir, sessionId + '.jsonl')
-writeFileSync(sessionPath, '{}\\n')
+const bindingMarker = 'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID
+writeFileSync(sessionPath, JSON.stringify({ message: { content: bindingMarker } }) + '\\n')
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
   process.stdout.write('STDIN:' + chunk)
@@ -94,16 +97,15 @@ process.stdout.write('❯ ')
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
 const writeFakeCodex = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'codex')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'codex',
     `#!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -127,7 +129,15 @@ process.stdin.on('data', (chunk) => {
 mkdirSync(sessionDir, { recursive: true })
 const writeSession = () => writeFileSync(
     join(sessionDir, 'rollout-2026-04-30T00-00-00-' + sessionId + '.jsonl'),
-    JSON.stringify({ type: 'session_meta', payload: { id: sessionId, cwd: process.cwd() } }) + '\\n'
+    JSON.stringify({
+      type: 'session_meta',
+      payload: {
+        id: sessionId,
+        cwd: process.cwd(),
+        hive_session_binding:
+          'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID,
+      },
+    }) + '\\n'
   )
 if (writeDelayMs > 0) setTimeout(writeSession, writeDelayMs)
 else writeSession()
@@ -141,16 +151,15 @@ process.stdout.write('❯ ')
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
 const writeFakeGemini = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'gemini')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'gemini',
     `#!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -171,17 +180,16 @@ if (existsSync(expectYoloMarker) && !args.includes('--yolo')) process.exit(4)
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
 const writeFakeOpenCode = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'opencode')
   const packageJsonPath = join(process.cwd(), 'package.json')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'opencode',
     `#!/usr/bin/env node
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -202,7 +210,6 @@ if (existsSync(expectYoloMarker) && args.includes('--dangerously-skip-permission
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
@@ -282,7 +289,11 @@ const startWorkerViaHttp = async (
 const getRunViaHttp = async (baseUrl: string, cookie: string, runId: string) => {
   const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, { headers: { cookie } })
   expect(response.status).toBe(200)
-  return (await response.json()) as { output: string; status: string }
+  const body = (await response.json()) as { output: string; status: string }
+  return {
+    ...body,
+    output: process.platform === 'win32' ? normalizePtyText(body.output) : body.output,
+  }
 }
 
 const writePersistedSessionId = (
@@ -734,7 +745,9 @@ describe('preset-driven Layer A', () => {
       )
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, failedResumeRun.runId)
-        expect(state.status).toBe('exited')
+        // A non-zero native CLI exit is an error; the important recovery
+        // contract is that the still-existing session id remains persisted.
+        expect(state.status).toBe('error')
         expect(state.output).toContain(`resume ${sessionId}`)
       })
 

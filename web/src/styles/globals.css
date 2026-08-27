@@ -1441,6 +1441,39 @@ html, body {
   gap: 10px;
 }
 
+/* Dispatch pulse — a lightweight visual handoff from Orchestrator to worker.
+   The moving segment is decorative; status text remains the source of truth. */
+.dispatch-pulse {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--accent) 5%, var(--bg-1));
+}
+.dispatch-pulse-heading,
+.dispatch-pulse-item {
+  display: flex;
+  align-items: center;
+}
+.dispatch-pulse-heading { justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.dispatch-pulse-title { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; font-weight: 650; }
+.dispatch-pulse-title svg { color: var(--accent); }
+.dispatch-pulse-count { min-width: 18px; padding: 2px 5px; border-radius: 999px; background: var(--bg-3); color: var(--accent); font-family: var(--font-mono); font-size: 10px; text-align: center; }
+.dispatch-pulse-list { display: grid; gap: 4px; }
+.dispatch-pulse-item { min-width: 0; gap: 7px; padding: 4px 0; }
+.dispatch-pulse-line { position: relative; display: inline-flex; width: 42px; flex: none; align-items: center; justify-content: space-between; color: var(--accent); }
+.dispatch-pulse-line--failed { color: var(--status-red); }
+.dispatch-pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 15%, transparent); }
+.dispatch-pulse-travel { position: absolute; left: 9px; right: 10px; height: 1px; overflow: hidden; background: color-mix(in oklab, currentColor 38%, var(--border)); }
+.dispatch-pulse-travel::after { display: block; width: 12px; height: 1px; background: currentColor; content: ''; animation: dispatch-pulse-travel 1.15s linear infinite; }
+@keyframes dispatch-pulse-travel { from { transform: translateX(-14px); } to { transform: translateX(38px); } }
+.dispatch-pulse-route { min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-pulse-route span { padding: 0 5px; color: var(--accent); }
+.dispatch-pulse-state { display: inline-flex; flex: none; align-items: center; gap: 3px; color: var(--status-yellow); font-size: 10px; white-space: nowrap; }
+.dispatch-pulse-state--submitted { color: var(--accent); }
+.dispatch-pulse-state--failed { color: var(--status-red); }
+@media (prefers-reduced-motion: reduce) { .dispatch-pulse-travel::after { animation: none; } }
+
 /* Worker cards keep identity, role, activity and state in stable rows so a
    mixed-status team can be scanned without opening each terminal. */
 .worker-card-shell {
@@ -1946,6 +1979,12 @@ html, body {
 .workspace-workflow-card p { margin: 4px 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
 .workspace-workflow-card code { color: var(--text-tertiary); font-size: 10px; }
 .workspace-workflow-card time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+.workspace-workflow-card__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
 
 @media (max-width: 760px) {
   .topbar-knowledge-button span { display: none; }
@@ -1972,7 +2011,12 @@ html, body {
   .workspace-memory-composer__fields { grid-template-columns: 1fr 1fr; }
   .workspace-memory-composer__fields input { grid-column: 1 / -1; }
   .workspace-workflow-card { grid-template-columns: auto minmax(0, 1fr); }
-  .workspace-workflow-card time { grid-column: 2; }
+  .workspace-workflow-card__actions {
+    grid-column: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
 }
 
 .modal-resize-handle {
@@ -1985,6 +2029,347 @@ html, body {
   outline: none;
   user-select: none;
   touch-action: none;
+}
+
+/* Git history drawer — a quiet, local-first versioning surface. It shares the
+   knowledge drawer's geometry but keeps the commit list intentionally denser
+   so the user can scan a project's recovery points without leaving the page. */
+.workspace-git-overlay { background: color-mix(in oklab, #000 32%, transparent); }
+.workspace-git-drawer {
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: min(660px, calc(100vw - 48px));
+  background: var(--bg-elevated);
+  border-color: var(--border-bright);
+  box-shadow: -14px 0 36px color-mix(in oklab, #000 26%, transparent);
+  color: var(--text-primary);
+}
+.workspace-git-header {
+  display: flex;
+  min-height: 68px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-git-heading-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-2));
+  color: var(--accent);
+}
+.workspace-git-icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.workspace-git-icon-button:hover:not(:disabled) { background: var(--bg-3); color: var(--text-primary); }
+.workspace-git-icon-button:disabled { cursor: not-allowed; opacity: 0.45; }
+.workspace-git-status {
+  display: flex;
+  min-height: 74px;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-1) 70%, transparent);
+}
+.workspace-git-status-main,
+.workspace-git-actions,
+.workspace-git-branch,
+.workspace-git-auto,
+.workspace-git-stats,
+.workspace-git-commit-meta,
+.workspace-git-badge,
+.workspace-git-revert,
+.workspace-git-dirty-note {
+  display: inline-flex;
+  align-items: center;
+}
+.workspace-git-status-main { gap: 8px; min-width: 0; font-size: 13px; }
+.workspace-git-state { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--text-tertiary); }
+.workspace-git-state--ready { background: var(--status-green); }
+.workspace-git-state--not-repository,
+.workspace-git-state--unknown { background: var(--status-yellow); }
+.workspace-git-state--unavailable,
+.workspace-git-state--error { background: var(--status-red); }
+.workspace-git-branch {
+  max-width: 44%;
+  gap: 4px;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-git-actions { flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.workspace-git-auto {
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.workspace-git-auto input { accent-color: var(--accent); }
+.workspace-git-message {
+  flex: none;
+  margin: 10px 18px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.workspace-git-message--error {
+  border-color: color-mix(in oklab, var(--status-red) 45%, var(--border));
+  background: color-mix(in oklab, var(--status-red) 10%, var(--bg-1));
+  color: var(--status-red);
+}
+.workspace-git-message--notice {
+  border-color: color-mix(in oklab, var(--status-green) 35%, var(--border));
+  background: color-mix(in oklab, var(--status-green) 9%, var(--bg-1));
+  color: var(--text-secondary);
+}
+.workspace-git-body { min-height: 0; flex: 1; padding: 16px 18px 24px; }
+.workspace-git-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.workspace-git-section-heading h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.workspace-git-section-heading p { margin: 3px 0 0; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
+.workspace-git-dirty-note { gap: 5px; color: var(--status-yellow); font-size: 11px; white-space: nowrap; }
+.workspace-git-commit-list { display: grid; gap: 8px; }
+.workspace-git-commit {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+.workspace-git-commit:hover { border-color: var(--border-bright); background: var(--bg-2); }
+.workspace-git-commit-topline,
+.workspace-git-commit-bottomline { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.workspace-git-commit-topline h4 {
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-git-commit-meta { flex-wrap: wrap; gap: 8px; margin-top: 5px; color: var(--text-tertiary); font-size: 11px; }
+.workspace-git-commit-meta code { color: var(--accent); font-family: var(--font-mono); }
+.workspace-git-badge { gap: 4px; flex: none; padding: 3px 6px; border-radius: 4px; background: color-mix(in oklab, var(--accent) 12%, var(--bg-2)); color: var(--accent); font-size: 10px; font-weight: 600; }
+.workspace-git-commit-bottomline { align-items: center; margin-top: 12px; }
+.workspace-git-stats { flex-wrap: wrap; gap: 8px; color: var(--text-tertiary); font-size: 11px; }
+.workspace-git-additions { color: var(--status-green); }
+.workspace-git-deletions { color: var(--status-red); }
+.workspace-git-revert {
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid color-mix(in oklab, var(--status-red) 28%, var(--border));
+  border-radius: 4px;
+  background: transparent;
+  color: var(--status-red);
+  font-size: 11px;
+}
+.workspace-git-revert:hover:not(:disabled) { background: color-mix(in oklab, var(--status-red) 10%, transparent); }
+.workspace-git-revert:disabled { cursor: not-allowed; opacity: 0.42; }
+.workspace-git-reverted { color: var(--text-tertiary); font-size: 11px; }
+.workspace-git-empty { display: flex; min-height: 220px; align-items: center; justify-content: center; flex-direction: column; gap: 9px; color: var(--text-tertiary); text-align: center; }
+.workspace-git-empty strong { color: var(--text-secondary); font-size: 14px; }
+.workspace-git-empty p { max-width: 90%; margin: 0; overflow-wrap: anywhere; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
+
+/* Activity center — one compact, copyable view for support and team handoff. */
+.activity-center-overlay { background: color-mix(in oklab, #000 32%, transparent); }
+.activity-center-drawer {
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: min(700px, calc(100vw - 48px));
+  background: var(--bg-elevated);
+  border-color: var(--border-bright);
+  box-shadow: -14px 0 36px color-mix(in oklab, #000 26%, transparent);
+  color: var(--text-primary);
+}
+.activity-center-header {
+  display: flex;
+  min-height: 68px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.activity-center-heading-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-2));
+  color: var(--accent);
+}
+.activity-center-icon-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.activity-center-icon-button:hover:not(:disabled) { background: var(--bg-3); color: var(--text-primary); }
+.activity-center-icon-button:disabled { cursor: not-allowed; opacity: 0.45; }
+.activity-center-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--bg-1) 70%, transparent);
+}
+.activity-center-message {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 10px 18px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.activity-center-message--error {
+  border-color: color-mix(in oklab, var(--status-red) 45%, var(--border));
+  background: color-mix(in oklab, var(--status-red) 10%, var(--bg-1));
+  color: var(--status-red);
+}
+.activity-center-body { min-height: 0; flex: 1; padding: 16px 18px 24px; }
+.activity-center-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.activity-center-summary > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.activity-center-summary svg { grid-row: span 2; color: var(--accent); }
+.activity-center-summary strong { color: var(--text-primary); font-size: 17px; line-height: 1; }
+.activity-center-summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-section { margin-top: 18px; }
+.activity-center-section:first-of-type { margin-top: 0; }
+.activity-center-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.activity-center-section-heading h3 { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+.activity-center-section-heading span { display: inline-flex; align-items: center; gap: 4px; max-width: 50%; overflow: hidden; color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-list { display: grid; gap: 7px; }
+.activity-center-dispatch {
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+.activity-center-dispatch-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text-tertiary); font-size: 10px; }
+.activity-center-dispatch-topline time { white-space: nowrap; }
+.activity-center-state { padding: 2px 6px; border-radius: 4px; background: var(--bg-3); color: var(--text-secondary); }
+.activity-center-state--failed { background: color-mix(in oklab, var(--status-red) 13%, var(--bg-2)); color: var(--status-red); }
+.activity-center-state--queued { color: var(--status-yellow); }
+.activity-center-state--submitted { color: var(--accent); }
+.activity-center-state--reported { color: var(--status-green); }
+.activity-center-dispatch-route { display: flex; align-items: center; gap: 7px; margin-top: 7px; overflow: hidden; color: var(--text-secondary); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-dispatch-route span { color: var(--accent); }
+.activity-center-dispatch p { margin: 5px 0 0; overflow: hidden; color: var(--text-primary); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-dispatch small { display: block; margin-top: 5px; overflow: hidden; color: var(--status-red); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-muted { margin: 0; color: var(--text-tertiary); font-size: 12px; }
+.activity-center-message-list { display: grid; gap: 5px; }
+.activity-center-message-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 7px 9px; border-radius: 5px; background: var(--bg-1); font-size: 11px; }
+.activity-center-message-type { color: var(--accent); font-family: var(--font-mono); font-size: 10px; }
+.activity-center-message-text { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-message-row time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+.activity-center-git-section { padding-top: 14px; border-top: 1px solid var(--border); }
+.activity-center-empty { display: flex; min-height: 240px; align-items: center; justify-content: center; flex-direction: column; gap: 9px; color: var(--text-tertiary); font-size: 12px; }
+
+@media (max-width: 760px) {
+  .activity-center-drawer {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    border-left: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .activity-center-header { min-height: 64px; padding: 12px 14px; }
+  .activity-center-actions { padding: 10px 14px; }
+  .activity-center-body { padding: 14px 14px 24px; }
+  .activity-center-summary { grid-template-columns: 1fr; }
+  .activity-center-message-row { grid-template-columns: auto minmax(0, 1fr); }
+  .activity-center-message-row time { display: none; }
+}
+
+@media (max-width: 760px) {
+  .workspace-git-drawer {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    border-left: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .workspace-git-header { min-height: 64px; padding: 12px 14px; }
+  .workspace-git-status { padding: 12px 14px; }
+  .workspace-git-actions { align-items: flex-start; flex-direction: column; }
+  .workspace-git-body { padding: 14px 14px 24px; }
+  .workspace-git-commit-topline { gap: 8px; }
+  .workspace-git-badge { display: none; }
+  .workspace-git-commit-bottomline { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .workspace-git-revert { min-height: 28px; }
 }
 .modal-resize-handle--left  { left: -4px; }
 .modal-resize-handle--right { right: -4px; }

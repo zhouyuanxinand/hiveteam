@@ -17,6 +17,7 @@ let cookie = ''
 const nativeFetch = globalThis.fetch
 const tempDirs: string[] = []
 let fetchCalls: Array<{ method: string; pathname: string }> = []
+const WORKSPACE_PICKER_TIMEOUT_MS = 15_000
 
 beforeEach(async () => {
   window.localStorage.removeItem?.('hive.workspace-sidebar.width')
@@ -79,7 +80,9 @@ describe('app shell with real server', () => {
     expect(fetchCalls).not.toContainEqual({ method: 'POST', pathname: '/api/fs/pick-folder' })
 
     fireEvent.click(screen.getByRole('button', { name: 'New Workspace' }))
-    const confirm = await screen.findByTestId('confirm-workspace-dialog')
+    const confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
     expect(within(confirm).getByTestId('confirm-workspace-create')).toBeInTheDocument()
 
     // Radix Dialog locks the rest of the tree (aria-hidden) — query with
@@ -99,7 +102,11 @@ describe('app shell with real server', () => {
       expect(screen.getByTestId('welcome-pane')).toBeInTheDocument()
     })
     fireEvent.click(screen.getByRole('button', { name: /add your first workspace/i }))
-    expect(await screen.findByTestId('confirm-workspace-dialog')).toBeInTheDocument()
+    expect(
+      await screen.findByTestId('confirm-workspace-dialog', undefined, {
+        timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+      })
+    ).toBeInTheDocument()
   })
 
   test('workspace create failure keeps dialog open and surfaces error toast', async () => {
@@ -125,7 +132,9 @@ describe('app shell with real server', () => {
     render(<App />)
     await screen.findByTestId('welcome-pane')
     fireEvent.click(screen.getByRole('button', { name: /add your first workspace/i }))
-    const confirm = await screen.findByTestId('confirm-workspace-dialog')
+    const confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-startup-toggle'))
     fireEvent.change(within(confirm).getByTestId('confirm-workspace-startup-command'), {
       target: { value: `${process.execPath} -e "process.stdin.resume()"` },

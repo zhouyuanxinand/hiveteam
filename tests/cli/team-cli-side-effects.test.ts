@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
 import { runTeamCommand } from '../../src/cli/team.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -78,8 +79,8 @@ describe('team send CLI side effects (R1.3)', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${scriptPath}"`],
+            command: process.execPath,
+            args: [scriptPath],
           }),
         })
       const startAgent = async (agentId: string) =>
@@ -132,18 +133,18 @@ describe('team send CLI side effects (R1.3)', () => {
       )
       await waitFor(async () => {
         const run = hive.store.getActiveRunByAgentId(workspace.id, worker.id)
-        expect(run?.output).toContain('WRK:')
-        expect(run?.output).toContain('@Orchestrator')
-        expect(run?.output).toContain('你的角色：')
-        expect(run?.output).toContain('实现登录')
-        expect(run?.output).toContain(`dispatch_id: ${dispatch?.id}`)
-        expect(run?.output).toContain(`team report "<result>" --dispatch ${dispatch?.id}`)
-        // The injected prompt may include the dispatch id so workers can report
-        // the exact task, but it must not leak workspace or agent ids.
-        const injected = (run?.output ?? '').replace(/^WRK:/gm, '')
-        expect(injected).not.toContain(workspace.id)
-        expect(injected).not.toContain(worker.id)
-        expect(injected).not.toContain(orchestratorId)
+        const output = normalizePtyText(run?.output ?? '')
+        expect(output).toContain('WRK:')
+        expect(output).toContain('@Orchestrator')
+        expect(output).toContain('你的角色：')
+        expect(output).toContain('实现登录')
+        expect(output).toContain(`dispatch_id: ${dispatch?.id}`)
+        expect(output).toContain(`team report "<result>" --dispatch ${dispatch?.id}`)
+        // Session binding is intentionally part of the injected prompt so a
+        // resumed CLI session can be verified against this workspace/agent.
+        expect(output).toContain(
+          `Hive session binding: workspace_id=${workspace.id}; agent_id=${worker.id}`
+        )
       })
 
       const messages = hive.store.listMessagesForRecovery(workspace.id, 0)
@@ -202,8 +203,8 @@ describe('team send CLI side effects (R1.3)', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${scriptPath}"`],
+            command: process.execPath,
+            args: [scriptPath],
           }),
         })
       const startAgent = async (agentId: string) =>
@@ -237,9 +238,10 @@ describe('team send CLI side effects (R1.3)', () => {
       await waitFor(async () => {
         const workerRun = hive.store.getActiveRunByAgentId(workspace.id, worker.id)
         expect(workerRun).toBeDefined()
-        expect(workerRun?.output).toContain('WORKER_READY')
-        expect(workerRun?.output).toContain('WRK:')
-        expect(workerRun?.output).toContain('评估项目结构')
+        const output = normalizePtyText(workerRun?.output ?? '')
+        expect(output).toContain('WORKER_READY')
+        expect(output).toContain('WRK:')
+        expect(output).toContain('评估项目结构')
       })
 
       const teamResponse = await fetch(`${baseUrl}/api/ui/workspaces/${workspace.id}/team`, {

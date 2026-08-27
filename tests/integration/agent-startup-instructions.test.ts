@@ -1,10 +1,11 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
+import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -44,9 +45,9 @@ describe('agent startup instructions', () => {
     mkdirSync(binDir, { recursive: true })
     tempDirs.push(dataDir)
 
-    const fakeClaude = join(binDir, 'claude')
-    writeFileSync(
-      fakeClaude,
+    writeNodeCli(
+      binDir,
+      'claude',
       [
         '#!/usr/bin/env node',
         "process.stdin.setEncoding('utf8')",
@@ -66,10 +67,10 @@ describe('agent startup instructions', () => {
         'process.stdin.resume()',
       ].join('\n')
     )
-    chmodSync(fakeClaude, 0o755)
 
     process.env.HIVE_DATA_DIR = dataDir
-    process.env.PATH = `${binDir}:${originalPath ?? ''}`
+    const pathDelimiter = process.platform === 'win32' ? ';' : ':'
+    process.env.PATH = `${binDir}${pathDelimiter}${originalPath ?? ''}`
     const hive = await runHiveCommand(['--port', '0'])
 
     try {
@@ -134,7 +135,7 @@ describe('agent startup instructions', () => {
           headers: { cookie: uiCookie },
         })
         const body = (await response.json()) as { output: string }
-        const output = body.output.replaceAll('IN:', '')
+        const output = normalizePtyText(body.output).replaceAll('IN:', '')
         expect(output).toContain('[Hive 系统消息：启动说明]')
         expect(output).toContain('你是 Alpha 的 Orchestrator')
         expect(output).toContain('team send <worker-name> "<task>"')
@@ -156,8 +157,9 @@ describe('agent startup instructions', () => {
           headers: { cookie: uiCookie },
         })
         const body = (await response.json()) as { output: string }
-        const output = body.output.replaceAll('IN:', '')
-        expect(output).toContain('❯ ')
+        const output = normalizePtyText(body.output).replaceAll('IN:', '')
+        // Windows console rendering can trim the prompt's trailing space.
+        expect(output).toContain('❯')
         expect(output).not.toContain('[Hive 系统消息：启动说明]')
         expect(output).not.toContain('你是 Alpha 的 Alice（coder）')
         expect(output).not.toContain('SUBMITTED')

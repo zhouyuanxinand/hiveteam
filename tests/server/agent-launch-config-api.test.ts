@@ -9,11 +9,11 @@ import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
-const servers: Array<{ close: () => void }> = []
+const servers: Array<{ close: () => Promise<void> }> = []
 
-afterEach(() => {
+afterEach(async () => {
   while (servers.length > 0) {
-    servers.pop()?.close()
+    await servers.pop()?.close()
   }
 
   for (const dir of tempDirs.splice(0)) {
@@ -39,7 +39,12 @@ describe('agent launch config api', () => {
     await new Promise<void>((resolve) => {
       app.server.listen(0, '127.0.0.1', () => resolve())
     })
-    servers.push(app.server)
+    servers.push({
+      async close() {
+        await store.close()
+        await new Promise<void>((resolve) => app.server.close(() => resolve()))
+      },
+    })
 
     const address = app.server.address()
     if (!address || typeof address === 'string') {

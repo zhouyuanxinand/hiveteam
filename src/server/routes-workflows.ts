@@ -1,92 +1,127 @@
-import type { Dirent } from 'node:fs'
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { basename, join, relative } from 'node:path'
-
-import { getRequiredParam, route, sendJson } from './route-helpers.js'
+import { join } from 'node:path'
+import type { WorkflowCatalogItem, WorkflowRun } from '../shared/workflows.js'
+import { BadRequestError } from './http-errors.js'
+import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 
-const WORKFLOW_EXTENSIONS = new Set(['.cjs', '.js', '.json', '.md', '.mjs', '.ts', '.yaml', '.yml'])
-const MAX_WORKFLOW_FILES = 100
+const workspaceIdFrom = (context: Parameters<RouteDefinition['handler']>[0]) =>
+  getRequiredParam(context.response, context.params, 'workspaceId', 'Workspace id is required')
 
-const extensionOf = (name: string) => {
-  const index = name.lastIndexOf('.')
-  return index < 0 ? '' : name.slice(index).toLowerCase()
-}
+const serializeWorkflow = (workflow: WorkflowCatalogItem) => ({
+  description: workflow.description,
+  id: workflow.id,
+  name: workflow.name,
+  path: workflow.path,
+  runnable: workflow.runnable,
+  updated_at: workflow.updatedAt,
+  ...(workflow.validationError ? { validation_error: workflow.validationError } : {}),
+})
 
-const titleFromFileName = (name: string) => {
-  const withoutExtension = name.replace(/\.[^.]+$/, '')
-  return withoutExtension
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ')
-}
+const serializeRun = (run: WorkflowRun) => ({
+  created_at: run.createdAt,
+  ended_at: run.endedAt,
+  error: run.error,
+  id: run.id,
+  name: run.name,
+  started_at: run.startedAt,
+  status: run.status,
+  steps: run.steps.map((step) => ({
+    artifacts: step.artifacts,
+    dispatch_id: step.dispatchId,
+    error: step.error,
+    id: step.id,
+    needs: step.needs,
+    report_text: step.reportText,
+    status: step.status,
+    task: step.task,
+    worker: step.worker,
+  })),
+  updated_at: run.updatedAt,
+  workflow_id: run.workflowId,
+  workspace_id: run.workspaceId,
+})
 
-const extractMetadata = (source: string, fallbackName: string) => {
-  const nameMatch = source.match(/(?:name|title)\s*[:=]\s*['"]([^'"]{1,100})['"]/i)
-  const descriptionMatch = source.match(/description\s*[:=]\s*['"]([^'"]{1,240})['"]/i)
-  return {
-    description: descriptionMatch?.[1]?.trim() ?? '',
-    name: nameMatch?.[1]?.trim() ?? titleFromFileName(fallbackName),
-  }
-}
-
-const listWorkflowFiles = async (root: string) => {
-  const found: string[] = []
-  const visit = async (directory: string, depth: number): Promise<void> => {
-    if (depth > 4 || found.length >= MAX_WORKFLOW_FILES) return
-    let entries: Dirent[]
-    try {
-      entries = await readdir(directory, { withFileTypes: true })
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
-    for (const entry of entries) {
-      if (found.length >= MAX_WORKFLOW_FILES) return
-      const absolutePath = join(directory, entry.name)
-      if (entry.isDirectory()) {
-        await visit(absolutePath, depth + 1)
-      } else if (entry.isFile() && WORKFLOW_EXTENSIONS.has(extensionOf(entry.name))) {
-        found.push(absolutePath)
-      }
-    }
-  }
-  await visit(root, 0)
-  return found
+const getWorkflowRoot = (context: Parameters<RouteDefinition['handler']>[0]) => {
+  const workspaceId = workspaceIdFrom(context)
+  if (!workspaceId) return null
+  const workspace = context.store.getWorkspaceSnapshot(workspaceId).summary
+  return { workspace, workspaceId, workflowRoot: join(workspace.path, '.hive', 'workflows') }
 }
 
 export const workflowRoutes: RouteDefinition[] = [
   route('GET', '/api/ui/workspaces/:workspaceId/workflows', async (context) => {
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
-    const workspaceId = getRequiredParam(
+    const resolved = getWorkflowRoot(context)
+    if (!resolved) return
+    const workflows = await context.store.workflows.listCatalog(
+      resolved.workflowRoot,
+      resolved.workspace.path
+    )
+    sendJson(context.response, 200, {
+      runs: context.store.workflows.listRuns(resolved.workspaceId).map(serializeRun),
+      schedules: [],
+      workflows: workflows.map(serializeWorkflow),
+    })
+  }),
+  route('GET', '/api/ui/workspaces/:workspaceId/workflows/runs', (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const resolved = getWorkflowRoot(context)
+    if (!resolved) return
+    sendJson(
+      context.response,
+      200,
+      context.store.workflows.listRuns(resolved.workspaceId).map(serializeRun)
+    )
+  }),
+  route('POST', '/api/ui/workspaces/:workspaceId/workflows/runs', async (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const resolved = getWorkflowRoot(context)
+    if (!resolved) return
+    const body = await readJsonBody<{ workflow_id?: unknown }>(context.request)
+    if (typeof body.workflow_id !== 'string' || !body.workflow_id.trim()) {
+      throw new BadRequestError('workflow_id is required')
+    }
+    const run = await context.store.workflows.start(
+      resolved.workspaceId,
+      resolved.workflowRoot,
+      body.workflow_id,
+      String(context.request.socket.localPort ?? '')
+    )
+    sendJson(context.response, 201, serializeRun(run))
+  }),
+  route('GET', '/api/ui/workspaces/:workspaceId/workflows/runs/:runId', (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    const runId = getRequiredParam(
       context.response,
       context.params,
-      'workspaceId',
-      'Workspace id is required'
+      'runId',
+      'Workflow run id is required'
     )
-    if (!workspaceId) return
-    const workspace = context.store.getWorkspaceSnapshot(workspaceId).summary
-    const workflowRoot = join(workspace.path, '.hive', 'workflows')
-    const files = await listWorkflowFiles(workflowRoot)
-    const workflows = await Promise.all(
-      files.map(async (filePath) => {
-        const [fileStat, source] = await Promise.all([
-          stat(filePath),
-          readFile(filePath, 'utf8').then((content) => content.slice(0, 12_000)),
-        ])
-        const metadata = extractMetadata(source, basename(filePath))
-        return {
-          description: metadata.description,
-          id: relative(workflowRoot, filePath).replaceAll('\\', '/'),
-          name: metadata.name,
-          path: relative(workspace.path, filePath).replaceAll('\\', '/'),
-          updated_at: fileStat.mtimeMs,
-        }
-      })
+    if (!workspaceId || !runId) return
+    const run = context.store.workflows.get(workspaceId, runId)
+    if (!run) {
+      sendJson(context.response, 404, { error: 'Workflow run not found' })
+      return
+    }
+    sendJson(context.response, 200, serializeRun(run))
+  }),
+  route('POST', '/api/ui/workspaces/:workspaceId/workflows/runs/:runId/stop', async (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    const runId = getRequiredParam(
+      context.response,
+      context.params,
+      'runId',
+      'Workflow run id is required'
     )
-    workflows.sort((left, right) => right.updated_at - left.updated_at)
-    sendJson(context.response, 200, { runs: [], schedules: [], workflows })
+    if (!workspaceId || !runId) return
+    const run = await context.store.workflows.stop(workspaceId, runId)
+    if (!run) {
+      sendJson(context.response, 404, { error: 'Workflow run not found' })
+      return
+    }
+    sendJson(context.response, 200, serializeRun(run))
   }),
 ]

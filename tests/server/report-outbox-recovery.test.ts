@@ -10,6 +10,16 @@ import { createRuntimeStore } from '../../src/server/runtime-store.js'
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal control sequences are the value under test.
+const TERMINAL_OSC_SEQUENCE = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/gu
+// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal control sequences are the value under test.
+const TERMINAL_CSI_SEQUENCE = /\u001b\[[0-?]*[ -/]*[@-~]/gu
+
+const stripTerminalControls = (value: string) =>
+  value.replace(TERMINAL_OSC_SEQUENCE, '').replace(TERMINAL_CSI_SEQUENCE, '')
+
+const normalizeTerminalText = (value: string) => stripTerminalControls(value).replace(/\r?\n/g, '')
+
 const waitFor = async (assertion: () => void, timeoutMs = 3000) => {
   const deadline = Date.now() + timeoutMs
   let lastError: unknown
@@ -75,8 +85,9 @@ describe('report outbox recovery', () => {
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
-      expect(run?.output).toContain('ORCH:')
-      expect(run?.output).toContain('Login implementation is complete')
+      const output = normalizeTerminalText(run?.output ?? '')
+      expect(output).toContain('ORCH:')
+      expect(output).toContain('Login implementation is complete')
     })
   })
 })

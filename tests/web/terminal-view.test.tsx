@@ -17,6 +17,13 @@ let terminalMouseTrackingMode: 'any' | 'drag' | 'none' | 'vt200' | 'x10' = 'none
 let terminalApplicationCursorKeysMode = false
 let terminalDisposeCount = 0
 let terminalOpenCount = 0
+let terminalRefreshCount = 0
+let terminalBlurCount = 0
+let terminalFocusCount = 0
+let terminalFocusMode = false
+let terminalIsFocused = false
+let deferTerminalWriteCallbacks = false
+let terminalWriteCallbacks: Array<() => void> = []
 let websocketCloseCount = 0
 
 class MockWebSocket {
@@ -109,8 +116,30 @@ vi.mock('@xterm/xterm', () => ({
       })
     }
     write(chunk?: string, callback?: () => void) {
-      if (chunk !== undefined) terminalWrites.push(chunk)
+      if (chunk !== undefined) {
+        terminalWrites.push(chunk)
+        if (chunk.includes('\x1b[?1004h')) terminalFocusMode = true
+      }
+      if (callback && deferTerminalWriteCallbacks) {
+        terminalWriteCallbacks.push(callback)
+        return
+      }
       callback?.()
+    }
+    refresh() {
+      terminalRefreshCount += 1
+    }
+    focus() {
+      terminalFocusCount += 1
+      if (terminalIsFocused) return
+      terminalIsFocused = true
+      if (terminalFocusMode) latestOnDataHandler?.('\x1b[I')
+    }
+    blur() {
+      terminalBlurCount += 1
+      if (!terminalIsFocused) return
+      terminalIsFocused = false
+      if (terminalFocusMode) latestOnDataHandler?.('\x1b[O')
     }
     dispose() {
       terminalDisposeCount += 1
@@ -168,6 +197,13 @@ afterEach(() => {
   terminalDisposeCount = 0
   terminalMouseTrackingMode = 'none'
   terminalOpenCount = 0
+  terminalRefreshCount = 0
+  terminalBlurCount = 0
+  terminalFocusCount = 0
+  terminalFocusMode = false
+  terminalIsFocused = false
+  deferTerminalWriteCallbacks = false
+  terminalWriteCallbacks = []
   websocketCloseCount = 0
   vi.unstubAllGlobals()
 })
@@ -368,6 +404,7 @@ describe('TerminalView', () => {
       expect(controlSocket?.sent).toHaveLength(sentBeforeVisibleResize + 1)
     })
 
+    const refreshBeforeReattach = terminalRefreshCount
     slot.remove()
 
     await waitFor(() => {
@@ -391,6 +428,9 @@ describe('TerminalView', () => {
     expect(terminalOpenCount).toBe(1)
     expect(terminalDisposeCount).toBe(0)
     await waitFor(() => {
+      expect(terminalRefreshCount).toBeGreaterThan(refreshBeforeReattach)
+    })
+    await waitFor(() => {
       expect(controlSocket?.sent.length).toBeGreaterThan(sentBeforeHiddenResize)
     })
     const sentBeforeProtocolMessages = controlSocket?.sent.length ?? 0
@@ -398,8 +438,11 @@ describe('TerminalView', () => {
     controlSocket?.onmessage?.({
       data: JSON.stringify({ type: 'restore', snapshot: 'restored-history' }),
     })
+    expect(terminalFocusCount).toBeGreaterThan(0)
     ioSocket?.onmessage?.({ data: 'live-after-reattach' })
-    expect(terminalWrites).toEqual(['restored-history', 'live-after-reattach'])
+    await waitFor(() => {
+      expect(terminalWrites).toEqual(['restored-history', 'live-after-reattach'])
+    })
     const controlMessagesAfterReattach = controlSocket?.sent
       .slice(sentBeforeProtocolMessages)
       .map((payload) => JSON.parse(String(payload)))
@@ -487,7 +530,9 @@ describe('TerminalView', () => {
       data: JSON.stringify({ type: 'restore', snapshot: 'restored-history' }),
     })
 
-    expect(terminalWrites).toEqual(['restored-history', 'live-after-attach'])
+    await waitFor(() => {
+      expect(terminalWrites).toEqual(['restored-history', 'live-after-attach'])
+    })
     expect(controlSocket?.sent.map((payload) => JSON.parse(String(payload)))).toContainEqual({
       type: 'restore_complete',
     })
@@ -495,6 +540,41 @@ describe('TerminalView', () => {
       type: 'output_ack',
       bytes: new TextEncoder().encode('live-after-attach').byteLength,
     })
+  })
+
+  test('waits for snapshot parsing before replaying native Codex focus', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    addPortalSlot('run-focus-restore')
+
+    render(<TerminalView runId="run-focus-restore" title="Codex" />)
+
+    await waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(2)
+    })
+    const [ioSocket, controlSocket] = MockWebSocket.instances
+    deferTerminalWriteCallbacks = true
+    ioSocket?.onmessage?.({ data: 'live-after-restore' })
+    controlSocket?.onmessage?.({
+      data: JSON.stringify({ type: 'restore', snapshot: '\x1b[?1004hrestored-history' }),
+    })
+
+    expect(terminalWrites).toEqual(['\x1b[?1004hrestored-history'])
+    expect(controlSocket?.sent.map((payload) => JSON.parse(String(payload)))).not.toContainEqual({
+      type: 'restore_complete',
+    })
+    expect(ioSocket?.sent).not.toContain('\x1b[I')
+
+    for (const callback of terminalWriteCallbacks.splice(0)) callback()
+
+    await waitFor(() => {
+      expect(terminalWrites).toEqual(['\x1b[?1004hrestored-history', 'live-after-restore'])
+      expect(ioSocket?.sent).toContain('\x1b[I')
+      expect(terminalFocusCount).toBeGreaterThan(0)
+    })
+    expect(controlSocket?.sent.map((payload) => JSON.parse(String(payload)))).toContainEqual({
+      type: 'restore_complete',
+    })
+    expect(terminalBlurCount).toBeGreaterThanOrEqual(0)
   })
 
   test('maps Shift+Enter to a modified Enter sequence instead of submit Enter', async () => {

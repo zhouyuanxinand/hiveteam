@@ -7,8 +7,10 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 
 const tempDirs: string[] = []
+const stores: Array<{ close: () => Promise<void> }> = []
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(stores.splice(0).map((store) => store.close()))
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true })
   }
@@ -20,10 +22,12 @@ describe('workspace persistence', () => {
     tempDirs.push(tempDir)
 
     const firstStore = createRuntimeStore({ dataDir: tempDir })
+    stores.push(firstStore)
     firstStore.createWorkspace('/tmp/hive-alpha', 'Alpha')
     firstStore.createWorkspace('/tmp/hive-beta', 'Beta')
 
     const secondStore = createRuntimeStore({ dataDir: tempDir })
+    stores.push(secondStore)
 
     expect(secondStore.listWorkspaces()).toEqual([
       {

@@ -1,9 +1,9 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
-
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -45,13 +45,15 @@ const createWorkspace = async (baseUrl: string, cookie: string) => {
 }
 
 const createCommandPreset = async (baseUrl: string, cookie: string) => {
+  const command = process.execPath
+  const args = ['-e', "process.stdout.write('worker up'); setInterval(() => {}, 60000)"]
   const response = await fetch(`${baseUrl}/api/settings/command-presets`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify({
       display_name: 'Sleeper',
-      command: 'bash',
-      args: ['-c', 'echo worker up; sleep 60'],
+      command,
+      args,
       env: {},
       resume_args_template: null,
       session_id_capture: null,
@@ -117,8 +119,8 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
     const config = server.store.peekAgentLaunchConfig(workspace.id, body.id)
     expect(config).toEqual(
       expect.objectContaining({
-        args: ['-c', 'echo worker up; sleep 60'],
-        command: 'bash',
+        args: ['-e', "process.stdout.write('worker up'); setInterval(() => {}, 60000)"],
+        command: process.execPath,
         commandPresetId: preset.id,
       })
     )
@@ -135,20 +137,18 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-worker-custom-start-'))
     tempDirs.push(binDir, dataDir)
     const shellCommandFile = join(dataDir, 'shell-command.txt')
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
       [
-        '#!/bin/sh',
-        'last_arg=""',
-        'for arg in "$@"; do last_arg="$arg"; done',
-        `printf '%s\\n' "$last_arg" > "${shellCommandFile}"`,
-        'echo worker custom shell ready',
-        'sleep 60',
+        "import { writeFileSync } from 'node:fs'",
+        `const args = process.argv.slice(2); writeFileSync(${JSON.stringify(shellCommandFile)}, (args.at(-1) ?? '') + '\\n')`,
+        "process.stdout.write('worker custom shell ready\\n')",
+        'setInterval(() => {}, 60000)',
       ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
     setEnv('SHELL', fakeShell)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
 
     const server = await startTestServer({ dataDir })
     servers.push(server)
@@ -174,7 +174,10 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
     expect(body.agent_start).toMatchObject({ error: null, ok: true })
     expect(typeof body.agent_start.run_id).toBe('string')
     expect(server.store.peekAgentLaunchConfig(workspace.id, body.id)).toMatchObject({
-      args: ['-lic', 'qwen --model qwen3-coder'],
+      args:
+        process.platform === 'win32'
+          ? ['/d', '/s', '/c', 'qwen --model qwen3-coder']
+          : ['-lic', 'qwen --model qwen3-coder'],
       command: fakeShell,
       commandPresetId: null,
       interactiveCommand: 'qwen',
@@ -198,19 +201,17 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-worker-opencode-profile-'))
     tempDirs.push(binDir, dataDir)
     const shellCommandFile = join(dataDir, 'shell-command.txt')
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
       [
-        '#!/bin/sh',
-        'last_arg=""',
-        'for arg in "$@"; do last_arg="$arg"; done',
-        `printf '%s\\n' "$last_arg" > "${shellCommandFile}"`,
-        'sleep 60',
+        "import { writeFileSync } from 'node:fs'",
+        `const args = process.argv.slice(2); writeFileSync(${JSON.stringify(shellCommandFile)}, (args.at(-1) ?? '') + '\\n')`,
+        'setInterval(() => {}, 60000)',
       ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
     setEnv('SHELL', fakeShell)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
 
     const server = await startTestServer({ dataDir })
     servers.push(server)
@@ -236,6 +237,10 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
     }
     expect(body.agent_start).toMatchObject({ error: null, ok: true })
     expect(server.store.peekAgentLaunchConfig(workspace.id, body.id)).toMatchObject({
+      args:
+        process.platform === 'win32'
+          ? ['/d', '/s', '/c', 'opencode --continue']
+          : ['-lic', 'opencode --continue'],
       command: fakeShell,
       commandPresetId: null,
       interactiveCommand: 'opencode',
@@ -292,7 +297,10 @@ describe('POST /api/workspaces/:workspaceId/workers autostart', () => {
       id: string
     }
     expect(body.agent_start).toMatchObject({
-      error: 'definitely-missing-hive-agent CLI not found in PATH',
+      error:
+        process.platform === 'win32'
+          ? 'definitely-missing-hive-agent failed to start (exit 1)'
+          : 'definitely-missing-hive-agent CLI not found in PATH',
       ok: false,
     })
     expect(body.agent_start.error).not.toContain('/bin/sh')

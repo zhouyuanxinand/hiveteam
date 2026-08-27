@@ -11,11 +11,15 @@ import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
-const servers: Array<{ close: () => void }> = []
+const servers: Array<{ close: () => Promise<void> }> = []
+const stores: Array<{ close: () => Promise<void> }> = []
 
-afterEach(() => {
+afterEach(async () => {
   while (servers.length > 0) {
-    servers.pop()?.close()
+    await servers.pop()?.close()
+  }
+  while (stores.length > 0) {
+    await stores.pop()?.close()
   }
 
   for (const dir of tempDirs.splice(0)) {
@@ -37,6 +41,7 @@ describe('runtime runs api (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(store)
     const workspace = store.createWorkspace(workspacePath, 'Alpha')
     const orchestrator = store.getWorkspaceSnapshot(workspace.id).agents[0]
     if (!orchestrator) {
@@ -56,7 +61,12 @@ describe('runtime runs api (unit)', () => {
     await new Promise<void>((resolve) => {
       app.server.listen(0, '127.0.0.1', () => resolve())
     })
-    servers.push(app.server)
+    servers.push({
+      close: async () => {
+        await store.close()
+        await new Promise<void>((resolve) => app.server.close(() => resolve()))
+      },
+    })
 
     const address = app.server.address()
     if (!address || typeof address === 'string') {

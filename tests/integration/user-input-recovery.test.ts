@@ -59,12 +59,16 @@ describe('user input recovery', () => {
     }
 
     const store = createRuntimeStore({ dataDir })
-    const workspace = store.listWorkspaces()[0]
-    if (!workspace) {
-      throw new Error('Expected workspace after restart')
+    try {
+      const workspace = store.listWorkspaces()[0]
+      if (!workspace) {
+        throw new Error('Expected workspace after restart')
+      }
+      expect(store.listMessagesForRecovery(workspace.id, 0)).toContainEqual(
+        expect.objectContaining({ type: 'user_input', text: '请继续实现登录' })
+      )
+    } finally {
+      await store.close()
     }
-    expect(store.listMessagesForRecovery(workspace.id, 0)).toContainEqual(
-      expect.objectContaining({ type: 'user_input', text: '请继续实现登录' })
-    )
   })
 })

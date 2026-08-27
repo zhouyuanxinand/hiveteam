@@ -1,11 +1,7 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
 import type { SessionCaptureSnapshot } from './session-capture.js'
-import {
-  doesCapturedSessionExist,
-  isCapturedSessionWriterActive,
-  supportsNativeSessionExistenceCheck,
-} from './session-capture.js'
+import { doesCapturedSessionExist, supportsNativeSessionExistenceCheck } from './session-capture.js'
 
 type BoundPreset = Pick<
   CommandPresetRecord,
@@ -82,12 +78,16 @@ export const withPresetResumeArgs = (
     onInvalidSessionId?.(lastSessionId)
     return nextConfig
   }
-  if (sessionIdCapture && isCapturedSessionWriterActive(sessionIdCapture, lastSessionId)) {
-    // A writer lock means another process currently owns this native session.
-    // Reusing it would make Codex fail with "already has an active writer".
-    onInvalidSessionId?.(lastSessionId)
-    return nextConfig
-  }
+  // Do not treat the presence of a Codex `thread-writer-locks/<id>.lock`
+  // file as proof that another process still owns the session. Codex uses an
+  // OS-level file lock, and its own startup path probes that lock and removes
+  // files left behind by a crashed process. A plain existence check here made
+  // every machine restart look like an active-writer conflict, so Hive skipped
+  // `codex resume` and silently opened a new conversation instead.
+  //
+  // The native CLI remains the authority for genuine concurrent ownership: it
+  // will return its active-writer error without causing Hive to discard the
+  // persisted session pointer.
   const args = config.args ?? []
   if (hasResumeArgs(args)) return nextConfig
   const yoloArgs = getPresetYoloArgs(preset)

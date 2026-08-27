@@ -19,14 +19,21 @@ import { useWorkspaceShellLauncher } from './terminal/useWorkspaceShellLauncher.
 import { useToast } from './ui/useToast.js'
 import { usePaneSplit } from './usePaneSplit.js'
 import { OrchestratorPane } from './worker/OrchestratorPane.js'
+import { TeamScenarioDialog } from './worker/TeamScenarioDialog.js'
 import { useOrchestratorPaneState } from './worker/useOrchestratorPaneState.js'
 import type { WorkerActions } from './worker/useWorkerActions.js'
 import { useWorkerComposer } from './worker/useWorkerComposer.js'
 import { WelcomePane } from './worker/WelcomePane.js'
 import { WorkersPane } from './worker/WorkersPane.js'
 
+let addWorkerDialogModulePromise: Promise<typeof import('./worker/AddWorkerDialog.js')> | null =
+  null
+const loadAddWorkerDialog = () => {
+  addWorkerDialogModulePromise ??= import('./worker/AddWorkerDialog.js')
+  return addWorkerDialogModulePromise
+}
 const AddWorkerDialog = lazy(() =>
-  import('./worker/AddWorkerDialog.js').then((module) => ({ default: module.AddWorkerDialog }))
+  loadAddWorkerDialog().then((module) => ({ default: module.AddWorkerDialog }))
 )
 const WorkerModal = lazy(() =>
   import('./worker/WorkerModal.js').then((module) => ({ default: module.WorkerModal }))
@@ -39,10 +46,11 @@ type WorkspaceDetailProps = {
   onStartWorker: (workerId: string) => Promise<{ error: string | null; runId: string | null }>
   onOrchestratorResult: (workspaceId: string, result: OrchestratorStartResult) => void
   onRequestAddWorkspace: () => void
-  onShellRunClosed?: (workspaceId: string, runId: string) => void
-  onShellRunStarted?: (workspaceId: string, run: TerminalRunSummary) => void
+  onShellRunClosed?: ((workspaceId: string, runId: string) => void) | undefined
+  onShellRunStarted?: ((workspaceId: string, run: TerminalRunSummary) => void) | undefined
+  onWorkersChanged?: ((workspaceId: string, workers: TeamListItem[]) => void) | undefined
   onTryDemo?: () => void
-  welcomeDisabledReason?: string
+  welcomeDisabledReason?: string | undefined
   orchestratorAutostartError: string | null
   orchestratorAutostartRunId: string | null
   terminalRuns: TerminalRunSummary[]
@@ -59,6 +67,7 @@ export const WorkspaceDetail = ({
   onRequestAddWorkspace,
   onShellRunClosed,
   onShellRunStarted,
+  onWorkersChanged,
   onTryDemo,
   welcomeDisabledReason,
   orchestratorAutostartError,
@@ -76,12 +85,19 @@ export const WorkspaceDetail = ({
   const [terminalPanelHidden, setTerminalPanelHidden] = useState(false)
   const [autoResumeOnRestart, setAutoResumeOnRestart] = useState<boolean | undefined>(undefined)
   const [autoResumeBusy, setAutoResumeBusy] = useState(false)
+  const [scenarioOpen, setScenarioOpen] = useState(false)
   const toast = useToast()
   const composer = useWorkerComposer({
     createWorker: onCreateWorker,
     open: composerOpen,
     workers,
   })
+  useEffect(() => {
+    if (!workspace) return
+    // Start loading the composer once a workspace is visible. The Add button
+    // stays responsive, while empty/welcome screens do not pay this cost.
+    void loadAddWorkerDialog()
+  }, [workspace])
   const orchestrator = useOrchestratorPaneState({
     workspaceId: workspace?.id ?? '',
     terminalRuns,
@@ -319,16 +335,17 @@ export const WorkspaceDetail = ({
             onOpenShellTerminal={openShellTerminal}
             onOpenWorker={(worker) => setActiveWorkerId(worker.id)}
             onRenameWorker={handleRenameWorker}
+            onScenarioClick={() => setScenarioOpen(true)}
             onStartWorker={handleStartWorker}
             startingWorkerId={startingWorkerId}
             terminalRuns={terminalRuns}
             workers={workers}
+            workspaceId={workspace.id}
           />
           {terminalPanelHidden ? null : (
             <TerminalBottomPanel
               tabs={shellPanelTabs}
               activeId={panelTabs.activeId}
-              scopeKey={workspace.id}
               onSelect={panelTabs.setActive}
               onClose={(tabId) => {
                 if (tabId.startsWith('shell:')) {
@@ -362,8 +379,27 @@ export const WorkspaceDetail = ({
           />
         </Suspense>
       ) : null}
+      <Suspense fallback={null}>
+        <TeamScenarioDialog
+          onClose={() => setScenarioOpen(false)}
+          onWorkersChanged={(nextWorkers) => onWorkersChanged?.(workspace.id, nextWorkers)}
+          open={scenarioOpen}
+          workspaceId={workspace.id}
+        />
+      </Suspense>
       {composerOpen ? (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <div
+              className="fixed inset-0 z-50 grid place-items-center bg-black/50"
+              data-testid="add-worker-loading"
+            >
+              <div className="elev-2 rounded-lg border px-5 py-4 text-sm text-sec" role="status">
+                Loading team member form…
+              </div>
+            </div>
+          }
+        >
           <AddWorkerDialog
             commandPresets={composer.commandPresets}
             commandPresetId={composer.commandPresetId}

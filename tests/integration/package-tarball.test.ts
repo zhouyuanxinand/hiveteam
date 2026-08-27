@@ -1,6 +1,6 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
@@ -14,15 +14,47 @@ interface PackResult {
   version: string
 }
 
-const runNpm = (args: string[]) =>
-  execFileSync(
-    process.platform === 'win32' ? 'cmd.exe' : 'npm',
-    process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args,
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }
-  )
+const runPackSmoke = () =>
+  new Promise<void>((resolve, reject) => {
+    execFile(
+      process.execPath,
+      ['scripts/pack-smoke.mjs'],
+      { encoding: 'utf8', timeout: 120_000 },
+      (error, stdout, stderr) => {
+        if (error) {
+          const output = [stdout, stderr].filter(Boolean).join('\n').trim()
+          if (output) error.message = `${error.message}\n${output}`
+          reject(error)
+          return
+        }
+        if (stderr) console.warn(stderr.trim())
+        resolve()
+      }
+    )
+  })
+
+const activeNodeDir = dirname(process.execPath)
+const activeNpmCli = join(activeNodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+
+const withActiveNodeEnv = (env: NodeJS.ProcessEnv = {}) => {
+  const mergedEnv = { ...process.env, ...env }
+  mergedEnv.PATH = [activeNodeDir, mergedEnv.PATH].filter(Boolean).join(delimiter)
+  return mergedEnv
+}
+
+const runNpm = (args: string[]) => {
+  const command = existsSync(activeNpmCli)
+    ? { file: process.execPath, args: [activeNpmCli, ...args] }
+    : process.platform === 'win32'
+      ? { file: 'cmd.exe', args: ['/d', '/s', '/c', 'npm', ...args] }
+      : { file: 'npm', args }
+
+  return execFileSync(command.file, command.args, {
+    encoding: 'utf8',
+    env: withActiveNodeEnv(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+}
 
 describe('npm package tarball', () => {
   test('publish dry-run exposes only runtime files and the hive bin', () => {
@@ -31,6 +63,7 @@ describe('npm package tarball', () => {
 
     const output = runNpm(['pack', '--dry-run', '--json'])
     const [result] = JSON.parse(output) as PackResult[]
+    if (!result) throw new Error('npm pack --dry-run returned no package metadata')
     const paths = result.files.map((file) => file.path)
 
     expect(result.name).toBe('hiveteam')
@@ -57,11 +90,7 @@ describe('npm package tarball', () => {
     expect(paths).not.toContain('bin/team')
   })
 
-  test('published tarball installs and starts the packaged runtime', () => {
-    execFileSync(process.execPath, ['scripts/pack-smoke.mjs'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 120_000,
-    })
+  test('published tarball installs and starts the packaged runtime', async () => {
+    await runPackSmoke()
   }, 120_000)
 })

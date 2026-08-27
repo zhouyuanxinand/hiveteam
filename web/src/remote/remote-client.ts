@@ -190,11 +190,23 @@ export class RemoteWebSocket extends EventTarget {
 
   send(data: string | ArrayBufferLike | ArrayBufferView | Blob) {
     if (this.readyState !== RemoteWebSocket.OPEN) throw remoteError('WebSocket is not open')
-    void bytesFromWebSocketData(data).then((bytes) => {
-      if (this.readyState === RemoteWebSocket.OPEN && this.streamId !== null) {
-        this.client.sendWebSocketData(this.streamId, bytes, typeof data === 'string')
-      }
-    })
+    void bytesFromWebSocketData(data)
+      .then((bytes) => {
+        if (this.readyState === RemoteWebSocket.OPEN && this.streamId !== null) {
+          void this.client
+            .sendWebSocketData(this.streamId, bytes, typeof data === 'string')
+            .catch((error: unknown) => {
+              if (this.readyState !== RemoteWebSocket.OPEN) return
+              this.remoteError(error instanceof Error ? error.message : '远程发送失败。')
+              this.remoteClose(1006, '远程发送失败')
+            })
+        }
+      })
+      .catch((error: unknown) => {
+        if (this.readyState !== RemoteWebSocket.OPEN) return
+        this.remoteError(error instanceof Error ? error.message : '远程发送失败。')
+        this.remoteClose(1006, '远程发送失败')
+      })
   }
 
   close(code = 1000, reason = '') {
@@ -458,6 +470,7 @@ export class RemoteClient {
         this.socket = null
         this.connectionKeys = null
         for (const stream of this.streams.values()) {
+          stream.sendFlow.cancel(remoteError('设备连接已断开。'))
           if (stream.kind === 'http') stream.reject(remoteError('设备连接已断开。'))
           else stream.socket.remoteClose(1006, '设备连接已断开')
         }
@@ -473,6 +486,9 @@ export class RemoteClient {
     this.socket?.close()
     this.socket = null
     this.connectionKeys = null
+    for (const stream of this.streams.values()) {
+      stream.sendFlow.cancel(remoteError('设备连接已断开。'))
+    }
     this.streams.clear()
   }
 
@@ -538,11 +554,13 @@ export class RemoteClient {
     }
   }
 
-  sendWebSocketData(streamId: number, data: Uint8Array, isText: boolean) {
+  async sendWebSocketData(streamId: number, data: Uint8Array, isText: boolean) {
     const stream = this.streams.get(streamId)
     if (!stream || stream.kind !== 'ws') return
     const payload = encodeWsMessage(data, isText)
-    if (!stream.sendFlow.trySend(payload.length).ok) return
+    await stream.sendFlow.waitForWindow(payload.length)
+    if (this.streams.get(streamId) !== stream || stream.socket.readyState !== RemoteWebSocket.OPEN)
+      return
     this.sendFrame(FrameKind.Data, streamId, payload)
   }
 
@@ -570,31 +588,34 @@ export class RemoteClient {
         sendFlow: createFlowController(),
       }
       this.streams.set(streamId, stream)
-      try {
-        this.sendFrame(
-          FrameKind.Open,
-          streamId,
-          encodeOpenPayload({
-            transport: StreamTransport.Http,
-            http: {
-              method: args.method,
-              path: args.path,
-              headers: args.headers,
-              hasBody: args.body.length > 0,
-            },
-          })
-        )
-        for (let offset = 0; offset < args.body.length; offset += MAX_BODY_CHUNK) {
-          const chunk = args.body.slice(offset, offset + MAX_BODY_CHUNK)
-          const payload = encodeHttpBodyChunk(chunk)
-          if (!stream.sendFlow.trySend(payload.length).ok) throw remoteError('请求体过大。')
-          this.sendFrame(FrameKind.Data, streamId, payload)
+      void (async () => {
+        try {
+          this.sendFrame(
+            FrameKind.Open,
+            streamId,
+            encodeOpenPayload({
+              transport: StreamTransport.Http,
+              http: {
+                method: args.method,
+                path: args.path,
+                headers: args.headers,
+                hasBody: args.body.length > 0,
+              },
+            })
+          )
+          for (let offset = 0; offset < args.body.length; offset += MAX_BODY_CHUNK) {
+            const chunk = args.body.slice(offset, offset + MAX_BODY_CHUNK)
+            const payload = encodeHttpBodyChunk(chunk)
+            await stream.sendFlow.waitForWindow(payload.length)
+            this.sendFrame(FrameKind.Data, streamId, payload)
+          }
+          this.sendFrame(FrameKind.End, streamId, new Uint8Array())
+        } catch (error) {
+          this.streams.delete(streamId)
+          stream.sendFlow.cancel(error instanceof Error ? error : remoteError('请求失败。'))
+          reject(error instanceof Error ? error : remoteError('请求失败。'))
         }
-        this.sendFrame(FrameKind.End, streamId, new Uint8Array())
-      } catch (error) {
-        this.streams.delete(streamId)
-        reject(error instanceof Error ? error : remoteError('请求失败。'))
-      }
+      })()
     })
   }
 
@@ -670,6 +691,7 @@ export class RemoteClient {
     }
     if (header.kind === FrameKind.Reset) {
       const reason = `远程流被重置（${decodeResetPayload(plaintext)}）`
+      stream.sendFlow.cancel(remoteError(reason))
       if (stream.kind === 'http') stream.reject(remoteError(reason))
       else {
         stream.socket.remoteError(reason)

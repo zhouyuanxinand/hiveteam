@@ -13,4 +13,7 @@ export const serializeDispatchRecord = (record: DispatchRecord) => ({
   text: record.text,
   to_agent_id: record.toAgentId,
   workspace_id: record.workspaceId,
+  ...(record.attemptCount !== undefined ? { attempt_count: record.attemptCount } : {}),
+  ...(record.lastAttemptAt !== undefined ? { last_attempt_at: record.lastAttemptAt } : {}),
+  ...(record.lastError !== undefined ? { last_error: record.lastError } : {}),
 })

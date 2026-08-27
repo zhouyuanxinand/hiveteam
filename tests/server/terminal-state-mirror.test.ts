@@ -3,6 +3,18 @@ import { describe, expect, test } from 'vitest'
 import { TerminalStateMirror } from '../../src/server/terminal-state-mirror.js'
 
 describe('TerminalStateMirror', () => {
+  test('preserves focus reporting in a restore snapshot', async () => {
+    const mirror = new TerminalStateMirror()
+
+    try {
+      mirror.write('\x1b[?1004h')
+
+      expect((await mirror.getSnapshot()).endsWith('\x1b[?1004h')).toBe(true)
+    } finally {
+      mirror.dispose()
+    }
+  })
+
   test('preserves SGR mouse encoding in a restore snapshot', async () => {
     const mirror = new TerminalStateMirror()
 

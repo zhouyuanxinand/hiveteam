@@ -47,9 +47,17 @@ interface AgentManager {
   getRun: (runId: string) => AgentRunSnapshot
   removeRun: (runId: string) => void
   stopRun: (runId: string) => void
+  /** Resolves after the native PTY has emitted exit and Windows released its handles. */
+  waitForRunExit?: (runId: string) => Promise<void>
 }
 
 const createRunId = () => randomUUID()
+const WINDOWS_PTY_RELEASE_SETTLE_MS = 500
+
+const waitForWindowsPtyRelease = async () => {
+  if (process.platform !== 'win32') return
+  await new Promise<void>((resolve) => setTimeout(resolve, WINDOWS_PTY_RELEASE_SETTLE_MS))
+}
 
 const createSpawnEnv = (inputEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
   const env = { ...process.env, ...inputEnv }
@@ -65,6 +73,8 @@ export const createAgentManager = ({
   ptyOutputBus?: PtyOutputBus
 } = {}): AgentManager => {
   const runs = new Map<string, AgentRunRecord>()
+  const runExitPromises = new Map<string, Promise<void>>()
+  const runExitResolvers = new Map<string, () => void>()
 
   const getRunRecord = (runId: string) => {
     const run = runs.get(runId)
@@ -84,6 +94,12 @@ export const createAgentManager = ({
       const spawnCommand = resolveSpawnCommand(input.command, input.cwd, env, input.args ?? [])
 
       const runId = createRunId()
+      let resolveRunExit = () => {}
+      const runExitPromise = new Promise<void>((resolve) => {
+        resolveRunExit = resolve
+      })
+      runExitPromises.set(runId, runExitPromise)
+      runExitResolvers.set(runId, resolveRunExit)
 
       const run: AgentRunRecord = {
         runId,
@@ -105,22 +121,38 @@ export const createAgentManager = ({
         },
       }
 
-      if (input.onExit) run.onExit = input.onExit
+      run.onExit = (event) => {
+        try {
+          input.onExit?.(event)
+        } finally {
+          void waitForWindowsPtyRelease().then(() => {
+            runExitResolvers.delete(runId)
+            resolveRunExit()
+          })
+        }
+      }
 
       runs.set(runId, run)
 
       try {
+        const ptyOptions = {
+          cwd: input.cwd,
+          env,
+          name: 'xterm-256color',
+          // Vitest runs without a real Windows console. Winpty keeps the
+          // integration suite deterministic there; normal Hive launches keep
+          // node-pty's modern ConPTY default unless explicitly overridden.
+          ...(process.env.HIVE_TEST_PTY_BACKEND === 'winpty' ? { useConpty: false } : {}),
+        }
         attachAgentPty(
           run,
-          spawn(spawnCommand.command, spawnCommand.args, {
-            cwd: input.cwd,
-            env,
-            name: 'xterm-256color',
-          }),
+          spawn(spawnCommand.command, spawnCommand.args, ptyOptions),
           ptyOutputBus
         )
       } catch (error) {
         runs.delete(runId)
+        runExitPromises.delete(runId)
+        runExitResolvers.delete(runId)
         throw error
       }
 
@@ -145,11 +177,16 @@ export const createAgentManager = ({
 
     removeRun(runId) {
       runs.delete(runId)
+      runExitPromises.delete(runId)
+      runExitResolvers.delete(runId)
     },
 
     stopRun(runId) {
       const run = getRunRecord(runId)
       run.process.stop()
+    },
+    async waitForRunExit(runId) {
+      await runExitPromises.get(runId)
     },
   }
 }

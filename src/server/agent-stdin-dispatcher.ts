@@ -8,6 +8,7 @@ import {
   createAwaitablePostStartInputWriter,
   createPostStartInputWriter,
 } from './post-start-input-writer.js'
+import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 
 interface AgentStdinDispatcherInput {
   agentManager: AgentManager | undefined
@@ -23,8 +24,11 @@ export const buildOrchestratorReportPayload = (
   text: string,
   artifacts: string[]
 ): string => {
-  const lines: string[] = [`[Hive 系统消息：来自 @${workerName} 的汇报]`, text]
-  for (const artifact of artifacts) lines.push(`artifact: ${artifact}`)
+  const lines: string[] = [
+    `[Hive 系统消息：来自 @${sanitizePromptData(workerName, 200)} 的汇报]`,
+    wrapUntrustedPromptData('report', text),
+  ]
+  for (const artifact of artifacts) lines.push(`artifact: ${sanitizePromptData(artifact, 1_000)}`)
   lines.push('', ORCHESTRATOR_REMINDER_TAIL, '')
   return lines.join('\n')
 }
@@ -34,8 +38,11 @@ export const buildOrchestratorStatusPayload = (
   text: string,
   artifacts: string[]
 ): string => {
-  const lines: string[] = [`[Hive 系统消息：来自 @${workerName} 的状态更新]`, text]
-  for (const artifact of artifacts) lines.push(`artifact: ${artifact}`)
+  const lines: string[] = [
+    `[Hive 系统消息：来自 @${sanitizePromptData(workerName, 200)} 的状态更新]`,
+    wrapUntrustedPromptData('status', text),
+  ]
+  for (const artifact of artifacts) lines.push(`artifact: ${sanitizePromptData(artifact, 1_000)}`)
   lines.push('', ORCHESTRATOR_REMINDER_TAIL, '')
   return lines.join('\n')
 }
@@ -55,7 +62,7 @@ export const buildWorkerDispatchPayload = (
     `[Hive 系统消息：来自 @${fromAgentName} 的派单]`,
     '',
     ...(sessionBindingMarker ? [sessionBindingMarker, ''] : []),
-    `你的角色：${workerDescription}`,
+    `你的角色：${sanitizePromptData(workerDescription, 2_000)}`,
     '',
     '你必须遵守：',
     `- 完成、失败、阻塞或部分完成后，执行 \`team report "<result>" --dispatch ${dispatchId}\``,
@@ -64,7 +71,7 @@ export const buildWorkerDispatchPayload = (
     `dispatch_id: ${dispatchId}`,
     '',
     '任务内容：',
-    text,
+    wrapUntrustedPromptData('dispatch-task', text),
   ]
   if (memoryDigest?.trim()) lines.push('', memoryDigest.trim())
   lines.push('', buildWorkerReminderTail(dispatchId), '')
@@ -78,7 +85,7 @@ export const buildWorkerCancelPayload = (dispatchId: string, reason: string): st
     '请停止执行这条派单，不要再为它调用 team report。',
     '',
     '取消原因：',
-    reason,
+    wrapUntrustedPromptData('status', reason, 2_000),
     '',
   ].join('\n')
 

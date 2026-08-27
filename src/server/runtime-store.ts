@@ -1,9 +1,13 @@
+import type { TeamMemoryDreamReview, TeamMemoryDreamRun } from '../shared/team-memory.js'
 import type { AgentSummary, TeamListItem, WorkspaceSummary } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
+import type { GitWorkspaceService } from './git-workspace-service.js'
+import { ConflictError, ForbiddenError } from './http-errors.js'
 import type { RecoveryMessage } from './message-log-store.js'
+import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import type { RemoteConfigSource } from './remote-config-keys.js'
@@ -17,6 +21,7 @@ import {
   createRuntimeStoreServices,
 } from './runtime-store-helpers.js'
 import type { SettingsStore } from './settings-store.js'
+import type { TeamMemoryDreamStore } from './team-memory-dream-store.js'
 import type { TeamMemoryStore } from './team-memory-store.js'
 import type {
   CancelTaskInput,
@@ -26,10 +31,12 @@ import type {
   StatusTaskInput,
 } from './team-operations.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
+import type { WorkflowRuntime } from './workflow-runtime.js'
 import type { WorkerInput, WorkspaceRecord } from './workspace-store.js'
 
 interface RuntimeStore {
   close: () => Promise<void>
+  git: GitWorkspaceService
   createWorkspace: (path: string, name: string) => WorkspaceSummary
   deleteWorkspace: (workspaceId: string) => Promise<void>
   listWorkspaces: () => WorkspaceSummary[]
@@ -100,6 +107,15 @@ interface RuntimeStore {
   resumeTerminalRun: (runId: string) => void
   settings: SettingsStore
   memory: TeamMemoryStore
+  memoryDream: TeamMemoryDreamStore
+  workflows: WorkflowRuntime
+  requestMemoryDream: (workspaceId: string) => Promise<TeamMemoryDreamRun>
+  requestMemoryDreamWorkerReview: (
+    workspaceId: string,
+    dreamId: string,
+    workerId: string,
+    hivePort: string
+  ) => Promise<TeamMemoryDreamReview>
   remote: {
     audit: RemoteAuditStore
     config: RemoteConfigSource
@@ -132,9 +148,65 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const buildDreamPrompt = (run: TeamMemoryDreamRun) =>
+    [
+      '[Hive system message: Team memory Dream review]',
+      'Review the prepared memory consolidation below as the Workspace Orchestrator.',
+      'This is a visible review request. Do not submit or alter memory outside the Hive UI workflow.',
+      'Only the Workspace Orchestrator authority may submit the reviewed Dream.',
+      wrapUntrustedPromptData('memory', JSON.stringify(run.suggestions), 8_000),
+      'After reviewing, leave the Dream in review state until the user confirms submission.',
+    ].join('\n\n')
+  const deliverDream = async (run: TeamMemoryDreamRun) => {
+    const orchestratorId = `${run.workspaceId}:orchestrator`
+    const activeRun = services.agentRuntime.getActiveRunByAgentId(run.workspaceId, orchestratorId)
+    if (!activeRun || run.executionStatus === 'requested') return run
+    services.memoryDreamStore.markExecutionRequested(run.workspaceId, run.id, activeRun.runId)
+    try {
+      await services.agentRuntime.deliverSystemMessageToAgent(
+        run.workspaceId,
+        orchestratorId,
+        buildDreamPrompt(run),
+        { requireActiveRun: true }
+      )
+      return services.memoryDreamStore.get(run.workspaceId, run.id) ?? run
+    } catch (error) {
+      return (
+        services.memoryDreamStore.markExecutionFailed(
+          run.workspaceId,
+          run.id,
+          error instanceof Error ? error.message : String(error)
+        ) ?? run
+      )
+    }
+  }
+  const deliverPendingDreams = async (workspaceId: string, agentId: string) => {
+    if (agentId !== `${workspaceId}:orchestrator`) return
+    for (const run of services.memoryDreamStore.listPendingExecution(workspaceId)) {
+      await deliverDream(run)
+    }
+  }
   const lifecycle = createRuntimeStoreLifecycle(
-    options.agentManager ? { agentManager: options.agentManager, services } : { services }
+    options.agentManager
+      ? { agentManager: options.agentManager, onAgentStarted: deliverPendingDreams, services }
+      : { onAgentStarted: deliverPendingDreams, services }
   )
+  const pendingGitScans = new Set<Promise<void>>()
+  let closePromise: Promise<void> | null = null
+  const close = () => {
+    if (closePromise) return closePromise
+    closePromise = (async () => {
+      // Workspace binding performs Git detection in the background so the API
+      // remains fast. Await those processes before closing the database and
+      // deleting test/workspace directories; otherwise Windows can keep the
+      // workspace CWD locked for a short period after runtime shutdown.
+      while (pendingGitScans.size > 0) {
+        await Promise.all(Array.from(pendingGitScans))
+      }
+      await lifecycle.close()
+    })()
+    return closePromise
+  }
   const runDataMutation = (mutation: () => void) => {
     if (!services.db) {
       mutation()
@@ -142,28 +214,120 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     }
     services.db.transaction(mutation)()
   }
+  const requestMemoryDream = async (workspaceId: string) =>
+    deliverDream(services.memoryDreamStore.create(workspaceId))
+  const requestMemoryDreamWorkerReview = async (
+    workspaceId: string,
+    dreamId: string,
+    workerId: string,
+    hivePort: string
+  ) => {
+    const dream = services.memoryDreamStore.get(workspaceId, dreamId)
+    if (!dream) throw new ConflictError('Dream run not found')
+    if (dream.status !== 'review') throw new ConflictError('Only a Dream in review can be reviewed')
+    const worker = services.workspaceStore.getWorker(workspaceId, workerId)
+    if (worker.role === 'orchestrator') {
+      throw new ForbiddenError('The Orchestrator cannot be assigned a worker review')
+    }
+    const orchestratorId = `${workspaceId}:orchestrator`
+    const orchestrator = services.workspaceStore.getAgent(workspaceId, orchestratorId)
+    if (orchestrator.role !== 'orchestrator') {
+      throw new ForbiddenError('Only the Workspace Orchestrator can request a review')
+    }
+    const task = [
+      'Review this Team memory Dream as a supporting worker.',
+      `Dream id: ${sanitizePromptData(dream.id, 100)}`,
+      'Return findings in normal prose. If you recommend replacement suggestions, append a JSON object after DREAM_REVIEW_JSON.',
+      'The JSON shape is {"suggestions":[{"body":"...","kind":"decision|fact|preference|pitfall|procedure_ref","scope":"workspace|user","source_memory_ids":[],"tags":[]}]}.',
+      'Do not submit the Dream; only the Workspace Orchestrator can submit it.',
+      wrapUntrustedPromptData('memory', JSON.stringify(dream.suggestions), 8_000),
+    ].join('\n\n')
+    const dispatch = await services.teamOps.dispatchTask(workspaceId, workerId, task, {
+      fromAgentId: orchestratorId,
+      hivePort,
+    })
+    const review = services.memoryDreamStore.recordReviewRequest(
+      workspaceId,
+      dreamId,
+      workerId,
+      dispatch.id
+    )
+    if (dispatch.status === 'failed') {
+      return services.memoryDreamStore.markReviewFailed(workspaceId, dispatch.id) ?? review
+    }
+    if (dispatch.status === 'reported' && dispatch.reportText) {
+      services.memoryDreamStore.recordWorkerReview(
+        workspaceId,
+        dispatch.id,
+        dispatch.reportText,
+        dispatch.artifacts
+      )
+    }
+    return review
+  }
+  const reportTask = (workspaceId: string, workerId: string, input?: ReportTaskInput) => {
+    const result = services.teamOps.reportTask(workspaceId, workerId, input)
+    if (result.dispatch) {
+      try {
+        services.memoryDreamStore.recordWorkerReview(
+          workspaceId,
+          result.dispatch.id,
+          result.dispatch.reportText ?? '',
+          result.dispatch.artifacts
+        )
+        services.workflowRuntime.recordDispatchReport(workspaceId, result.dispatch)
+      } catch (error) {
+        console.error('[hive] post-report workflow bookkeeping failed', {
+          error: error instanceof Error ? error.message : String(error),
+          workspaceId,
+        })
+      }
+    }
+    return result
+  }
   let remoteTunnel: RemoteTunnel | null = null
   return {
-    close: lifecycle.close,
+    close,
+    git: services.git,
     createWorkspace: (path, name) => {
       const workspace = services.workspaceStore.createWorkspace(path, name)
+      const gitScan = services.git
+        .getStatus(workspace.id, workspace.path)
+        .catch((error: unknown) => {
+          if (String(error).toLowerCase().includes('database connection is not open')) return
+          console.warn('[hive] Git repository detection failed while binding workspace', {
+            error: error instanceof Error ? error.message : String(error),
+            workspaceId: workspace.id,
+          })
+        })
+        .then(() => undefined)
+      pendingGitScans.add(gitScan)
+      void gitScan.then(
+        () => pendingGitScans.delete(gitScan),
+        () => pendingGitScans.delete(gitScan)
+      )
       void lifecycle.startWorkspaceWatch(workspace.id)
       return workspace
     },
     listWorkspaces: () => services.workspaceStore.listWorkspaces(),
     deleteWorkspace: async (workspaceId) => {
       const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
-      lifecycle.deleteWorkspaceShell(workspaceId)
+      await lifecycle.deleteWorkspaceShell(workspaceId)
       for (const agent of workspace.agents) {
         const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, agent.id)
-        if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
+        if (activeRun) {
+          services.agentRuntime.stopAgentRun(activeRun.runId)
+          await services.agentRuntime.waitForAgentRunExit?.(activeRun.runId)
+        }
         services.agentRuntime.deleteAgentLaunchConfig(workspaceId, agent.id)
       }
       await services.tasksFileWatcher.stop(workspaceId)
       runDataMutation(() => {
         services.memoryStore.deleteWorkspaceEntries(workspaceId)
+        services.memoryDreamStore.deleteWorkspace(workspaceId)
         services.reportOutbox.deleteWorkspaceEntries(workspaceId)
         services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
+        services.git.deleteWorkspace(workspaceId)
         services.workspaceStore.deleteWorkspace(workspaceId)
       })
       if (services.settings.getAppState('active_workspace_id')?.value === workspaceId) {
@@ -183,18 +347,37 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         services.workspaceStore.deleteWorker(workspaceId, workerId)
       })
     },
-    recordUserInput: services.teamOps.recordUserInput,
+    recordUserInput: (workspaceId, orchestratorId, text) => {
+      services.teamOps.recordUserInput(workspaceId, orchestratorId, text)
+      services.gitTurnCoordinator.recordInput(workspaceId, orchestratorId, text)
+    },
     cancelTask: services.teamOps.cancelTask,
     dispatchTask: services.teamOps.dispatchTask,
     dispatchTaskByWorkerName: services.teamOps.dispatchTaskByWorkerName,
-    reportTask: services.teamOps.reportTask,
+    reportTask,
     statusTask: services.teamOps.statusTask,
     listDispatches: services.dispatchLedgerStore.listWorkspaceDispatches,
     listWorkers: (workspaceId) => {
       // `team list` is the Orchestrator's normal first call after a restart.
       // Use it as the durable report replay trigger.
       services.teamOps.drainReportOutbox(workspaceId)
-      return services.workspaceStore.listWorkers(workspaceId)
+      const pendingByWorker = new Map<string, number>()
+      for (const dispatch of services.dispatchLedgerStore.listWorkspaceDispatches(workspaceId)) {
+        if (
+          dispatch.status === 'queued' ||
+          dispatch.status === 'submitted' ||
+          dispatch.status === 'failed'
+        ) {
+          pendingByWorker.set(
+            dispatch.toAgentId,
+            (pendingByWorker.get(dispatch.toAgentId) ?? 0) + 1
+          )
+        }
+      }
+      return services.workspaceStore.listWorkers(workspaceId).map((worker) => ({
+        ...worker,
+        pendingTaskCount: pendingByWorker.get(worker.id) ?? worker.pendingTaskCount,
+      }))
     },
     getLastPtyLineForAgent: (workspaceId, agentId) =>
       services.workerOutputTracker?.getLastPtyLine(workspaceId, agentId) ?? null,
@@ -229,6 +412,10 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     resumeTerminalRun: lifecycle.resumeTerminalRun,
     settings: services.settings,
     memory: services.memoryStore,
+    memoryDream: services.memoryDreamStore,
+    requestMemoryDream,
+    requestMemoryDreamWorkerReview,
+    workflows: services.workflowRuntime,
     remote: {
       audit: services.remoteAudit,
       config: services.remoteConfig,

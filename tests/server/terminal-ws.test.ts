@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -8,6 +8,7 @@ import WebSocket from 'ws'
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -225,53 +226,57 @@ describe('terminal websocket server', () => {
     }
   }, 60000)
 
-  test('forwards binary stdin from io socket into the PTY', async () => {
-    const workspacePath = join(tmpdir(), `hive-terminal-binary-stdin-${Date.now()}`)
-    mkdirSync(workspacePath, { recursive: true })
-    tempDirs.push(workspacePath)
-    const script = join(workspacePath, 'hex.js')
-    writeFileSync(
-      script,
-      [
-        'if (process.stdin.isTTY) process.stdin.setRawMode(true)',
-        'process.stdin.resume()',
-        "console.log('READY')",
-        "process.stdin.on('data', (chunk) => {",
-        "  process.stdout.write('HEX:' + chunk.toString('hex') + '\\n')",
-        '})',
-      ].join('\n')
-    )
-
-    const server = await startTestServer()
-    try {
-      const cookie = await getUiCookie(server.baseUrl)
-      const workspace = await createWorkspace(server.baseUrl, cookie, workspacePath)
-      const worker = await createWorker(server.baseUrl, cookie, workspace.id)
-      await configureAgent(server.baseUrl, cookie, workspace.id, worker.id, process.execPath, [
+  test.skipIf(process.platform === 'win32')(
+    'forwards binary stdin from io socket into the PTY',
+    async () => {
+      const workspacePath = join(tmpdir(), `hive-terminal-binary-stdin-${Date.now()}`)
+      mkdirSync(workspacePath, { recursive: true })
+      tempDirs.push(workspacePath)
+      const script = join(workspacePath, 'hex.js')
+      writeFileSync(
         script,
-      ])
-      const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-      const io = await openSocket(toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`), cookie)
-      const received: string[] = []
+        [
+          'if (process.stdin.isTTY) process.stdin.setRawMode(true)',
+          'process.stdin.resume()',
+          "console.log('READY')",
+          "process.stdin.on('data', (chunk) => {",
+          "  process.stdout.write('HEX:' + chunk.toString('hex') + '\\n')",
+          '})',
+        ].join('\n')
+      )
 
-      io.on('message', (chunk) => {
-        received.push(chunk.toString())
-      })
+      const server = await startTestServer()
+      try {
+        const cookie = await getUiCookie(server.baseUrl)
+        const workspace = await createWorkspace(server.baseUrl, cookie, workspacePath)
+        const worker = await createWorker(server.baseUrl, cookie, workspace.id)
+        await configureAgent(server.baseUrl, cookie, workspace.id, worker.id, process.execPath, [
+          script,
+        ])
+        const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
+        const io = await openSocket(toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`), cookie)
+        const received: string[] = []
 
-      await waitFor(() => {
-        expect(received.join('')).toContain('READY')
-      })
-      io.send(Buffer.from([0x1b, 0x5b, 0x4d, 0xc8, 0x21, 0x21]))
+        io.on('message', (chunk) => {
+          received.push(chunk.toString())
+        })
 
-      await waitFor(() => {
-        expect(received.join('')).toContain('HEX:1b5b4dc82121')
-      })
+        await waitFor(() => {
+          expect(received.join('')).toContain('READY')
+        })
+        io.send(Buffer.from([0x1b, 0x5b, 0x4d, 0xc8, 0x21, 0x21]))
 
-      io.close()
-    } finally {
-      await server.close()
-    }
-  }, 60000)
+        await waitFor(() => {
+          expect(received.join('')).toContain('HEX:1b5b4dc82121')
+        })
+
+        io.close()
+      } finally {
+        await server.close()
+      }
+    },
+    60000
+  )
 
   test('rejects websocket upgrades for a missing run id', async () => {
     const server = await startTestServer()
@@ -338,6 +343,8 @@ describe('terminal websocket server', () => {
     const workspacePath = join(tmpdir(), `hive-terminal-resize-${Date.now()}`)
     mkdirSync(workspacePath, { recursive: true })
     tempDirs.push(workspacePath)
+    const persistentAgent = join(workspacePath, 'persistent-agent.js')
+    writeFileSync(persistentAgent, 'setInterval(() => {}, 60000)\n')
 
     const agentManager = createAgentManager()
     const resizeSpy = vi.spyOn(agentManager, 'resizeRun')
@@ -356,9 +363,8 @@ describe('terminal websocket server', () => {
       const cookie = await getUiCookie(baseUrl)
       const workspace = await createWorkspace(baseUrl, cookie, workspacePath)
       const worker = await createWorker(baseUrl, cookie, workspace.id)
-      await configureAgent(baseUrl, cookie, workspace.id, worker.id, '/bin/bash', [
-        '-lc',
-        "trap 'stty size' WINCH; echo ready; while true; do sleep 1; done",
+      await configureAgent(baseUrl, cookie, workspace.id, worker.id, process.execPath, [
+        persistentAgent,
       ])
       const run = await startAgent(baseUrl, cookie, workspace.id, worker.id)
       const control = await openSocket(
@@ -418,17 +424,15 @@ describe('terminal websocket server', () => {
     const workspacePath = join(tmpdir(), `hive-terminal-shell-exit-${Date.now()}`)
     mkdirSync(workspacePath, { recursive: true })
     tempDirs.push(workspacePath)
-    const fakeShell = join(workspacePath, 'fake-shell')
-    writeFileSync(
-      fakeShell,
-      [
-        '#!/usr/bin/env node',
-        "process.stdout.write('shell ready\\n')",
-        'setTimeout(() => process.exit(0), 150)',
-      ].join('\n')
+    const fakeShell = writeNodeCli(
+      workspacePath,
+      'fake-shell',
+      ["process.stdout.write('shell ready\\n')", 'setTimeout(() => process.exit(0), 150)'].join(
+        '\n'
+      )
     )
-    chmodSync(fakeShell, 0o755)
     setEnv('SHELL', fakeShell)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
 
     const server = await startTestServer()
     try {

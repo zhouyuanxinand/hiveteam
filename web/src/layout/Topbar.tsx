@@ -1,4 +1,4 @@
-import { Brain, ListChecks, Workflow } from 'lucide-react'
+import { Brain, ClipboardList, GitBranch, ListChecks, Workflow } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useI18n } from '../i18n.js'
@@ -6,18 +6,21 @@ import { NotificationSettingsButton } from '../notifications/NotificationSetting
 import { RemoteAccessButton } from '../remote/RemoteAccessButton.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { APP_VERSION } from '../version.js'
-import { LanguageToggle } from './LanguageToggle.js'
 import { ThemeToggle } from './ThemeToggle.js'
 
 type TopbarProps = {
   actions?: ReactNode
   hideActions?: boolean
-  onToggleTaskGraph?: () => void
-  onToggleMemory?: () => void
-  onToggleWorkflows?: () => void
+  onToggleTaskGraph?: (() => void) | undefined
+  onToggleActivity?: (() => void) | undefined
+  onToggleMemory?: (() => void) | undefined
+  onToggleGit?: (() => void) | undefined
+  onToggleWorkflows?: (() => void) | undefined
   openTaskCount?: number
   taskGraphOpen?: boolean
+  activityOpen?: boolean
   memoryOpen?: boolean
+  gitOpen?: boolean
   workflowsOpen?: boolean
   version?: string
 }
@@ -26,11 +29,15 @@ export const Topbar = ({
   actions,
   hideActions = false,
   onToggleTaskGraph,
+  onToggleActivity,
   onToggleMemory,
+  onToggleGit,
   onToggleWorkflows,
   openTaskCount = 0,
   taskGraphOpen = false,
+  activityOpen = false,
   memoryOpen = false,
+  gitOpen = false,
   workflowsOpen = false,
   version = APP_VERSION,
 }: TopbarProps) => {
@@ -66,6 +73,38 @@ export const Topbar = ({
           <>
             {actions}
             <RemoteAccessButton />
+            {onToggleGit ? (
+              <Tooltip label={t('git.title')}>
+                <button
+                  type="button"
+                  onClick={onToggleGit}
+                  aria-pressed={gitOpen}
+                  aria-label={t('git.title')}
+                  className="topbar-knowledge-button"
+                  data-active={gitOpen ? 'true' : undefined}
+                  data-testid="topbar-git"
+                >
+                  <GitBranch size={13} aria-hidden />
+                  <span>{t('git.title')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
+            {onToggleActivity ? (
+              <Tooltip label={t('activity.title')}>
+                <button
+                  type="button"
+                  onClick={onToggleActivity}
+                  aria-pressed={activityOpen}
+                  aria-label={t('activity.title')}
+                  className="topbar-knowledge-button"
+                  data-active={activityOpen ? 'true' : undefined}
+                  data-testid="topbar-activity"
+                >
+                  <ClipboardList size={13} aria-hidden />
+                  <span>{t('activity.title')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
             {onToggleMemory ? (
               <Tooltip label={t('memory.title')}>
                 <button
@@ -115,7 +154,6 @@ export const Topbar = ({
                 </button>
               </Tooltip>
             ) : null}
-            <LanguageToggle />
             <NotificationSettingsButton />
           </>
         )}

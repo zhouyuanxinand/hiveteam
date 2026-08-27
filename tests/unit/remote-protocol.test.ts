@@ -80,4 +80,21 @@ describe('remote protocol', () => {
     expect(flow.applyAck(5)).toEqual({ resumed: true })
     expect(flow.trySend(5)).toEqual({ ok: true })
   })
+
+  test('waits for cumulative acknowledgement before reserving a payload', async () => {
+    const flow = createFlowController(10, 4)
+    await flow.waitForWindow(10)
+
+    let released = false
+    const waiter = flow.waitForWindow(4).then(() => {
+      released = true
+    })
+    await Promise.resolve()
+    expect(released).toBe(false)
+
+    expect(flow.applyAck(5)).toEqual({ resumed: true })
+    await waiter
+    expect(released).toBe(true)
+    expect(flow.isPaused()).toBe(false)
+  })
 })

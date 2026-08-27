@@ -9,7 +9,8 @@ import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 
 const tempDirs: string[] = []
-const servers: Array<{ close: () => void }> = []
+const servers: Array<{ close: () => Promise<void> }> = []
+const stores: Array<{ close: () => Promise<void> }> = []
 
 const waitFor = async (assertion: () => void, timeoutMs = 1500, intervalMs = 20) => {
   const deadline = Date.now() + timeoutMs
@@ -28,9 +29,12 @@ const waitFor = async (assertion: () => void, timeoutMs = 1500, intervalMs = 20)
   throw lastError
 }
 
-afterEach(() => {
+afterEach(async () => {
   while (servers.length > 0) {
-    servers.pop()?.close()
+    await servers.pop()?.close()
+  }
+  while (stores.length > 0) {
+    await stores.pop()?.close()
   }
 
   for (const dir of tempDirs.splice(0)) {
@@ -60,6 +64,7 @@ describe('team runtime flow (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(store)
     const workspace = store.createWorkspace(workspacePath, 'Alpha')
     const orchestrator = store.getWorkspaceSnapshot(workspace.id).agents[0]
     if (!orchestrator) {
@@ -72,8 +77,8 @@ describe('team runtime flow (unit)', () => {
       args: [workerScript],
     })
     store.configureAgentLaunch(workspace.id, orchestrator.id, {
-      command: '/bin/bash',
-      args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+      command: process.execPath,
+      args: ['-e', 'process.stdin.resume()'],
     })
 
     await store.startAgent(workspace.id, worker.id, {
@@ -87,7 +92,12 @@ describe('team runtime flow (unit)', () => {
     await new Promise<void>((resolve) => {
       app.server.listen(0, '127.0.0.1', () => resolve())
     })
-    servers.push(app.server)
+    servers.push({
+      close: async () => {
+        await store.close()
+        await new Promise<void>((resolve) => app.server.close(() => resolve()))
+      },
+    })
 
     const address = app.server.address()
     if (!address || typeof address === 'string') {
@@ -148,6 +158,7 @@ describe('team runtime flow (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(store)
     const workspace = store.createWorkspace(workspacePath, 'Alpha')
     const orchestrator = store.getWorkspaceSnapshot(workspace.id).agents[0]
     if (!orchestrator) {
@@ -160,8 +171,8 @@ describe('team runtime flow (unit)', () => {
       args: [orchestratorScript],
     })
     store.configureAgentLaunch(workspace.id, worker.id, {
-      command: '/bin/bash',
-      args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+      command: process.execPath,
+      args: ['-e', 'process.stdin.resume()'],
     })
 
     await store.startAgent(workspace.id, orchestrator.id, {
@@ -176,7 +187,12 @@ describe('team runtime flow (unit)', () => {
     await new Promise<void>((resolve) => {
       app.server.listen(0, '127.0.0.1', () => resolve())
     })
-    servers.push(app.server)
+    servers.push({
+      close: async () => {
+        await store.close()
+        await new Promise<void>((resolve) => app.server.close(() => resolve()))
+      },
+    })
 
     const address = app.server.address()
     if (!address || typeof address === 'string') {

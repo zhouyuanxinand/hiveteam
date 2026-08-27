@@ -1,15 +1,28 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 
 const tempDirs: string[] = []
 const originalPath = process.env.PATH
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: PTY output intentionally contains ANSI OSC control sequences.
+const ANSI_OSC_SEQUENCE = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g
+// Keep bracketed-paste start/end markers so the interactive CLI contract can assert them.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: PTY output intentionally contains ANSI CSI control sequences.
+const ANSI_CSI_SEQUENCE_EXCEPT_BRACKETED_PASTE = /\u001b\[(?!200~|201~)[0-?]*[ -/]*[@-~]/g
+
+const stripTerminalControls = (value: string) =>
+  value.replace(ANSI_OSC_SEQUENCE, '').replace(ANSI_CSI_SEQUENCE_EXCEPT_BRACKETED_PASTE, '')
+
+const normalizePtyOutput = (value: string) =>
+  stripTerminalControls(value).replace(/[\r\n\t ]+/g, ' ')
 
 const waitFor = async (assertion: () => void, timeoutMs = 2000, intervalMs = 25) => {
   const deadline = Date.now() + timeoutMs
@@ -78,23 +91,28 @@ describe('team prompt contract', () => {
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      const output = run?.output.replace(/\r\n/g, '\n')
+      const output = stripTerminalControls(run?.output.replace(/\r\n/g, '\n') ?? '')
       expect(output).toContain('@Orchestrator')
-      expect(output?.replace(/\s/g, '')).toContain(
+      expect(output.replace(/\s/g, '')).toContain(
         `你的角色：${worker.description}`.replace(/\s/g, '')
       )
-      expect(output).toContain(`执行 \`team report "<result>" --dispatch ${dispatch.id}\``)
-      expect(output).toContain(`dispatch_id: ${dispatch.id}`)
+      const compactOutput = output.replace(/\s/g, '')
+      expect(compactOutput).toContain(
+        `执行\`teamreport"<result>"--dispatch${dispatch.id}\``.replace(/\s/g, '')
+      )
+      expect(compactOutput).toContain(`dispatch_id:${dispatch.id}`)
       expect(output).not.toContain('--success')
       expect(output).not.toContain('--failed')
       expect(output).toContain('实现登录')
-      expect(output).toContain('<hive-memory context="dispatch">')
-      expect(output).toContain('必须保留现有 session cookie 兼容性')
+      expect(compactOutput).toContain('<hive-memorycontext="dispatch">')
+      expect(compactOutput).toContain('必须保留现有sessioncookie兼容性')
       // Task body is followed by a <hive-system-reminder> tail carrying the
       // dispatch_id-bound report syntax — this is what re-anchors the worker
       // identity after an internal /compact.
-      expect(output).toMatch(/实现登录[\s\S]*<hive-system-reminder>[\s\S]*<\/hive-system-reminder>/)
-      expect(output).toContain(`team report "<result>" --dispatch ${dispatch.id}`)
+      expect(compactOutput).toMatch(
+        /实现登录[\s\S]*<hive-system-reminder>[\s\S]*<\/hive-system-reminder>/
+      )
+      expect(compactOutput).toContain(`teamreport"<result>"--dispatch${dispatch.id}`)
     })
   })
 
@@ -106,9 +124,9 @@ describe('team prompt contract', () => {
     mkdirSync(binDir, { recursive: true })
     tempDirs.push(dataDir)
 
-    const fakeClaude = join(binDir, 'claude')
-    writeFileSync(
-      fakeClaude,
+    writeNodeCli(
+      binDir,
+      'claude',
       [
         '#!/usr/bin/env node',
         "process.stdin.setEncoding('utf8')",
@@ -132,8 +150,7 @@ describe('team prompt contract', () => {
         'process.stdin.resume()',
       ].join('\n')
     )
-    chmodSync(fakeClaude, 0o755)
-    process.env.PATH = `${binDir}:${originalPath ?? ''}`
+    process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`
 
     const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
     stores.push(store)
@@ -154,7 +171,7 @@ describe('team prompt contract', () => {
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('❯ ')
+      expect(run?.output).toContain('❯')
       expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
     }, 4000)
@@ -165,10 +182,12 @@ describe('team prompt contract', () => {
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('\u001b[200~[Hive 系统消息：来自 @Orchestrator 的派单]')
-      expect(run?.output).toContain('实现登录')
-      expect(run?.output).toContain('\u001b[201~')
-      expect(run?.output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
+      const output = normalizePtyOutput(run?.output ?? '')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
+      expect(output).toContain('[Hive 系统消息：来自 @Orchestrator 的派单]')
+      expect(output).toContain('实现登录')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
+      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -180,9 +199,9 @@ describe('team prompt contract', () => {
     mkdirSync(binDir, { recursive: true })
     tempDirs.push(dataDir)
 
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
       [
         '#!/usr/bin/env node',
         "process.stdin.setEncoding('utf8')",
@@ -205,7 +224,6 @@ describe('team prompt contract', () => {
         'process.stdin.resume()',
       ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
 
     const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
     stores.push(store)
@@ -226,7 +244,7 @@ describe('team prompt contract', () => {
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('❯ ')
+      expect(run?.output).toContain('❯')
       expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
     }, 4000)
@@ -237,10 +255,14 @@ describe('team prompt contract', () => {
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
-      expect(run?.output).toContain('\u001b[200~[Hive 系统消息：来自 @Orchestrator 的派单]')
-      expect(run?.output).toContain('实现登录')
-      expect(run?.output).toContain('\u001b[201~')
-      expect(run?.output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+      const output = normalizePtyOutput(run?.output ?? '')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
+      expect(output).toContain('[Hive 系统消息：来自 @Orchestrator 的派单]')
+      expect(output).toContain('实现登录')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
+      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(
+        process.platform === 'win32' ? 1 : 2
+      )
     }, 4000)
   })
 
@@ -252,9 +274,9 @@ describe('team prompt contract', () => {
     mkdirSync(binDir, { recursive: true })
     tempDirs.push(dataDir)
 
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
       [
         '#!/usr/bin/env node',
         "process.stdin.setEncoding('utf8')",
@@ -277,7 +299,6 @@ describe('team prompt contract', () => {
         'process.stdin.resume()',
       ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
 
     const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
     stores.push(store)
@@ -302,8 +323,8 @@ describe('team prompt contract', () => {
 
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
     store.configureAgentLaunch(workspace.id, worker.id, {
-      command: '/bin/bash',
-      args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+      command: process.execPath,
+      args: ['-e', 'process.stdin.resume()'],
     })
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await store.dispatchTaskByWorkerName(workspace.id, 'Alice', 'Report through shell wrapper', {
@@ -316,10 +337,14 @@ describe('team prompt contract', () => {
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
-      expect(run?.output).toContain('\u001b[200~[Hive 系统消息：来自 @Alice 的汇报]')
-      expect(run?.output).toContain('Done from shell-wrapped Claude')
-      expect(run?.output).toContain('\u001b[201~')
-      expect(run?.output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(2)
+      const output = normalizePtyOutput(run?.output ?? '')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
+      expect(output).toContain('[Hive 系统消息：来自 @Alice 的汇报]')
+      expect(output).toContain('Done from shell-wrapped Claude')
+      if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
+      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(
+        process.platform === 'win32' ? 1 : 2
+      )
     }, 4000)
   })
 })

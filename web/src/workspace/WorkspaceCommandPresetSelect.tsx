@@ -150,6 +150,7 @@ export const WorkspaceCommandPresetSelect = ({
         <CliBindingField
           command={selected.command}
           displayName={selected.displayName}
+          installHint={selected.installHint}
           onChange={onStartupCommandChange}
           testId="workspace-cli-binding-path"
           value={startupCommand}

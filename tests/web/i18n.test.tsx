@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { AppProviders } from '../../web/src/AppProviders.js'
@@ -18,37 +18,19 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-describe('UI language switcher', () => {
-  test('switches shell copy to Chinese and persists the choice', () => {
+describe('UI language', () => {
+  test('uses the persisted language without rendering a topbar language switcher', () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh')
     render(
       <AppProviders>
         <Topbar version="0.6.0-alpha.5" />
         <WelcomePane onAddWorkspace={() => {}} />
       </AppProviders>
     )
-
-    expect(screen.getByText('Welcome to HiveTeam')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Switch language to 中文' }))
 
     expect(screen.getByText('欢迎使用 HiveTeam')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /添加第一个 Workspace/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '切换语言到 English' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /切换语言/ })).not.toBeInTheDocument()
     expect(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY)).toBe('zh')
-  })
-
-  test('still switches for the current session when storage is unavailable', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('blocked', 'SecurityError')
-    })
-    render(
-      <AppProviders>
-        <Topbar version="0.6.0-alpha.5" />
-        <WelcomePane onAddWorkspace={() => {}} />
-      </AppProviders>
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Switch language to 中文' }))
-
-    expect(screen.getByText('欢迎使用 HiveTeam')).toBeInTheDocument()
   })
 })

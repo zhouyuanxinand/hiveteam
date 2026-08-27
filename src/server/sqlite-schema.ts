@@ -18,8 +18,11 @@ import { applySchemaVersion20 } from './sqlite-schema-v20.js'
 import { applySchemaVersion21 } from './sqlite-schema-v21.js'
 import { applySchemaVersion22 } from './sqlite-schema-v22.js'
 import { applySchemaVersion23 } from './sqlite-schema-v23.js'
+import { applySchemaVersion24 } from './sqlite-schema-v24.js'
+import { applySchemaVersion25 } from './sqlite-schema-v25.js'
+import { applySchemaVersion26 } from './sqlite-schema-v26.js'
 
-export const CURRENT_SCHEMA_VERSION = 23
+export const CURRENT_SCHEMA_VERSION = 26
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -132,6 +135,18 @@ export const initializeRuntimeDatabase = (db: Database) => {
 
     CREATE INDEX IF NOT EXISTS idx_report_outbox_pending
       ON report_outbox (workspace_id, target_agent_id, delivered_at, created_at);
+
+    -- Keep delivery failures separate from the stable dispatch ledger schema.
+    -- The original queued/submitted row remains available for replay.
+    CREATE TABLE IF NOT EXISTS dispatch_delivery_failures (
+      dispatch_id TEXT PRIMARY KEY,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL,
+      last_attempt_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dispatch_delivery_failures_attempted
+      ON dispatch_delivery_failures (last_attempt_at);
   `)
 
   const workspaceColumns = new Set(
@@ -321,5 +336,26 @@ export const initializeRuntimeDatabase = (db: Database) => {
     // receives the compatible memory tables without depending on official
     // later-version migrations.
     applySchemaVersion23(db)
+  }
+
+  if (!appliedVersions.has(24)) {
+    applySchemaVersion24(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(24, Date.now())
+  } else {
+    applySchemaVersion24(db)
+  }
+
+  if (!appliedVersions.has(25)) {
+    applySchemaVersion25(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(25, Date.now())
+  } else {
+    applySchemaVersion25(db)
+  }
+
+  if (!appliedVersions.has(26)) {
+    applySchemaVersion26(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(26, Date.now())
+  } else {
+    applySchemaVersion26(db)
   }
 }

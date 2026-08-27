@@ -34,6 +34,7 @@ export const finishAgentRun = (
 
 export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: PtyOutputBus) => {
   let stdinClosed = false
+  let stopRequested = false
   let forceKillTimer: ReturnType<typeof setTimeout> | undefined
   const resolveProcessGroupId = () => {
     if (process.platform === 'win32' || pty.pid <= 0) return null
@@ -51,6 +52,53 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   }
   const processGroupId = resolveProcessGroupId()
   const stopped = () => run.status === 'exited' || run.status === 'error'
+  const isAlreadyKilledPtyError = (error: unknown) =>
+    process.platform === 'win32' &&
+    /pty seems to have been killed already|pty is not active|already exited/i.test(
+      error instanceof Error ? error.message : String(error)
+    )
+  const ptyErrorEmitter = pty as IPty & {
+    on?: (event: 'error', listener: (error: unknown) => void) => unknown
+  }
+  const ptyInputSocket = (
+    pty as unknown as {
+      _agent?: {
+        inSocket?: {
+          on?: (event: 'error', listener: (error: unknown) => void) => unknown
+        }
+      }
+    }
+  )._agent?.inSocket
+  if (process.platform === 'win32' && typeof ptyErrorEmitter.on === 'function') {
+    // node-pty's WindowsTerminal throws from its internal socket error
+    // handler unless the terminal has at least two error listeners. A PTY
+    // that Hive has just stopped can report this asynchronously, after the
+    // synchronous kill() call has already returned. Consume that benign
+    // teardown error so it cannot become an uncaught exception.
+    ptyErrorEmitter.on('error', (error) => {
+      if (!isAlreadyKilledPtyError(error)) {
+        console.warn('[hive] PTY error during Windows terminal teardown', {
+          error: error instanceof Error ? error.message : String(error),
+          runId: run.runId,
+        })
+      }
+    })
+    ptyErrorEmitter.on('error', () => {})
+  }
+  if (process.platform === 'win32' && typeof ptyInputSocket?.on === 'function') {
+    // Windows node-pty writes through a private input net.Socket. A write
+    // that was queued just before the child exits can complete after the
+    // socket is closed and emit `write EOF` on that socket rather than on the
+    // public IPty event emitter. Always consume the expected teardown error so
+    // it cannot surface as an uncaught exception; unexpected errors remain
+    // visible in the runtime log.
+    ptyInputSocket.on('error', (error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/write EOF|write EPIPE|stream was destroyed|socket is closed/i.test(message)) {
+        console.warn('[hive] PTY input socket error', { error: message, runId: run.runId })
+      }
+    })
+  }
   const ignoreMissingProcess = (error: unknown) => {
     if ((error as NodeJS.ErrnoException | null)?.code !== 'ESRCH') throw error
   }
@@ -58,6 +106,16 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
     const code = (error as NodeJS.ErrnoException | null)?.code
     if (code !== 'ESRCH' && code !== 'EPERM') throw error
   }
+  const terminateWindowsChild = () => {
+    if (process.platform !== 'win32' || pty.pid <= 0) return
+    try {
+      process.kill(pty.pid, 'SIGKILL')
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code
+      if (code !== 'ESRCH' && code !== 'EPERM') throw error
+    }
+  }
+  const isWindowsPtyReady = () => (pty as IPty & { _isReady?: boolean })._isReady !== false
   const killProcessGroup = (signal: NodeJS.Signals) => {
     if (process.platform === 'win32' || processGroupId === null) return
     try {
@@ -68,10 +126,16 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   }
   const killPty = (signal: NodeJS.Signals) => {
     try {
-      if (process.platform === 'win32') pty.kill()
-      else pty.kill(signal)
+      if (process.platform === 'win32') {
+        // node-pty queues kill() until the Winpty data pipe becomes ready.
+        // If shutdown happens before that point, a naturally closing child can
+        // make the deferred kill throw asynchronously. Terminate the concrete
+        // child instead; the Winpty agent then closes its pipes normally.
+        if (isWindowsPtyReady()) pty.kill()
+        else terminateWindowsChild()
+      } else pty.kill(signal)
     } catch (error) {
-      ignoreMissingProcess(error)
+      if (!isAlreadyKilledPtyError(error)) ignoreMissingProcess(error)
     }
     killProcessGroup(signal)
   }
@@ -89,10 +153,13 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
     forceKillTimer = setTimeout(() => {
       forceKillTimer = undefined
       try {
-        if (process.platform === 'win32') pty.kill()
+        // Never enqueue a second Windows pty.kill(). The first call may still
+        // be deferred inside node-pty and duplicate deferred kills produce
+        // "Pty seems to have been killed already" as an uncaught exception.
+        if (process.platform === 'win32') terminateWindowsChild()
         else pty.kill('SIGKILL')
       } catch (error) {
-        ignoreMissingProcess(error)
+        if (!isAlreadyKilledPtyError(error)) ignoreMissingProcess(error)
       }
       killProcessGroup('SIGKILL')
     }, FORCE_KILL_DELAY_MS)
@@ -117,6 +184,13 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
         cleanupProcessGroup()
         return
       }
+      // Stop can be requested from more than one lifecycle path (for example
+      // worker deletion and runtime shutdown racing each other). node-pty's
+      // Windows backend reports a second kill asynchronously as an uncaught
+      // "Pty seems to have been killed already" error, so make the operation
+      // idempotent while the first stop is still being torn down.
+      if (stopRequested) return
+      stopRequested = true
       killPty('SIGTERM')
       stdinClosed = true
       scheduleForceKill()
@@ -124,6 +198,20 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
     write(text) {
       if (stdinClosed || run.status === 'exited' || run.status === 'error') {
         throw new Error(`PTY is not active for run: ${run.runId}`)
+      }
+      if (
+        process.platform === 'win32' &&
+        process.env.HIVE_TEST_PTY_BACKEND === 'winpty' &&
+        typeof text === 'string' &&
+        text.endsWith('\n') &&
+        !text.endsWith('\r\n')
+      ) {
+        // Winpty exposes a Windows console input buffer: a bare LF is not
+        // treated as Enter by line-oriented child CLIs. Keep production input
+        // byte-for-byte intact and only normalize the test backend's final
+        // line terminator.
+        pty.write(`${text.slice(0, -1)}\r\n`)
+        return
       }
       pty.write(text)
     },
@@ -140,6 +228,9 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   pty.onExit((event) => {
     stdinClosed = true
     cleanupProcessGroup()
-    finishAgentRun(run, event.exitCode, ptyOutputBus)
+    // Winpty may report null or a forced-termination code when Hive closes a
+    // healthy agent. An explicit Hive stop is a clean lifecycle transition;
+    // only spontaneous non-zero exits should mark the run as failed.
+    finishAgentRun(run, stopRequested ? 0 : event.exitCode, ptyOutputBus)
   })
 }

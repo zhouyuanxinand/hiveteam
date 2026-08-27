@@ -2,6 +2,13 @@ import '@testing-library/jest-dom/vitest'
 
 import { afterEach } from 'vitest'
 
+// node-pty's ConPTY cleanup helper calls AttachConsole from a forked process.
+// Vitest is not attached to a Windows console, so use winpty for real-PTY
+// integration tests; production launches retain ConPTY by default.
+if (process.platform === 'win32' && process.env.HIVE_TEST_PTY_BACKEND === undefined) {
+  process.env.HIVE_TEST_PTY_BACKEND = 'winpty'
+}
+
 // Node 25 ships an experimental localStorage that overrides jsdom's implementation
 // but lacks standard methods (setItem, getItem, clear, removeItem). Polyfill when needed.
 if (typeof window !== 'undefined' && typeof window.localStorage?.setItem !== 'function') {

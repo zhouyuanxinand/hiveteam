@@ -11,13 +11,17 @@ import {
 type MainLayoutProps = {
   children: ReactNode
   hideTopbarActions?: boolean
-  onToggleTaskGraph?: () => void
-  onToggleMemory?: () => void
-  onToggleWorkflows?: () => void
+  onToggleTaskGraph?: (() => void) | undefined
+  onToggleActivity?: (() => void) | undefined
+  onToggleMemory?: (() => void) | undefined
+  onToggleGit?: (() => void) | undefined
+  onToggleWorkflows?: (() => void) | undefined
   openTaskCount?: number
   sidebar: ReactNode
   taskGraphOpen?: boolean
+  activityOpen?: boolean
   memoryOpen?: boolean
+  gitOpen?: boolean
   workflowsOpen?: boolean
   topbarActions?: ReactNode
 }
@@ -26,12 +30,16 @@ export const MainLayout = ({
   children,
   hideTopbarActions = false,
   onToggleTaskGraph,
+  onToggleActivity,
   onToggleMemory,
+  onToggleGit,
   onToggleWorkflows,
   openTaskCount = 0,
   sidebar,
   taskGraphOpen = false,
+  activityOpen = false,
   memoryOpen = false,
+  gitOpen = false,
   workflowsOpen = false,
   topbarActions,
 }: MainLayoutProps) => {
@@ -47,11 +55,15 @@ export const MainLayout = ({
         actions={topbarActions}
         hideActions={hideTopbarActions}
         onToggleTaskGraph={onToggleTaskGraph}
+        onToggleActivity={onToggleActivity}
         onToggleMemory={onToggleMemory}
+        onToggleGit={onToggleGit}
         onToggleWorkflows={onToggleWorkflows}
         openTaskCount={openTaskCount}
         taskGraphOpen={taskGraphOpen}
+        activityOpen={activityOpen}
         memoryOpen={memoryOpen}
+        gitOpen={gitOpen}
         workflowsOpen={workflowsOpen}
       />
       <div className="main-layout-body flex min-h-0 flex-1">

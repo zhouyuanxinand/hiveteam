@@ -9,6 +9,7 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 
 const tempDirs: string[] = []
+const stores: Array<{ close: () => Promise<void> }> = []
 
 const waitFor = async (assertion: () => void, timeoutMs = 1500, intervalMs = 20) => {
   const deadline = Date.now() + timeoutMs
@@ -27,7 +28,8 @@ const waitFor = async (assertion: () => void, timeoutMs = 1500, intervalMs = 20)
   throw lastError
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(stores.splice(0).map((store) => store.close()))
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true })
   }
@@ -56,6 +58,7 @@ describe('agent lifecycle (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(firstStore)
     const workspace = firstStore.createWorkspace(workspacePath, 'Alpha')
     const orchestrator = firstStore.getWorkspaceSnapshot(workspace.id).agents[0]
     if (!orchestrator) {
@@ -71,6 +74,7 @@ describe('agent lifecycle (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(secondStore)
 
     const run = await secondStore.startAgent(workspace.id, orchestrator.id, {
       hivePort: '4010',
@@ -87,7 +91,8 @@ describe('agent lifecycle (unit)', () => {
     expect(liveRun.output).toContain(`PROJECT=${workspace.id}`)
     expect(liveRun.output).toContain(`AGENT=${orchestrator.id}`)
     expect(liveRun.output).toContain('PATH=')
-    expect(liveRun.output).toContain('/dist/bin')
+    const expectedBinDir = process.platform === 'win32' ? 'dist\\bin' : '/dist/bin'
+    expect(liveRun.output).toContain(expectedBinDir)
 
     expect(persistedRun).toMatchObject({
       agentId: orchestrator.id,
@@ -112,6 +117,7 @@ describe('agent lifecycle (unit)', () => {
       agentManager: createAgentManager(),
       dataDir,
     })
+    stores.push(store)
     const workspace = store.createWorkspace(workspacePath, 'Alpha')
     const orchestrator = store.getWorkspaceSnapshot(workspace.id).agents[0]
     if (!orchestrator) {

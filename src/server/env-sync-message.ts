@@ -2,6 +2,7 @@ import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 
 import { getHiveTeamRules } from './hive-team-guidance.js'
 import type { RecoveryMessage } from './message-log-store.js'
+import { wrapUntrustedPromptData } from './prompt-safety.js'
 import { wrapSystemMessage } from './system-message.js'
 import { TASKS_RELATIVE_PATH } from './tasks-file.js'
 
@@ -22,7 +23,12 @@ const formatRestartWindow = (messages: RecoveryMessage[]) => {
     }
   )
   if (sends.length === 0) return ['- 重启期间未派新单']
-  return sends.slice(-5).map((message) => `- send -> ${message.to}: ${message.text}`)
+  return sends
+    .slice(-5)
+    .map(
+      (message) =>
+        `- send -> ${message.to}:\n${wrapUntrustedPromptData('dispatch-task', message.text)}`
+    )
 }
 
 export const buildEnvSyncMessage = ({
@@ -45,7 +51,9 @@ export const buildEnvSyncMessage = ({
       '- 现有 worker:',
       ...formatWorkers(workers),
       `- ${TASKS_RELATIVE_PATH} 当前内容:`,
-      tasksContent.slice(0, TASKS_HEAD_LIMIT) || '(空)',
+      tasksContent.trim()
+        ? wrapUntrustedPromptData('workflow', tasksContent.slice(0, TASKS_HEAD_LIMIT))
+        : '(空)',
       ...formatRestartWindow(restartWindowMessages),
       agent.role === 'orchestrator' ? '- Hive worker 派单规则:' : '- Hive worker 边界:',
       ...getHiveTeamRules(agent).map((rule) => `  - ${rule}`),

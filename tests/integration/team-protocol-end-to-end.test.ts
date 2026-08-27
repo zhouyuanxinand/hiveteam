@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 
 const tempDirs: string[] = []
 
@@ -98,8 +99,8 @@ describe('team protocol end to end', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${orchScript}"`],
+            command: process.execPath,
+            args: [orchScript],
           }),
         }
       )
@@ -111,8 +112,8 @@ describe('team protocol end to end', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${workerScript}"`],
+            command: process.execPath,
+            args: [workerScript],
           }),
         }
       )
@@ -162,8 +163,9 @@ describe('team protocol end to end', () => {
           { headers: { cookie } }
         )
         const body = (await workerRunResponse.json()) as { output: string }
-        expect(body.output).toContain(`dispatch_id: ${sendBody.dispatch_id}`)
-        expect(body.output).toContain(`team report "<result>" --dispatch ${sendBody.dispatch_id}`)
+        const output = normalizePtyText(body.output)
+        expect(output).toContain(`dispatch_id: ${sendBody.dispatch_id}`)
+        expect(output).toContain(`team report "<result>" --dispatch ${sendBody.dispatch_id}`)
       })
 
       const activeDispatchesResponse = await fetch(

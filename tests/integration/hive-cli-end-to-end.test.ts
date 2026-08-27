@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -47,11 +48,11 @@ describe('hive cli end to end', () => {
       throw new Error('occupied server did not bind to an inet port')
     }
 
-    const modulePath = new URL('../../src/cli/hive.ts', import.meta.url)
+    const modulePath = fileURLToPath(new URL('../../src/cli/hive.ts', import.meta.url))
     const { spawn } = await import('node:child_process')
     const processHandle = spawn(
       process.execPath,
-      ['--import', 'tsx', modulePath.pathname, '--port', String(address.port)],
+      ['--import', 'tsx', modulePath, '--port', String(address.port)],
       {
         env: { ...process.env, HIVE_DATA_DIR: dataDir },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -190,8 +191,8 @@ describe('hive cli end to end', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${scriptPath}"`],
+            command: process.execPath,
+            args: [scriptPath],
           }),
         }
       )
@@ -262,15 +263,11 @@ describe('hive cli end to end', () => {
     delete childEnv.HIVE_ORCHESTRATOR_ARGS_JSON
     delete childEnv.HIVE_ORCHESTRATOR_COMMAND
     const { spawn } = await import('node:child_process')
-    const modulePath = new URL('../../src/cli/hive.ts', import.meta.url)
-    const processHandle = spawn(
-      process.execPath,
-      ['--import', 'tsx', modulePath.pathname, '--port', '0'],
-      {
-        env: { ...childEnv, HOME: homeDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    )
+    const modulePath = fileURLToPath(new URL('../../src/cli/hive.ts', import.meta.url))
+    const processHandle = spawn(process.execPath, ['--import', 'tsx', modulePath, '--port', '0'], {
+      env: { ...childEnv, HOME: homeDir, USERPROFILE: homeDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     let stdout = ''
     processHandle.stdout.on('data', (chunk) => {
       stdout += chunk.toString()

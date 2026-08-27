@@ -1,10 +1,10 @@
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
+import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -89,11 +89,11 @@ const writeEchoAgent = (workspacePath: string, filename: string) => {
 const writeResumableClaudeEcho = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'claude')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'claude',
     `#!/usr/bin/env node
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -105,13 +105,16 @@ let pasteOpen = false
 const args = process.argv.slice(2)
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '11111111-1111-4111-8111-111111111111'
-const encoded = process.cwd().replace(/[\\/:\\s]/g, '-')
+const encoded = [...process.cwd()]
+  .map((char) => [32, 47, 58, 92].includes(char.charCodeAt(0)) ? '-' : char)
+  .join('')
 const projectsRoot = process.env.HIVE_CLAUDE_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects')
 const projectDir = join(projectsRoot, encoded)
 const failMarker = join(process.cwd(), '.fail-next-resume')
 mkdirSync(projectDir, { recursive: true })
 const sessionPath = join(projectDir, sessionId + '.jsonl')
-writeFileSync(sessionPath, '{}\\n')
+const bindingMarker = 'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID
+writeFileSync(sessionPath, JSON.stringify({ message: { content: bindingMarker } }) + '\\n')
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
   process.stdout.write('STDIN:' + chunk)
@@ -131,6 +134,7 @@ process.stdin.on('data', (chunk) => {
 process.stdout.write('ARGS:' + args.join(' ') + '\\n')
 if (args.includes('--resume') && existsSync(failMarker)) {
   process.stdout.write('RESUME_FAIL\\n')
+  if (existsSync(sessionPath)) unlinkSync(sessionPath)
   setTimeout(() => process.exit(1), 100)
 } else {
   process.stdout.write('❯ ')
@@ -138,7 +142,6 @@ if (args.includes('--resume') && existsSync(failMarker)) {
 }
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
@@ -206,7 +209,11 @@ const startWorkerViaHttp = async (
 const getRunViaHttp = async (baseUrl: string, cookie: string, runId: string) => {
   const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, { headers: { cookie } })
   expect(response.status).toBe(200)
-  return (await response.json()) as { output: string; status: string }
+  const body = (await response.json()) as { output: string; status: string }
+  return {
+    ...body,
+    output: process.platform === 'win32' ? normalizePtyText(body.output) : body.output,
+  }
 }
 
 afterEach(() => {
@@ -318,7 +325,9 @@ describe('Layer B fallback integration', () => {
     try {
       const cookie = await getUiCookie(server.baseUrl)
       const workspace = await createWorkspaceViaHttp(server.baseUrl, cookie, workspacePath)
-      const alice = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Alice')
+      // Layer B recovery is an orchestrator concern. An idle worker must not
+      // receive a synthetic conversation without a submitted dispatch.
+      const alice = { id: orchestratorId(workspace.id) }
       const bob = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Bob', 'tester')
 
       await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/tasks`, {
@@ -478,7 +487,9 @@ describe('Layer B fallback integration', () => {
     try {
       const cookie = await getUiCookie(server.baseUrl)
       const workspace = await createWorkspaceViaHttp(server.baseUrl, cookie, workspacePath)
-      const alice = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Alice')
+      // Keep this recovery fallback on the orchestrator path; worker starts
+      // without an assignment intentionally remain at the native prompt.
+      const alice = { id: orchestratorId(workspace.id) }
       const bob = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Bob', 'tester')
       const bobScript = writeEchoAgent(workspacePath, 'bob-passive.js')
       const sessionId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
@@ -512,7 +523,9 @@ describe('Layer B fallback integration', () => {
       })
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
-        expect(state.output).toContain('[Pasted text #1 +1 lines]')
+        // An idle worker must stay at its native prompt on the first start;
+        // Layer B input is only injected after the failed resume below.
+        expect(state.output).toContain('ARGS:')
       })
       server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
       await waitFor(async () => {
@@ -538,8 +551,10 @@ describe('Layer B fallback integration', () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, thirdRun.runId)
         expect(state.status).toBe('running')
         expect(state.output).not.toContain('--resume')
-        expect(state.output).toContain('STDIN:\u001b[200~[Hive 系统消息：你是 Alpha 的')
-        expect(state.output).toContain('\u001b[201~')
+        if (process.platform !== 'win32') {
+          expect(state.output).toContain('STDIN:\u001b[200~[Hive 系统消息：你是 Alpha 的')
+          expect(state.output).toContain('\u001b[201~')
+        }
         expect(state.output).toContain('recover after failed resume')
         expect(state.output).toContain('恢复后检查 Layer B 摘要')
         expect(state.output).toContain('Bob')

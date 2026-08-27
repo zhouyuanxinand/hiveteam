@@ -17,11 +17,13 @@ import {
   CONN_SALT_STREAM_ID,
   createFlowController,
   createStreamMachine,
+  decodeAckPayload,
   decodeConnSalt,
   decodeHeader,
   decodeHttpData,
   decodeOpenPayload,
   decodeWsMessage,
+  encodeAckPayload,
   encodeConnSalt,
   encodeHeader,
   encodeHttpBodyChunk,
@@ -114,13 +116,24 @@ type StreamState = {
   http?: LoopbackHttpRequest
   ws?: LoopbackWsConnection
   ioAckControl?: LoopbackWsConnection
-  pendingSelfAck: number
+  outboundQueue: OutboundFrame[]
+  outboundDrainActive: boolean
+  pendingOutboundBytes: number
+}
+
+type OutboundFrame = {
+  closeAfterSend?: boolean
+  kind: (typeof FrameKind)[keyof typeof FrameKind]
+  onSent?: () => void
+  payload: Uint8Array
 }
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 const TERMINAL_IO_RE = /^\/ws\/terminal\/([^/?]+)\/io$/
 const LOOPBACK_WS_PENDING_BYTES_LIMIT = 256 * 1024
+const LOOPBACK_STREAM_PENDING_BYTES_LIMIT = 4 * 1024 * 1024
+const LOOPBACK_HTTP_BODY_CHUNK = 48 * 1024
 
 const bytesEqual = (left: Uint8Array, right: Uint8Array) =>
   left.length === right.length && left.every((value, index) => value === right[index])
@@ -344,6 +357,9 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
     const stream = streams.get(key)
     if (!stream) return
     stream.closed = true
+    stream.outboundQueue.length = 0
+    stream.pendingOutboundBytes = 0
+    stream.sendFlow.cancel(new Error('remote stream closed'))
     if (stream.http) stream.http.abort()
     if (stream.ws) mode === 'close' ? stream.ws.onClose() : stream.ws.abort()
     if (stream.ioAckControl)
@@ -365,6 +381,90 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
       textEncoder.encode(JSON.stringify({ type: 'output_ack', bytes: count })),
       true
     )
+  }
+
+  const drainOutbound = (
+    state: DeviceState,
+    streamId: number,
+    key: string,
+    stream: StreamState
+  ) => {
+    if (stream.outboundDrainActive) return
+    stream.outboundDrainActive = true
+    void (async () => {
+      while (!stream.closed) {
+        const item = stream.outboundQueue[0]
+        if (!item) return
+        if (item.kind === FrameKind.Data) {
+          if (!stream.sendFlow.trySend(item.payload.length).ok) {
+            await stream.sendFlow.waitForWindow(item.payload.length)
+          }
+        }
+        if (stream.closed) return
+        sendFrame(state, item.kind, streamId, item.payload)
+        stream.outboundQueue.shift()
+        if (item.kind === FrameKind.Data) {
+          stream.pendingOutboundBytes = Math.max(
+            0,
+            stream.pendingOutboundBytes - item.payload.length
+          )
+        }
+        item.onSent?.()
+        if (item.closeAfterSend) {
+          if (stream.transport === 'http') {
+            ctx.audit.enqueue({
+              action: 'http',
+              result: 'ok',
+              endpoint: stream.path,
+              deviceId: state.session.deviceId,
+            })
+          }
+          removeStream(key, 'close')
+          return
+        }
+      }
+    })()
+      .catch((error: unknown) => {
+        if (stream.closed) return
+        try {
+          sendReset(state, streamId, ResetCode.InternalError)
+        } catch {
+          // The gateway socket may already be gone.
+        }
+        removeStream(key)
+        console.error('[hive] remote loopback output failed', error)
+      })
+      .finally(() => {
+        stream.outboundDrainActive = false
+        if (!stream.closed && stream.outboundQueue.length > 0) {
+          drainOutbound(state, streamId, key, stream)
+        }
+      })
+  }
+
+  const enqueueOutbound = (
+    state: DeviceState,
+    streamId: number,
+    key: string,
+    stream: StreamState,
+    frame: OutboundFrame
+  ) => {
+    if (stream.closed) return
+    if (
+      frame.kind === FrameKind.Data &&
+      stream.pendingOutboundBytes + frame.payload.length > LOOPBACK_STREAM_PENDING_BYTES_LIMIT
+    ) {
+      try {
+        sendReset(state, streamId, ResetCode.InternalError)
+      } catch {
+        // The gateway socket may already be gone.
+      }
+      removeStream(key)
+      return
+    }
+    stream.outboundQueue.push(frame)
+    if (frame.kind === FrameKind.Data) stream.pendingOutboundBytes += frame.payload.length
+    drainOutbound(state, streamId, key, stream)
   }
 
   const resolveAndOpen = (
@@ -463,7 +563,9 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
       recvFlow: createFlowController(),
       sendFlow: createFlowController(),
       closed: false,
-      pendingSelfAck: 0,
+      outboundQueue: [],
+      outboundDrainActive: false,
+      pendingOutboundBytes: 0,
     }
     stream.machine.onRecv(FrameKind.Open)
     streams.set(key, stream)
@@ -479,30 +581,32 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
         {
           onHead: (head) => {
             if (stream.closed) return
-            sendFrame(
-              state,
-              FrameKind.Data,
-              streamId,
-              encodeHttpHead({
+            enqueueOutbound(state, streamId, key, stream, {
+              kind: FrameKind.Data,
+              payload: encodeHttpHead({
                 status: head.status,
                 headers: sanitizeTunnelResponseHeaders(head.headers),
-              })
-            )
+              }),
+            })
           },
           onBody: (chunk) => {
-            if (!stream.closed)
-              sendFrame(state, FrameKind.Data, streamId, encodeHttpBodyChunk(chunk))
+            if (stream.closed) return
+            for (let offset = 0; offset < chunk.length; offset += LOOPBACK_HTTP_BODY_CHUNK) {
+              enqueueOutbound(state, streamId, key, stream, {
+                kind: FrameKind.Data,
+                payload: encodeHttpBodyChunk(
+                  chunk.slice(offset, offset + LOOPBACK_HTTP_BODY_CHUNK)
+                ),
+              })
+            }
           },
           onEnd: () => {
             if (stream.closed) return
-            sendFrame(state, FrameKind.End, streamId, new Uint8Array())
-            ctx.audit.enqueue({
-              action: 'http',
-              result: 'ok',
-              endpoint: stream.path,
-              deviceId: state.session.deviceId,
+            enqueueOutbound(state, streamId, key, stream, {
+              closeAfterSend: true,
+              kind: FrameKind.End,
+              payload: new Uint8Array(),
             })
-            removeStream(key, 'close')
           },
           onError: () => {
             if (stream.closed) return
@@ -540,19 +644,19 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
           }),
         onMessage: (data, isText) => {
           if (stream.closed) return
-          const fits = stream.sendFlow.trySend(data.length).ok
-          sendFrame(state, FrameKind.Data, streamId, encodeWsMessage(data, isText))
-          if (fits) {
-            sendOutputAck(stream, data.length + stream.pendingSelfAck)
-            stream.pendingSelfAck = 0
-          } else {
-            stream.pendingSelfAck += data.length
-          }
+          enqueueOutbound(state, streamId, key, stream, {
+            kind: FrameKind.Data,
+            onSent: () => sendOutputAck(stream, data.length),
+            payload: encodeWsMessage(data, isText),
+          })
         },
         onClose: () => {
           if (stream.closed) return
-          sendFrame(state, FrameKind.End, streamId, new Uint8Array())
-          removeStream(key, 'close')
+          enqueueOutbound(state, streamId, key, stream, {
+            closeAfterSend: true,
+            kind: FrameKind.End,
+            payload: new Uint8Array(),
+          })
         },
         onError: () => {
           if (stream.closed) return
@@ -571,12 +675,6 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
       removeStream(streamKey(state.session.deviceId, streamId))
       return
     }
-    const ack = stream.recvFlow.onConsume(plaintext.length)
-    if (ack) {
-      const payload = new Uint8Array(4)
-      new DataView(payload.buffer).setUint32(0, ack.ackCumulative)
-      sendFrame(state, FrameKind.Ack, streamId, payload)
-    }
     try {
       if (stream.transport === 'http') {
         const data = decodeHttpData(plaintext)
@@ -593,6 +691,8 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
         })
         stream.ws?.onData(message.data, message.isText)
       }
+      const ack = stream.recvFlow.onConsume(plaintext.length)
+      if (ack) sendFrame(state, FrameKind.Ack, streamId, encodeAckPayload(ack.ackCumulative))
     } catch {
       sendReset(state, streamId, ResetCode.ProtocolError)
       removeStream(streamKey(state.session.deviceId, streamId))
@@ -609,17 +709,14 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
   }
 
   const onAckFrame = (state: DeviceState, streamId: number, plaintext: Uint8Array) => {
-    const stream = streams.get(streamKey(state.session.deviceId, streamId))
-    if (!stream || plaintext.length < 4) return
-    const cumulative = new DataView(
-      plaintext.buffer,
-      plaintext.byteOffset,
-      plaintext.byteLength
-    ).getUint32(0)
-    const resumed = stream.sendFlow.applyAck(cumulative).resumed
-    if (resumed && stream.pendingSelfAck > 0) {
-      sendOutputAck(stream, stream.pendingSelfAck)
-      stream.pendingSelfAck = 0
+    const key = streamKey(state.session.deviceId, streamId)
+    const stream = streams.get(key)
+    if (!stream) return
+    try {
+      stream.sendFlow.applyAck(decodeAckPayload(plaintext))
+    } catch {
+      sendReset(state, streamId, ResetCode.ProtocolError)
+      removeStream(key)
     }
   }
 

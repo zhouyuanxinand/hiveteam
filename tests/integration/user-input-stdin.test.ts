@@ -72,8 +72,8 @@ describe('user input stdin injection', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `"${process.execPath}" "${orchScript}"`],
+          command: process.execPath,
+          args: [orchScript],
         }),
       })
 

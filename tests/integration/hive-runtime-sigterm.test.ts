@@ -88,8 +88,8 @@ describeUnixOnly('hive runtime SIGTERM shutdown', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
-        command: '/bin/bash',
-        args: ['-lc', `exec node -e "setInterval(() => {}, 1000)" -- ${marker}`],
+        command: process.execPath,
+        args: ['-e', 'setInterval(() => {}, 1000)', '--', marker],
       }),
     })
 

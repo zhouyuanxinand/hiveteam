@@ -9,30 +9,58 @@ import { runHiveCommand } from '../../src/cli/hive.js'
 import { runTeamCommand } from '../../src/cli/team.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal control sequences are the value under test.
+const TERMINAL_OSC_SEQUENCE = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/gu
+// biome-ignore lint/suspicious/noControlCharactersInRegex: terminal control sequences are the value under test.
+const TERMINAL_CSI_SEQUENCE = /\u001b\[[0-?]*[ -/]*[@-~]/gu
+
+const stripTerminalControls = (value: string) =>
+  value.replace(TERMINAL_OSC_SEQUENCE, '').replace(TERMINAL_CSI_SEQUENCE, '')
+
+const normalizeTerminalText = (value: string) => stripTerminalControls(value).replace(/\r?\n/g, '')
+
+const compactTerminalText = (value: string) => stripTerminalControls(value).replace(/\s/g, '')
+
 const runTeamBinaryWithStdin = (
   args: string[],
   env: Record<string, string>,
   stdinContent: string
 ): Promise<{ code: number | null; stderr: string; stdout: string }> =>
   new Promise((resolve, reject) => {
-    const child = spawn('node_modules/.bin/tsx', ['bin/team', ...args], {
+    const child = spawn(process.execPath, ['--import', 'tsx', 'bin/team', ...args], {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-    child.on('error', reject)
-    child.on('close', (code) =>
+    let settled = false
+    const rejectOnce = (error: Error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+    const resolveOnce = (code: number | null) => {
+      if (settled) return
+      settled = true
       resolve({
         code,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderr: Buffer.concat(stderr).toString('utf8'),
       })
-    )
-    child.stdin.write(stdinContent)
-    child.stdin.end()
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.on('error', (error) => rejectOnce(error))
+    child.stdin.on('error', (error) => {
+      // A short-lived CLI can exit before Windows finishes flushing the
+      // inherited stdin pipe (notably for invalid-argument tests). This is
+      // a normal child-process race; the exit code and stderr remain useful.
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EPIPE' && code !== 'EOF') rejectOnce(error)
+    })
+    child.on('close', (code) => resolveOnce(code))
+    child.stdin.end(stdinContent)
   })
 
 const tempDirs: string[] = []
@@ -99,8 +127,8 @@ describe('team report cli', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `"${process.execPath}" "${orchScript}"`],
+          command: process.execPath,
+          args: [orchScript],
         }),
       })
       const startResponse = await fetch(
@@ -117,8 +145,8 @@ describe('team report cli', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+          command: process.execPath,
+          args: ['-e', 'process.stdin.resume()'],
         }),
       })
       await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/start`, {
@@ -142,8 +170,9 @@ describe('team report cli', () => {
           headers: { cookie: uiCookie },
         })
         const body = (await runResponse.json()) as { output: string }
-        expect(body.output).toContain('[Hive 系统消息：来自 @Alice 的状态更新]')
-        expect(body.output).toContain('Alice 已接入 workspace，等待派单')
+        const output = normalizeTerminalText(body.output)
+        expect(output).toContain('[Hive 系统消息：来自 @Alice 的状态更新]')
+        expect(output).toContain('Alice 已接入 workspace，等待派单')
       })
       expect(hive.store.listDispatches(workspace.id)).toEqual([])
       expect(hive.store.listMessagesForRecovery(workspace.id, 0)).toContainEqual(
@@ -208,8 +237,8 @@ describe('team report cli', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `"${process.execPath}" "${orchScript}"`],
+          command: process.execPath,
+          args: [orchScript],
         }),
       })
       const startResponse = await fetch(
@@ -229,8 +258,8 @@ describe('team report cli', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+            command: process.execPath,
+            args: ['-e', 'process.stdin.resume()'],
           }),
         }
       )
@@ -321,8 +350,8 @@ describe('team report cli', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `"${process.execPath}" "${orchScript}"`],
+          command: process.execPath,
+          args: [orchScript],
         }),
       })
       const startResponse = await fetch(
@@ -341,8 +370,8 @@ describe('team report cli', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+            command: process.execPath,
+            args: ['-e', 'process.stdin.resume()'],
           }),
         }
       )
@@ -403,10 +432,11 @@ describe('team report cli', () => {
           headers: { cookie: uiCookie },
         })
         const body = (await runResponse.json()) as { output: string }
-        expect(body.output).toContain('## Bug fix summary')
-        expect(body.output).toContain('lost results when')
-        expect(body.output).toContain('"quotes" and special chars like $RUNTIME_VAR')
-        expect(body.output).toContain('- src/cli/team.ts')
+        const output = compactTerminalText(body.output)
+        expect(output).toContain('##Bugfixsummary')
+        expect(output).toContain('lostresultswhen')
+        expect(output).toContain('"quotes"andspecialcharslike$RUNTIME_VAR')
+        expect(output).toContain('-src/cli/team.ts')
       })
 
       expect(hive.store.listMessagesForRecovery(workspace.id, 0)).toContainEqual(

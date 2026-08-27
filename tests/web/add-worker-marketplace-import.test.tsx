@@ -7,6 +7,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { Toaster } from '../../web/src/ui/toast.js'
 import { ToastProvider } from '../../web/src/ui/useToast.js'
 import { AddWorkerDialog } from '../../web/src/worker/AddWorkerDialog.js'
+
+const MARKETPLACE_LOAD_TIMEOUT_MS = 10_000
+
 import { useWorkerComposer } from '../../web/src/worker/useWorkerComposer.js'
 
 const {
@@ -144,16 +147,21 @@ describe('AddWorkerDialog marketplace integration', () => {
   test('clicking Browse marketplace opens the drawer', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByTestId('open-marketplace'))
-    await waitFor(() => {
-      expect(screen.getByTestId('marketplace-content')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('marketplace-content')).toBeInTheDocument()
+      },
+      { timeout: MARKETPLACE_LOAD_TIMEOUT_MS }
+    )
   })
 
   test('importing an agent shows a success toast with the agent name', async () => {
     render(<Harness />)
 
     fireEvent.click(screen.getByTestId('open-marketplace'))
-    await waitFor(() => expect(screen.getByText('Code Reviewer')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Code Reviewer')).toBeInTheDocument(), {
+      timeout: MARKETPLACE_LOAD_TIMEOUT_MS,
+    })
     fireEvent.click(screen.getByText('Code Reviewer'))
     const importButton = await screen.findByTestId('marketplace-import-button')
     await waitFor(() => expect(importButton).not.toBeDisabled())
@@ -168,9 +176,12 @@ describe('AddWorkerDialog marketplace integration', () => {
     render(<Harness onSubmitCapture={submitCapture} />)
 
     fireEvent.click(screen.getByTestId('open-marketplace'))
-    await waitFor(() => {
-      expect(screen.getByText('Code Reviewer')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(screen.getByText('Code Reviewer')).toBeInTheDocument()
+      },
+      { timeout: MARKETPLACE_LOAD_TIMEOUT_MS }
+    )
 
     fireEvent.click(screen.getByText('Code Reviewer'))
     const importButton = await screen.findByTestId('marketplace-import-button')

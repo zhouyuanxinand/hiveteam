@@ -10,12 +10,12 @@ import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
-const servers: Array<{ close: () => void }> = []
+const servers: Array<{ close: () => Promise<void> }> = []
 const tempDirs: string[] = []
 
-afterEach(() => {
+afterEach(async () => {
   while (servers.length > 0) {
-    servers.pop()?.close()
+    await servers.pop()?.close()
   }
   for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
 })
@@ -28,7 +28,12 @@ const startServer = async () => {
     app.server.listen(0, '127.0.0.1', () => resolve())
   })
 
-  servers.push(app.server)
+  servers.push({
+    async close() {
+      await store.close()
+      await new Promise<void>((resolve) => app.server.close(() => resolve()))
+    },
+  })
 
   const address = app.server.address()
   if (!address || typeof address === 'string') {
@@ -61,7 +66,12 @@ const startServerWithVersionInfo = async () => {
     app.server.listen(0, '127.0.0.1', () => resolve())
   })
 
-  servers.push(app.server)
+  servers.push({
+    async close() {
+      await store.close()
+      await new Promise<void>((resolve) => app.server.close(() => resolve()))
+    },
+  })
 
   const address = app.server.address()
   if (!address || typeof address === 'string') {
@@ -328,8 +338,8 @@ describe('runtime http app', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+          command: process.execPath,
+          args: ['-e', 'process.stdin.resume()'],
         }),
       }
     )
@@ -385,8 +395,8 @@ describe('runtime http app', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+          command: process.execPath,
+          args: ['-e', 'process.stdin.resume()'],
         }),
       }
     )
@@ -398,8 +408,8 @@ describe('runtime http app', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({
-          command: '/bin/bash',
-          args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+          command: process.execPath,
+          args: ['-e', 'process.stdin.resume()'],
         }),
       }
     )

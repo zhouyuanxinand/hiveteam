@@ -17,6 +17,8 @@ let sandboxRoot = ''
 let dummyPresetId = ''
 const nativeFetch = globalThis.fetch
 const tempDirs: string[] = []
+const WORKSPACE_PICKER_TIMEOUT_MS = 15_000
+const WORKSPACE_CREATE_TIMEOUT_MS = 30_000
 
 beforeEach(async () => {
   window.localStorage.setItem('hive.first-run-seen', '1')
@@ -73,7 +75,9 @@ describe('workspace flow with real server', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New Workspace' }))
 
     // User-triggered pick-folder → mock returns the sandbox dir → compact confirm opens.
-    const confirm = await screen.findByTestId('confirm-workspace-dialog')
+    const confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
     expect(within(confirm).getByTestId('confirm-workspace-path')).toHaveValue(
       join(sandboxRoot, 'alpha-project')
     )
@@ -92,7 +96,7 @@ describe('workspace flow with real server', () => {
             .find((b) => b.classList.contains('ws-row'))
         ).toHaveAttribute('aria-current', 'true')
       },
-      { timeout: 10_000 }
+      { timeout: WORKSPACE_CREATE_TIMEOUT_MS }
     )
 
     // Workspace name + path live in the sidebar (workspace row); the canvas
@@ -134,7 +138,7 @@ describe('workspace flow with real server', () => {
     await waitFor(() => {
       expect(drawer).toHaveAttribute('aria-hidden', 'false')
     })
-  }, 20_000)
+  }, 45_000)
 
   test('existing workspace stays stopped until the user starts Queen', async () => {
     const existingPath = join(sandboxRoot, 'existing-project')

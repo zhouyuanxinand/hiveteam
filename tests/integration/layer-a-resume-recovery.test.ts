@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -14,11 +6,14 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { getClaudeSessionFilePath } from '../../src/server/session-capture-claude.js'
+import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
 const originalClaudeProjectsDir = process.env.HIVE_CLAUDE_PROJECTS_DIR
+
+const compactPtyText = (value: string) => normalizePtyText(value).replace(/\s/g, '')
 
 const waitFor = async (
   assertion: () => void | Promise<void>,
@@ -53,18 +48,20 @@ const readLastSessionId = (dataDir: string, workspaceId: string, agentId: string
 const writeFakeClaude = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'claude')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'claude',
     `#!/usr/bin/env node
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const args = process.argv.slice(2)
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '11111111-1111-4111-8111-111111111111'
-const encoded = process.cwd().replace(/[\\/:\\s]/g, '-')
+const encoded = [...process.cwd()]
+  .map((char) => [32, 47, 58, 92].includes(char.charCodeAt(0)) ? '-' : char)
+  .join('')
 const projectsRoot = process.env.HIVE_CLAUDE_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects')
 const projectDir = join(projectsRoot, encoded)
 const failMarker = join(process.cwd(), '.fail-next-resume')
@@ -72,7 +69,8 @@ const expectFreshMarker = join(process.cwd(), '.expect-fresh')
 const expectResumeMarker = join(process.cwd(), '.expect-resume')
 mkdirSync(projectDir, { recursive: true })
 const sessionPath = join(projectDir, sessionId + '.jsonl')
-writeFileSync(sessionPath, '{}\\n')
+const bindingMarker = 'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID
+writeFileSync(sessionPath, JSON.stringify({ message: { content: bindingMarker } }) + '\\n')
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
   process.stdout.write('STDIN:' + chunk)
@@ -87,13 +85,13 @@ if (existsSync(expectFreshMarker) && args.includes('--resume')) {
   process.exit(3)
 }
 if (args.includes('--resume') && existsSync(failMarker)) {
+  unlinkSync(sessionPath)
   process.exit(1)
 }
 process.stdout.write('❯ ')
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 
@@ -177,6 +175,7 @@ describe('Layer A resume recovery integration', () => {
       })
 
       const firstRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
+      await new Promise((resolve) => setTimeout(resolve, 100))
 
       await waitFor(() => {
         expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
@@ -194,8 +193,10 @@ describe('Layer A resume recovery integration', () => {
       await waitFor(async () => {
         const run = await getRunOutputViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(run.status).toBe('running')
-        expect(run.output).toContain(
-          `ARGS:--resume ${sessionId} --dangerously-skip-permissions --session-id-test ${sessionId}`
+        expect(compactPtyText(run.output)).toContain(
+          compactPtyText(
+            `ARGS:--resume ${sessionId} --dangerously-skip-permissions --session-id-test ${sessionId}`
+          )
         )
       })
       unlinkSync(join(workspacePath, '.expect-resume'))
@@ -248,10 +249,11 @@ describe('Layer A resume recovery integration', () => {
       await waitFor(async () => {
         const run = await getRunOutputViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(run.status).toBe('running')
-        expect(run.output).toContain(
-          `ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`
+        const output = compactPtyText(run.output)
+        expect(output).toContain(
+          compactPtyText(`ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`)
         )
-        expect(run.output).not.toContain('--resume')
+        expect(output).not.toContain('--resume')
       })
       unlinkSync(join(workspacePath, '.expect-fresh'))
     } finally {
@@ -314,10 +316,11 @@ describe('Layer A resume recovery integration', () => {
       await waitFor(async () => {
         const run = await getRunOutputViaHttp(server.baseUrl, cookie, thirdRun.runId)
         expect(run.status).toBe('running')
-        expect(run.output).toContain(
-          `ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`
+        const output = compactPtyText(run.output)
+        expect(output).toContain(
+          compactPtyText(`ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`)
         )
-        expect(run.output).not.toContain('--resume')
+        expect(output).not.toContain('--resume')
       })
       unlinkSync(join(workspacePath, '.expect-fresh'))
     } finally {

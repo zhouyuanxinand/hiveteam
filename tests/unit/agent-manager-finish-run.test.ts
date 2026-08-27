@@ -57,8 +57,8 @@ describe('agent manager finishRun', () => {
 
     const run = await manager.startAgent({
       agentId: 'agent-1',
-      command: '/bin/bash',
-      cwd: '/tmp',
+      command: process.execPath,
+      cwd: process.cwd(),
       onExit: onExitSpy,
     })
 
@@ -77,8 +77,8 @@ describe('agent manager finishRun', () => {
 
     const run = await manager.startAgent({
       agentId: 'agent-2',
-      command: '/bin/bash',
-      cwd: '/tmp',
+      command: process.execPath,
+      cwd: process.cwd(),
       onExit: onExitSpy,
     })
 
@@ -98,8 +98,8 @@ describe('agent manager finishRun', () => {
 
     const run = await manager.startAgent({
       agentId: 'agent-3',
-      command: '/bin/bash',
-      cwd: '/tmp',
+      command: process.execPath,
+      cwd: process.cwd(),
       onExit: onExitSpy,
     })
 

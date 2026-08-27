@@ -75,7 +75,7 @@ describe('post-start input writer', () => {
     vi.advanceTimersByTime(149)
     expect(manager.writeInput).toHaveBeenCalledTimes(1)
 
-    vi.advanceTimersByTime(1)
+    vi.advanceTimersByTime(700)
     expect(manager.writeInput).toHaveBeenCalledTimes(2)
     expect(manager.writeInput).toHaveBeenNthCalledWith(2, 'run-1', '\r')
   })

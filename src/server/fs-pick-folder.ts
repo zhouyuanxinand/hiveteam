@@ -7,6 +7,7 @@ import { type FsProbeResponse, probeDirectory } from './fs-browse.js'
 const MACOS_CANCEL_PATTERNS = [/-128/, /-1743/, /user canceled/i, /execution error/i]
 // zenity documents exit code 1 on Cancel. kdialog uses exit code 1 as well.
 const LINUX_CANCEL_EXIT_CODES = new Set([1])
+const WINDOWS_PICKER_PATH_PREFIX = 'HIVE_PICKER_PATH_BASE64:'
 
 type SpawnResult = {
   stderr: string
@@ -69,6 +70,18 @@ const emptyResponse = (overrides: Partial<PickFolderResponse> = {}): PickFolderR
   supported: true,
   ...overrides,
 })
+
+const parseWindowsPickedPath = (stdout: string): string => {
+  const encodedLine = stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith(WINDOWS_PICKER_PATH_PREFIX))
+
+  if (!encodedLine) return stdout.trim().replace(/^\uFEFF/u, '')
+
+  const encodedPath = encodedLine.slice(WINDOWS_PICKER_PATH_PREFIX.length)
+  return Buffer.from(encodedPath, 'base64').toString('utf8').trim()
+}
 
 const finalizeWithProbe = async (path: string): Promise<PickFolderResponse> => {
   // A native OS picker can select a valid workspace on another drive or
@@ -139,7 +152,7 @@ const windowsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => 
     '$dialog.Description = "Select Hive workspace"',
     '$dialog.ShowNewFolderButton = $false',
     '$result = $dialog.ShowDialog()',
-    'if ($result -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.WriteLine($dialog.SelectedPath); exit 0 }',
+    `if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $encodedPath = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($dialog.SelectedPath)); [Console]::Out.WriteLine("${WINDOWS_PICKER_PATH_PREFIX}" + $encodedPath); exit 0 }`,
     'exit 1',
   ].join('; ')
   const result = await run(
@@ -163,7 +176,11 @@ const windowsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => 
     }
     return emptyResponse({ canceled: true })
   }
-  const picked = result.stdout.trim()
+  // Windows PowerShell's redirected stdout encoding depends on the host code
+  // page. Returning the selected Unicode path as ASCII base64 avoids corrupting
+  // paths such as D:\桌面 before Node probes the directory. Keep accepting raw
+  // output for compatibility with older helpers and test doubles.
+  const picked = parseWindowsPickedPath(result.stdout)
   if (picked.length === 0) return emptyResponse({ canceled: true })
   return finalizeWithProbe(picked)
 }

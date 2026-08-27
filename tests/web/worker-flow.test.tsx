@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { delimiter, join } from 'node:path'
+
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { App } from '../../web/src/app.js'
+import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 
 vi.mock('@xterm/xterm', () => ({
@@ -55,6 +61,8 @@ let serverContext: Awaited<ReturnType<typeof startTestServer>> | undefined
 let workspaceId = ''
 let sleeperPresetId = ''
 let uiCookie = ''
+let originalPath = ''
+let fakeCliDir = ''
 
 const WORKER_FLOW_TIMEOUT_MS = 5000
 
@@ -98,6 +106,16 @@ const stubFetchWithEmptyTerminalRuns = () => {
 
 beforeEach(async () => {
   window.localStorage.clear()
+  // Keep the fixture independent from the host shell. The worker-flow cases
+  // intentionally use `bash` and `ccs` as fake CLIs, but neither is guaranteed
+  // to exist on Windows. Put real cross-platform Node shims on PATH so the UI
+  // availability check and the server-side PTY launcher observe the same
+  // executable set.
+  originalPath = process.env.PATH ?? ''
+  fakeCliDir = mkdtempSync(join(tmpdir(), 'hive-worker-flow-cli-'))
+  writeNodeCli(fakeCliDir, 'bash', 'process.stdin.resume()')
+  writeNodeCli(fakeCliDir, 'ccs', 'process.stdin.resume()')
+  process.env.PATH = `${fakeCliDir}${delimiter}${originalPath}`
   window.matchMedia =
     window.matchMedia ??
     ((query: string) =>
@@ -153,6 +171,9 @@ afterEach(async () => {
   workspaceId = ''
   sleeperPresetId = ''
   uiCookie = ''
+  process.env.PATH = originalPath
+  if (fakeCliDir) rmSync(fakeCliDir, { force: true, recursive: true })
+  fakeCliDir = ''
 })
 
 describe('worker flow with real server', () => {
@@ -173,9 +194,12 @@ describe('worker flow with real server', () => {
     // the default-active card; click is idempotent and asserts wiring.
     fireEvent.click(within(dialog).getByTestId('role-card-coder'))
     // Agent CLI is selected via radio-style buttons keyed by preset id.
-    await waitFor(() => {
-      expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
+      },
+      { timeout: WORKER_FLOW_TIMEOUT_MS }
+    )
     fireEvent.click(within(dialog).getByTestId(`agent-radio-${sleeperPresetId}`))
     fireEvent.click(within(dialog).getByTestId('add-worker-submit'))
 
@@ -193,9 +217,11 @@ describe('worker flow with real server', () => {
       { timeout: WORKER_FLOW_TIMEOUT_MS }
     )
     expect(card).toBeInTheDocument()
-    expect(within(card).getByText('Alice')).toBeInTheDocument()
-    expect(within(card).getByText('Coder')).toBeInTheDocument()
-    expect(within(card).getByText('stopped')).toBeInTheDocument()
+    const cardShell = card.closest('.worker-card-shell')
+    expect(cardShell).not.toBeNull()
+    expect(within(cardShell as HTMLElement).getByText('Alice')).toBeInTheDocument()
+    expect(within(cardShell as HTMLElement).getByText('Coder')).toBeInTheDocument()
+    expect(within(cardShell as HTMLElement).getByText('stopped')).toBeInTheDocument()
     // Add Member affordance now lives only in the WorkersPane header (the
     // dashed in-grid Add Member tile was redundant and visually misleading).
     expect(screen.getByTestId('add-worker-trigger')).toHaveTextContent('Add Member')
@@ -263,9 +289,12 @@ describe('worker flow with real server', () => {
     expect((instructions as HTMLTextAreaElement).value).toContain(
       '你是审查型 worker。先找高风险问题，再给出最小修复建议。'
     )
-    await waitFor(() => {
-      expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
+      },
+      { timeout: WORKER_FLOW_TIMEOUT_MS }
+    )
     fireEvent.click(within(dialog).getByTestId(`agent-radio-${sleeperPresetId}`))
     fireEvent.click(within(dialog).getByTestId('add-worker-submit'))
 
@@ -283,10 +312,10 @@ describe('worker flow with real server', () => {
   })
 
   test('Add Worker random name follows the selected Chinese language', async () => {
+    window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh')
     render(<App />)
 
     await screen.findByTestId('add-worker-trigger', {}, { timeout: WORKER_FLOW_TIMEOUT_MS })
-    fireEvent.click(screen.getByRole('button', { name: 'Switch language to 中文' }))
     await waitFor(() => {
       expect(screen.getByTestId('add-worker-trigger')).toHaveTextContent('添加成员')
     })
@@ -305,9 +334,12 @@ describe('worker flow with real server', () => {
     fireEvent.change(within(dialog).getByPlaceholderText('e.g. Alice'), {
       target: { value: 'CustomAgent' },
     })
-    await waitFor(() => {
-      expect(within(dialog).queryByTestId('agent-radio-generic')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(within(dialog).queryByTestId('agent-radio-generic')).toBeInTheDocument()
+      },
+      { timeout: WORKER_FLOW_TIMEOUT_MS }
+    )
     fireEvent.click(within(dialog).getByTestId('agent-radio-generic'))
     fireEvent.click(within(dialog).getByText('Startup command'))
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Startup command' }), {
@@ -344,9 +376,12 @@ describe('worker flow with real server', () => {
     fireEvent.change(within(dialog).getByPlaceholderText('e.g. Alice'), {
       target: { value: 'ClaudeAlias' },
     })
-    await waitFor(() => {
-      expect(within(dialog).queryByTestId('agent-radio-claude')).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(within(dialog).queryByTestId('agent-radio-claude')).toBeInTheDocument()
+      },
+      { timeout: WORKER_FLOW_TIMEOUT_MS }
+    )
     fireEvent.click(within(dialog).getByTestId('agent-radio-claude'))
     fireEvent.click(within(dialog).getByText('Startup command'))
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Startup command' }), {
@@ -384,9 +419,12 @@ describe('worker flow with real server', () => {
     fireEvent.change(within(dialog).getByPlaceholderText('e.g. Alice'), {
       target: { value: 'Immediate' },
     })
-    await waitFor(() => {
-      expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
-    })
+    await waitFor(
+      () => {
+        expect(within(dialog).queryByTestId(`agent-radio-${sleeperPresetId}`)).toBeInTheDocument()
+      },
+      { timeout: WORKER_FLOW_TIMEOUT_MS }
+    )
     fireEvent.click(within(dialog).getByTestId(`agent-radio-${sleeperPresetId}`))
     fireEvent.click(within(dialog).getByTestId('add-worker-submit'))
 
@@ -426,7 +464,9 @@ describe('worker flow with real server', () => {
     render(<App />)
 
     const card = await screen.findByRole('button', { name: /^Open Bob$/ })
-    expect(within(card).getByText('stopped')).toBeInTheDocument()
+    const cardShell = card.closest('.worker-card-shell')
+    expect(cardShell).not.toBeNull()
+    expect(within(cardShell as HTMLElement).getByText('stopped')).toBeInTheDocument()
     fireEvent.click(card)
 
     const modal = await screen.findByTestId('worker-modal')

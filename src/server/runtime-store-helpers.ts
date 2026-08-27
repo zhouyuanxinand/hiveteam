@@ -10,6 +10,8 @@ import { createAgentRuntime } from './agent-runtime.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
 import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
+import { createGitTurnCoordinator, type GitTurnCoordinator } from './git-turn-coordinator.js'
+import { createGitWorkspaceService } from './git-workspace-service.js'
 import { createMessageLogStore } from './message-log-store.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
@@ -33,16 +35,20 @@ import { createSettingsStore } from './settings-store.js'
 import { createTasksFileService } from './tasks-file.js'
 import { createTasksFileWatcher } from './tasks-file-watcher.js'
 import { createTeamMemoryDigestProvider } from './team-memory-digest.js'
+import { createTeamMemoryDreamStore } from './team-memory-dream-store.js'
 import { createTeamMemoryStore } from './team-memory-store.js'
 import { createTeamOperations } from './team-operations.js'
 import { resolveTerminalInputProfile } from './terminal-input-profile.js'
 import { createUiAuth } from './ui-auth.js'
 import { createWorkerOutputTracker, type WorkerOutputTracker } from './worker-output-tracker.js'
+import { createWorkflowRuntime, type WorkflowRuntime } from './workflow-runtime.js'
 import { createWorkspaceShellRuntime } from './workspace-shell-runtime.js'
 import { createWorkspaceStore } from './workspace-store.js'
 
 export interface RuntimeStoreServices {
   agentRunStore: ReturnType<typeof createAgentRunStore>
+  git: ReturnType<typeof createGitWorkspaceService>
+  gitTurnCoordinator: GitTurnCoordinator
   agentSessionStore: ReturnType<typeof createAgentSessionStore>
   agentRuntime: ReturnType<typeof createAgentRuntime>
   interruptedRuns: InterruptedAgentRun[]
@@ -50,6 +56,7 @@ export interface RuntimeStoreServices {
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
   memoryStore: ReturnType<typeof createTeamMemoryStore>
+  memoryDreamStore: ReturnType<typeof createTeamMemoryDreamStore>
   reportOutbox: ReturnType<typeof createReportOutboxStore>
   remoteAudit: RemoteAuditStore
   remoteConfig: RemoteConfigSource
@@ -64,6 +71,7 @@ export interface RuntimeStoreServices {
   teamOps: ReturnType<typeof createTeamOperations>
   uiAuth: ReturnType<typeof createUiAuth>
   workerOutputTracker: WorkerOutputTracker | null
+  workflowRuntime: WorkflowRuntime
   workspaceStore: ReturnType<typeof createWorkspaceStore>
 }
 
@@ -74,6 +82,7 @@ interface CreateRuntimeStoreServicesOptions {
 
 interface CreateRuntimeStoreLifecycleOptions {
   agentManager?: AgentManager
+  onAgentStarted?: (workspaceId: string, agentId: string) => void | Promise<void>
   services: RuntimeStoreServices
 }
 
@@ -99,6 +108,7 @@ export const createRuntimeStoreServices = (
   options: CreateRuntimeStoreServicesOptions = {}
 ): RuntimeStoreServices => {
   const db = openRuntimeDatabase(options.dataDir)
+  const git = createGitWorkspaceService(db)
   const messageLogStore = createMessageLogStore(db)
   const dispatchLedgerStore = createDispatchLedgerStore(db)
   const reportOutbox = createReportOutboxStore(db)
@@ -106,6 +116,7 @@ export const createRuntimeStoreServices = (
   const agentSessionStore = createAgentSessionStore(db)
   const settings = createSettingsStore(db)
   const memoryStore = createTeamMemoryStore(db)
+  const memoryDreamStore = createTeamMemoryDreamStore(db, memoryStore)
   if (!settings.getAppState(REMOTE_DAEMON_ID_KEY)?.value) {
     settings.setAppState(REMOTE_DAEMON_ID_KEY, randomUUID())
   }
@@ -148,6 +159,11 @@ export const createRuntimeStoreServices = (
   const workerOutputTracker = options.agentManager
     ? createWorkerOutputTracker(options.agentManager.getOutputBus())
     : null
+  const gitTurnCoordinator = createGitTurnCoordinator({
+    git,
+    outputBus: options.agentManager?.getOutputBus() ?? null,
+    workspaceStore,
+  })
   const agentRuntime = createAgentRuntime(
     options.agentManager,
     agentRunStore,
@@ -155,6 +171,7 @@ export const createRuntimeStoreServices = (
     settings.getCommandPreset,
     (workspaceId, agentId) => {
       workerOutputTracker?.detach(workspaceId, agentId)
+      gitTurnCoordinator.detach(workspaceId, agentId)
       if (!workspaceStore.hasAgent(workspaceId, agentId)) return
       workspaceStore.markAgentStopped(workspaceId, agentId)
     },
@@ -172,19 +189,32 @@ export const createRuntimeStoreServices = (
     listOpenWorkspaceDispatches: (workspaceId) =>
       dispatchLedgerStore
         .listWorkspaceDispatches(workspaceId)
-        .filter((dispatch) => dispatch.status === 'queued' || dispatch.status === 'submitted'),
+        .filter(
+          (dispatch) =>
+            dispatch.status === 'queued' ||
+            dispatch.status === 'submitted' ||
+            dispatch.status === 'failed'
+        ),
     insertMessage: messageLogStore.insertMessage,
     markDispatchCancelled: dispatchLedgerStore.markCancelled,
+    markDispatchDeliveryFailed: dispatchLedgerStore.markDeliveryFailed,
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
     reportOutbox,
     runDataMutation: (mutation) => db.transaction(mutation)(),
     workspaceStore,
   })
+  const workflowRuntime = createWorkflowRuntime({
+    db,
+    teamOps,
+    workspaceStore,
+  })
   startExistingWorkspaceWatches()
 
   return {
     agentRunStore,
+    git,
+    gitTurnCoordinator,
     agentSessionStore,
     agentRuntime,
     interruptedRuns,
@@ -192,6 +222,7 @@ export const createRuntimeStoreServices = (
     dispatchLedgerStore,
     messageLogStore,
     memoryStore,
+    memoryDreamStore,
     reportOutbox,
     remoteAudit,
     remoteConfig,
@@ -206,12 +237,14 @@ export const createRuntimeStoreServices = (
     teamOps,
     uiAuth,
     workerOutputTracker,
+    workflowRuntime,
     workspaceStore,
   }
 }
 
 export const createRuntimeStoreLifecycle = ({
   agentManager,
+  onAgentStarted,
   services,
 }: CreateRuntimeStoreLifecycleOptions) => {
   const AUTO_RESUME_INTERVAL_MS = 500
@@ -234,6 +267,15 @@ export const createRuntimeStoreLifecycle = ({
         services.workspaceStore.markAgentStopped(workspaceId, agentId)
       } else {
         services.workerOutputTracker?.attach(workspaceId, agentId, run.runId, run.output)
+        const launchConfig = services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId)
+        services.gitTurnCoordinator.attach({
+          agentId,
+          command: launchConfig?.interactiveCommand ?? launchConfig?.command ?? '',
+          initialOutput: run.output,
+          runId: run.runId,
+          workspaceId,
+          workspacePath: services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path,
+        })
         queueMicrotask(() => {
           try {
             services.teamOps.replayQueuedDispatches(workspaceId, agentId)
@@ -242,6 +284,15 @@ export const createRuntimeStoreLifecycle = ({
               agentId,
               error: error instanceof Error ? error.message : String(error),
               workspaceId,
+            })
+          }
+          if (onAgentStarted) {
+            void Promise.resolve(onAgentStarted(workspaceId, agentId)).catch((error: unknown) => {
+              console.error('[hive] post-agent-start bookkeeping failed', {
+                agentId,
+                error: error instanceof Error ? error.message : String(error),
+                workspaceId,
+              })
             })
           }
         })
@@ -401,10 +452,11 @@ export const createRuntimeStoreLifecycle = ({
 
   return {
     close: async () => {
-      services.shellRuntime.close()
+      await services.shellRuntime.close()
       await services.agentRuntime.close()
       await services.tasksFileWatcher.close()
       services.workerOutputTracker?.closeAll()
+      services.gitTurnCoordinator.close()
       services.agentRunStore.close?.()
       services.remotePairing.dispose()
       await services.remoteAudit.flush()
@@ -416,9 +468,8 @@ export const createRuntimeStoreLifecycle = ({
     },
     peekAgentLaunchConfig: (workspaceId: string, agentId: string) =>
       services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId),
-    deleteWorkspaceShell: (workspaceId: string) => {
-      services.shellRuntime.deleteWorkspace(workspaceId)
-    },
+    deleteWorkspaceShell: (workspaceId: string) =>
+      services.shellRuntime.deleteWorkspace(workspaceId),
     closeWorkspaceShell: (workspaceId: string, runId: string) =>
       services.shellRuntime.closeRun(workspaceId, runId),
     getLiveRun: (runId: string) =>

@@ -54,7 +54,7 @@ describe('team cli help', () => {
     await runTeamCommand(['report', 'Done'])
 
     expect(errorSpy).toHaveBeenCalledWith(
-      'Hive recorded the report, but could not deliver it to Orchestrator in real time: No active run for agent: workspace-1:orchestrator'
+      'HiveTeam recorded the report, but could not deliver it to Orchestrator in real time: No active run for agent: workspace-1:orchestrator'
     )
   })
 })

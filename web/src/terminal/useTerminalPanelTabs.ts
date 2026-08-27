@@ -69,10 +69,16 @@ export const useTerminalPanelTabs = ({ workspaceId, workers, terminalRuns }: Par
   orderedIdsRef.current = orderedIds
   // Reload from localStorage when switching workspaces.
   const lastWorkspaceRef = useRef<string>(workspaceId)
+  // A tab can be opened in the same render that its run/worker is reported to
+  // the parent. Keep that explicitly requested id alive until the next data
+  // snapshot contains it; otherwise the GC effect can observe the old empty
+  // snapshot and immediately erase the tab from state and localStorage.
+  const pendingTabIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     if (lastWorkspaceRef.current === workspaceId) return
     lastWorkspaceRef.current = workspaceId
+    pendingTabIdsRef.current.clear()
     setOrderedIds(readStoredIds(tabsKey(workspaceId)))
     const stored = readStoredActive(activeKey(workspaceId))
     setActiveIdRaw(stored.length > 0 ? stored : null)
@@ -120,6 +126,17 @@ export const useTerminalPanelTabs = ({ workspaceId, workers, terminalRuns }: Par
     return map
   }, [terminalRuns, workspaceId])
 
+  useEffect(() => {
+    for (const id of pendingTabIdsRef.current) {
+      if (
+        (id.startsWith('worker:') && workerById.has(id.slice('worker:'.length))) ||
+        (id.startsWith('shell:') && shellRunById.has(id.slice('shell:'.length)))
+      ) {
+        pendingTabIdsRef.current.delete(id)
+      }
+    }
+  }, [shellRunById, workerById])
+
   const tabs = useMemo<TerminalTab[]>(() => {
     const out: TerminalTab[] = []
     for (const id of orderedIds) {
@@ -159,6 +176,7 @@ export const useTerminalPanelTabs = ({ workspaceId, workers, terminalRuns }: Par
     if (!dataLoadedRef.current) return
     setOrderedIds((current) => {
       const next = current.filter((id) => {
+        if (pendingTabIdsRef.current.has(id)) return true
         if (id.startsWith('worker:')) return workerById.has(id.slice('worker:'.length))
         if (id.startsWith('shell:')) return shellRunById.has(id.slice('shell:'.length))
         return false
@@ -178,6 +196,7 @@ export const useTerminalPanelTabs = ({ workspaceId, workers, terminalRuns }: Par
     // User action also counts as "data loaded" — they explicitly want a tab.
     dataLoadedRef.current = true
     const id = workerTabId(workerId)
+    pendingTabIdsRef.current.add(id)
     setOrderedIds((current) => (current.includes(id) ? current : [...current, id]))
     setActiveIdRaw(id)
   }, [])
@@ -185,11 +204,13 @@ export const useTerminalPanelTabs = ({ workspaceId, workers, terminalRuns }: Par
   const openShellTab = useCallback((runId: string) => {
     dataLoadedRef.current = true
     const id = shellTabId(runId)
+    pendingTabIdsRef.current.add(id)
     setOrderedIds((current) => (current.includes(id) ? current : [...current, id]))
     setActiveIdRaw(id)
   }, [])
 
   const closeTab = useCallback((tabId: string) => {
+    pendingTabIdsRef.current.delete(tabId)
     const before = orderedIdsRef.current
     const next = before.filter((id) => id !== tabId)
     if (next.length === before.length) return

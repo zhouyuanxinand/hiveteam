@@ -1,11 +1,10 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Dices, Store } from 'lucide-react'
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, lazy, Suspense, useMemo, useState } from 'react'
 
 import type { WorkerRole } from '../../../src/shared/types.js'
 import type { CommandPreset, RoleTemplate } from '../api.js'
 import { useI18n } from '../i18n.js'
-import { MarketplaceDrawer } from '../marketplace/MarketplaceDrawer.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { useToast } from '../ui/useToast.js'
 import {
@@ -17,6 +16,12 @@ import {
   SectionLabel,
   StartupCommandField,
 } from './AddWorkerDialogFields.js'
+
+const MarketplaceDrawer = lazy(() =>
+  import('../marketplace/MarketplaceDrawer.js').then((module) => ({
+    default: module.MarketplaceDrawer,
+  }))
+)
 
 type AddWorkerDialogProps = {
   commandPresets: CommandPreset[]
@@ -45,7 +50,7 @@ type AddWorkerDialogProps = {
   templateBusy: boolean
   workerName: string
   workerRole: WorkerRole
-  writeDisabledReason?: string
+  writeDisabledReason?: string | undefined
 }
 
 export const AddWorkerDialog = ({
@@ -239,10 +244,7 @@ export const AddWorkerDialog = ({
                     onChange={onModelChange}
                   />
                 ) : null}
-                {commandPresets.find((preset) => preset.id === commandPresetId)?.available !==
-                false ? (
-                  <StartupCommandField value={startupCommand} onChange={onStartupCommandChange} />
-                ) : null}
+                <StartupCommandField value={startupCommand} onChange={onStartupCommandChange} />
               </div>
 
               <div
@@ -271,12 +273,16 @@ export const AddWorkerDialog = ({
           </Dialog.Content>
         </div>
       </Dialog.Portal>
-      <MarketplaceDrawer
-        open={marketplaceOpen}
-        onClose={() => setMarketplaceOpen(false)}
-        onImport={handleMarketplaceImport}
-        importedNames={importedNames}
-      />
+      {marketplaceOpen ? (
+        <Suspense fallback={null}>
+          <MarketplaceDrawer
+            open
+            onClose={() => setMarketplaceOpen(false)}
+            onImport={handleMarketplaceImport}
+            importedNames={importedNames}
+          />
+        </Suspense>
+      ) : null}
     </Dialog.Root>
   )
 }

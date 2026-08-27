@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   HIVE_USAGE,
   handleHiveInfoCommand,
@@ -12,8 +13,18 @@ import {
 import { DEFAULT_HIVE_PORT } from '../../src/cli/hive-defaults.js'
 import { HIVE_UPDATE_USAGE, runHiveUpdateCommand } from '../../src/cli/hive-update.js'
 
+let testDataDir = ''
+
+beforeEach(() => {
+  testDataDir = mkdtempSync(join(tmpdir(), 'hive-cli-test-'))
+  process.env.HIVE_DATA_DIR = testDataDir
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
+  delete process.env.HIVE_DATA_DIR
+  if (testDataDir) rmSync(testDataDir, { force: true, recursive: true })
+  testDataDir = ''
 })
 
 describe('hive cli', () => {

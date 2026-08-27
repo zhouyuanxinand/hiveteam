@@ -139,6 +139,10 @@ export const createAgentRuntime = (
     stopAgentRun(runId) {
       stopLiveRun(agentManager, registry, syncRun, runId)
     },
+    async waitForAgentRunExit(runId) {
+      await registry.getExitEntry(runId)?.promise
+      await agentManager?.waitForRunExit?.(runId)
+    },
     validateAgentToken: tokenRegistry.validate,
     deliverSystemMessageToAgent(workspaceId, agentId, text, input = {}) {
       return stdinDispatcher.deliverSystemMessageToAgent(workspaceId, agentId, text, input)

@@ -1,4 +1,4 @@
-import { Terminal, UserPlus } from 'lucide-react'
+import { Sparkles, Terminal, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import type { TeamListItem } from '../../../src/shared/types.js'
@@ -6,23 +6,26 @@ import type { TerminalRunSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { Confirm } from '../ui/Confirm.js'
 import { EmptyState } from '../ui/EmptyState.js'
+import { DispatchPulse } from './DispatchPulse.js'
 import { WorkerCard, type WorkerCardActionKind } from './WorkerCard.js'
 import { presentWorkerStatus, type WorkerStatusKind } from './worker-status.js'
 
 type WorkersPaneProps = {
   autoResumeBusy?: boolean
-  autoResumeOnRestart?: boolean
+  autoResumeOnRestart?: boolean | undefined
   onAddWorkerClick: () => void
   onAutoResumeChange?: (enabled: boolean) => void
   onDeleteWorker: (worker: TeamListItem) => void
-  onOpenShellTerminal: () => void
+  onOpenShellTerminal?: () => void
   onOpenWorker: (worker: TeamListItem) => void
   onRenameWorker: (worker: TeamListItem, newName: string) => Promise<{ error: string | null }>
+  onScenarioClick?: () => void
   onStartWorker: (worker: TeamListItem) => void
   shellTerminalAvailable?: boolean
   startingWorkerId: string | null
   terminalRuns: TerminalRunSummary[]
   workers: TeamListItem[]
+  workspaceId?: string
 }
 
 const SECTION_ORDER: WorkerStatusKind[] = ['working', 'idle', 'stopped']
@@ -61,11 +64,13 @@ export const WorkersPane = ({
   onOpenShellTerminal,
   onOpenWorker,
   onRenameWorker,
+  onScenarioClick,
   onStartWorker,
   shellTerminalAvailable = true,
   startingWorkerId,
   terminalRuns,
   workers,
+  workspaceId,
 }: WorkersPaneProps) => {
   const { t } = useI18n()
   const { sections, summary } = useMemo(() => summarizeWorkers(workers), [workers])
@@ -150,6 +155,17 @@ export const WorkersPane = ({
                 <span className="workers-pane-action__label">{t('shellTerminal.open')}</span>
               </button>
             ) : null}
+            {onScenarioClick ? (
+              <button
+                type="button"
+                onClick={onScenarioClick}
+                className="workers-pane-action icon-btn icon-btn--tertiary"
+                data-testid="team-scenario-trigger"
+              >
+                <Sparkles size={14} aria-hidden />
+                <span className="workers-pane-action__label">{t('scenario.open')}</span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onAddWorkerClick}
@@ -180,20 +196,33 @@ export const WorkersPane = ({
       </div>
 
       <div className="workers-pane-body scroll-y flex-1 px-2 py-2">
+        {workspaceId ? <DispatchPulse workers={workers} workspaceId={workspaceId} /> : null}
         {workers.length === 0 ? (
           <EmptyState
             icon={<UserPlus size={28} />}
             title={t('worker.emptyTitle')}
             description={t('worker.emptyDesc')}
             action={
-              <button
-                type="button"
-                onClick={onAddWorkerClick}
-                className="icon-btn icon-btn--primary"
-                data-testid="add-worker-empty"
-              >
-                <UserPlus size={14} aria-hidden /> {t('worker.emptyAdd')}
-              </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {onScenarioClick ? (
+                  <button
+                    type="button"
+                    onClick={onScenarioClick}
+                    className="icon-btn"
+                    data-testid="team-scenario-empty"
+                  >
+                    <Sparkles size={14} aria-hidden /> {t('scenario.open')}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={onAddWorkerClick}
+                  className="icon-btn icon-btn--primary"
+                  data-testid="add-worker-empty"
+                >
+                  <UserPlus size={14} aria-hidden /> {t('worker.emptyAdd')}
+                </button>
+              </div>
             }
           />
         ) : (

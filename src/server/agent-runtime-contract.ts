@@ -36,6 +36,7 @@ export interface AgentRuntime {
     input: StartAgentOptions
   ) => Promise<LiveAgentRun>
   stopAgentRun: (runId: string) => void
+  waitForAgentRunExit?: (runId: string) => Promise<void>
   validateAgentToken: AgentTokenRegistry['validate']
   /**
    * Resolves only after a live terminal accepted the opaque system message.

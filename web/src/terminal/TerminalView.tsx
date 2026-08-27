@@ -19,6 +19,10 @@ interface TerminalViewProps {
   title: string
 }
 
+interface TerminalPtyViewProps extends TerminalViewProps {
+  visible: boolean
+}
+
 const TERMINAL_PARKING_LOT_ID = 'hive-terminal-parking-lot'
 const PARKED_TERMINAL_DISPOSE_DELAY_MS = 500
 
@@ -201,15 +205,55 @@ export const TerminalView = ({ inputProfile = 'default', runId, title }: Termina
 
   if (!host) return null
   return createPortal(
-    <TerminalPtyView inputProfile={inputProfile} runId={runId} title={title} />,
+    <TerminalPtyView
+      inputProfile={inputProfile}
+      runId={runId}
+      title={title}
+      visible={portalTarget !== null}
+    />,
     host
   )
 }
 
-const TerminalPtyView = ({ inputProfile, runId, title: _title }: TerminalViewProps) => {
+const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: TerminalPtyViewProps) => {
   const { t } = useI18n()
-  const { containerRef, error, status } = useTerminalRun(runId, inputProfile)
+  const { containerRef, error, focus, refresh, status } = useTerminalRun(runId, inputProfile)
   const statusKey = STATUS_KEYS[status]
+
+  useEffect(() => {
+    if (!visible || status !== 'running') return
+
+    let cancelled = false
+    let firstFrame: number | undefined
+    let secondFrame: number | undefined
+    let fallbackTimer: number | undefined
+
+    const redraw = () => {
+      if (cancelled) return
+      refresh()
+    }
+    const wakeTerminal = () => {
+      redraw()
+      focus()
+    }
+
+    if (typeof window.requestAnimationFrame === 'function') {
+      firstFrame = window.requestAnimationFrame(() => {
+        wakeTerminal()
+        secondFrame = window.requestAnimationFrame(redraw)
+      })
+    } else {
+      fallbackTimer = window.setTimeout(wakeTerminal, 0)
+    }
+
+    return () => {
+      cancelled = true
+      if (firstFrame !== undefined) window.cancelAnimationFrame(firstFrame)
+      if (secondFrame !== undefined) window.cancelAnimationFrame(secondFrame)
+      if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer)
+    }
+  }, [focus, refresh, status, visible])
+
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>

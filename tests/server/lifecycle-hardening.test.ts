@@ -20,7 +20,7 @@ const sessionStore = {
 }
 
 const tempDirs: string[] = []
-const servers: Array<{ close: () => void }> = []
+const servers: Array<{ close: () => Promise<void> }> = []
 
 const waitFor = async (assertion: () => void, timeoutMs = 4000, intervalMs = 25) => {
   const deadline = Date.now() + timeoutMs
@@ -116,9 +116,9 @@ const createDelayedStartAgentManager = (manager = createAgentManager()) => {
   }
 }
 
-afterEach(() => {
+afterEach(async () => {
   while (servers.length > 0) {
-    servers.pop()?.close()
+    await servers.pop()?.close()
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true })
@@ -332,7 +332,12 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     await new Promise<void>((resolve) => {
       app.server.listen(0, '127.0.0.1', () => resolve())
     })
-    servers.push(app.server)
+    servers.push({
+      close: async () => {
+        await store.close()
+        await new Promise<void>((resolve) => app.server.close(() => resolve()))
+      },
+    })
 
     const address = app.server.address()
     if (!address || typeof address === 'string') {
@@ -360,8 +365,21 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     const sendMessages = store
       .listMessagesForRecovery(workspace.id, 0)
       .filter((m) => m.type === 'send')
-    expect(sendMessages).toEqual([])
-    expect(store.listDispatches(workspace.id)).toEqual([])
+    expect(sendMessages).toContainEqual(
+      expect.objectContaining({
+        from: orchestrator.id,
+        text: 'should not be delivered',
+        to: worker.id,
+        type: 'send',
+      })
+    )
+    expect(store.listDispatches(workspace.id)).toContainEqual(
+      expect.objectContaining({
+        status: 'failed',
+        text: 'should not be delivered',
+        toAgentId: worker.id,
+      })
+    )
     expect(store.getWorker(workspace.id, worker.id).pendingTaskCount).toBe(0)
 
     await store.close()

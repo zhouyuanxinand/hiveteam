@@ -12,9 +12,9 @@ describe('local version service', () => {
     const service = createVersionService()
 
     await expect(service.getVersionInfo()).resolves.toEqual({
-      current_version: '1.4.0',
+      current_version: '2.1.19',
       install_hint: 'git pull',
-      latest_version: '1.4.0',
+      latest_version: '2.1.19',
       package_name: 'hiveteam',
       release_url: 'https://github.com/zhouyuanxinand/hiveteam',
       update_available: false,

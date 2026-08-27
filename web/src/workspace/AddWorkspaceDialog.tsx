@@ -65,7 +65,7 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
     if (trigger === 0) return
     let cancelled = false
     setCommandPresetError(null)
-    const presetsReady = listCommandPresets()
+    void listCommandPresets()
       .then((presets) => {
         if (cancelled) return
         const nextId = presets.some(
@@ -92,7 +92,6 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
     setStage({ kind: 'picking' })
     pickFolder()
       .then(async (result) => {
-        await presetsReady
         if (cancelled) return
         // User canceled the native dialog — dismiss silently without showing
         // any additional UI. This mirrors how macOS Finder handles cancel.

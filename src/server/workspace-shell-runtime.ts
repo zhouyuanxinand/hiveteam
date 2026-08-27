@@ -6,6 +6,7 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 const WORKSPACE_SHELL_SUFFIX = ':shell'
 const WORKSPACE_SHELL_LABEL = 'Shell'
 const EXITED_SHELL_RETENTION_MS = 5000
+const SHELL_STOP_WAIT_TIMEOUT_MS = 5000
 
 export const getWorkspaceShellAgentId = (workspaceId: string): string =>
   `${workspaceId}${WORKSPACE_SHELL_SUFFIX}`
@@ -111,23 +112,42 @@ export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefin
     requireManager().stopRun(runId)
   }
 
-  const closeRun = (runId: string) => {
+  const waitForPtyStop = async (runId: string) => {
+    const deadline = Date.now() + SHELL_STOP_WAIT_TIMEOUT_MS
+    while (Date.now() <= deadline) {
+      try {
+        const run = requireManager().getRun(runId)
+        if (run.status === 'exited' || run.status === 'error') return
+      } catch {
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+  }
+
+  const requestCloseRun = (runId: string) => {
     try {
       stopPtyRun(runId)
     } catch {
       // The shell may have already exited or been removed by the PTY manager.
     }
-    try {
-      requireManager().removeRun(runId)
-    } catch {
-      // The PTY manager may have already dropped the run.
-    }
-    detachRun(runId)
+  }
+
+  const closeRunAndWait = async (runId: string) => {
+    requestCloseRun(runId)
+    await waitForPtyStop(runId)
+    await agentManager?.waitForRunExit?.(runId)
+    forgetShellRun(runId)
+  }
+
+  const closeRun = (runId: string) => {
+    requestCloseRun(runId)
+    forgetShellRun(runId)
   }
 
   return {
-    close() {
-      for (const runId of Array.from(workspaceIdsByRunId.keys())) closeRun(runId)
+    async close() {
+      await Promise.all(Array.from(workspaceIdsByRunId.keys()).map(closeRunAndWait))
       runIdsByWorkspaceId.clear()
       workspaceIdsByRunId.clear()
       startedAtByRunId.clear()
@@ -140,14 +160,8 @@ export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefin
       closeRun(runId)
       return true
     },
-    deleteWorkspace(workspaceId: string) {
-      for (const runId of Array.from(runIdsByWorkspaceId.get(workspaceId) ?? [])) {
-        try {
-          closeRun(runId)
-        } catch {
-          // Workspace deletion should not fail because the shell already exited.
-        }
-      }
+    async deleteWorkspace(workspaceId: string) {
+      await Promise.all(Array.from(runIdsByWorkspaceId.get(workspaceId) ?? []).map(closeRunAndWait))
       runIdsByWorkspaceId.delete(workspaceId)
     },
     getLiveRun(runId: string): LiveAgentRun | undefined {

@@ -1,6 +1,6 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { Terminal as XtermTerminal } from '@xterm/xterm'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
@@ -47,8 +47,17 @@ export const useTerminalRun = (
   inputProfile: TerminalWheelInputProfile = 'default'
 ) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const refreshRef = useRef<(() => void) | null>(null)
+  const focusRef = useRef<(() => void) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'connecting' | 'running' | 'stopped'>('connecting')
+
+  const refresh = useCallback(() => {
+    refreshRef.current?.()
+  }, [])
+  const focus = useCallback(() => {
+    focusRef.current?.()
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -67,6 +76,7 @@ export const useTerminalRun = (
     let helperTextarea: HTMLTextAreaElement | null = null
     let onCompositionStart: ((event: Event) => void) | undefined
     let onCompositionEnd: ((event: Event) => void) | undefined
+    let restored = false
     const isComposingRef = { current: false }
 
     void Promise.all([
@@ -209,11 +219,51 @@ export const useTerminalRun = (
         if (pixelWidth > 0) pixels.pixelWidth = pixelWidth
         return pixels
       }
-      const resize = () => {
+      const refreshTerminal = () => {
         if (!containerRef.current || !isContainerResizable()) return
         fitAddon?.fit()
+        if (terminal && terminal.rows > 0 && typeof terminal.refresh === 'function') {
+          // xterm can be initialized while its portal host is parked in the
+          // hidden parking lot. Fitting alone does not always repaint the
+          // renderer after that host becomes visible, which leaves the native
+          // CLI input row looking blank until the next terminal event.
+          terminal.refresh(0, terminal.rows - 1)
+        }
+      }
+      const focusTerminal = () => {
+        const container = containerRef.current
+        const activeElement = document.activeElement
+        if (!restored || !terminal || !container || !isContainerResizable()) return
+
+        // Only reclaim focus when this terminal was already active or nothing
+        // else owns it. This keeps a restored terminal from stealing focus
+        // from a dialog or another form control.
+        if (
+          activeElement !== document.body &&
+          activeElement !== null &&
+          !container.contains(activeElement)
+        ) {
+          return
+        }
+
+        // Codex enables DECSET ?1004 and uses the following FocusIn sequence
+        // to redraw its native composer after a restored TUI. Calling focus()
+        // before the snapshot is parsed is ineffective because xterm does not
+        // yet know it should emit that sequence. A deliberate blur/focus after
+        // the write callback makes the CLI redraw its own input row; Hive does
+        // not fabricate a prompt in the browser.
+        if (activeElement && container.contains(activeElement)) terminal.blur()
+        terminal.focus()
+      }
+      const resize = () => {
+        if (!containerRef.current || !isContainerResizable()) return
+        refreshTerminal()
         const { pixelHeight, pixelWidth } = getContainerPixels()
         client?.resize(terminal?.cols ?? 80, terminal?.rows ?? 24, pixelWidth, pixelHeight)
+      }
+      refreshRef.current = refreshTerminal
+      focusRef.current = () => {
+        focusTerminal()
       }
       const scheduleResize = () => {
         if (resizeTimer) window.clearTimeout(resizeTimer)
@@ -239,7 +289,16 @@ export const useTerminalRun = (
           nextTerminal.write(chunk, () => acknowledge(new TextEncoder().encode(chunk).byteLength))
         },
         onRestore(snapshot) {
-          nextTerminal.write(snapshot)
+          return new Promise<void>((resolve) => {
+            nextTerminal.write(snapshot, () => {
+              if (!disposed) {
+                restored = true
+                refreshTerminal()
+                focusTerminal()
+              }
+              resolve()
+            })
+          })
         },
         runId,
       })
@@ -266,6 +325,8 @@ export const useTerminalRun = (
 
     return () => {
       disposed = true
+      refreshRef.current = null
+      focusRef.current = null
       if (onWindowResize) window.removeEventListener('resize', onWindowResize)
       if (onThemeChange) window.removeEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       resizeObserver?.disconnect()
@@ -289,5 +350,5 @@ export const useTerminalRun = (
     }
   }, [runId, inputProfile])
 
-  return { containerRef, error, status }
+  return { containerRef, error, focus, refresh, status }
 }

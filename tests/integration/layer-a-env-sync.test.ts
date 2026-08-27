@@ -1,10 +1,10 @@
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -70,9 +70,9 @@ const writePassiveNodeScript = (workspacePath: string, filename: string) => {
 const writeResumableClaudeEcho = (workspacePath: string) => {
   const binDir = join(workspacePath, 'bin')
   mkdirSync(binDir, { recursive: true })
-  const cliPath = join(binDir, 'claude')
-  writeFileSync(
-    cliPath,
+  const cliPath = writeNodeCli(
+    binDir,
+    'claude',
     `#!/usr/bin/env node
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -81,13 +81,16 @@ import { join } from 'node:path'
 const args = process.argv.slice(2)
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '11111111-1111-4111-8111-111111111111'
-const encoded = process.cwd().replace(/[\\/:\\s]/g, '-')
+const encoded = [...process.cwd()]
+  .map((char) => [32, 47, 58, 92].includes(char.charCodeAt(0)) ? '-' : char)
+  .join('')
 const projectsRoot = process.env.HIVE_CLAUDE_PROJECTS_DIR ?? join(homedir(), '.claude', 'projects')
 const projectDir = join(projectsRoot, encoded)
 const expectResumeMarker = join(process.cwd(), '.expect-resume')
 mkdirSync(projectDir, { recursive: true })
 const sessionPath = join(projectDir, sessionId + '.jsonl')
-writeFileSync(sessionPath, '{}\\n')
+const bindingMarker = 'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID
+writeFileSync(sessionPath, JSON.stringify({ message: { content: bindingMarker } }) + '\\n')
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
   process.stdout.write('STDIN:' + chunk)
@@ -100,7 +103,6 @@ process.stdout.write('❯ ')
 setInterval(() => {}, 1000)
 `
   )
-  chmodSync(cliPath, 0o755)
   return cliPath
 }
 

@@ -94,8 +94,8 @@ describe('cross workspace send isolation', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${scriptPath}"`],
+            command: process.execPath,
+            args: [scriptPath],
           }),
         })
       }

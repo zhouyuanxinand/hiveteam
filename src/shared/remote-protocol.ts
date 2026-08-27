@@ -451,10 +451,13 @@ export function createStreamMachine(): StreamMachine {
 
 export interface FlowController {
   trySend(n: number): { ok: true } | { ok: false; reason: 'WindowExhausted' }
+  /** Wait for peer credit and reserve the bytes when credit is available. */
+  waitForWindow(n: number): Promise<void>
   applyAck(cumulativeBytes: number): { resumed: boolean }
   onConsume(n: number): { ackCumulative: number } | null
   flushAck(): { ackCumulative: number }
   isPaused(): boolean
+  cancel(error?: Error): void
 }
 
 export function createFlowController(
@@ -465,19 +468,47 @@ export function createFlowController(
   let acknowledged = 0
   let consumed = 0
   let lastAckedAt = 0
+  let cancelled: Error | null = null
+  const waiters: Array<{
+    bytes: number
+    reject: (error: Error) => void
+    resolve: () => void
+  }> = []
   const isPaused = () => sentBytes - acknowledged >= window
+  const trySend = (bytes: number) => {
+    if (cancelled || sentBytes - acknowledged + bytes > window) {
+      return { ok: false as const, reason: 'WindowExhausted' as const }
+    }
+    sentBytes += bytes
+    return accepted
+  }
+  const flushWaiters = () => {
+    while (waiters.length > 0) {
+      const waiter = waiters[0]
+      if (!waiter) break
+      const result = trySend(waiter.bytes)
+      if (!result.ok) break
+      waiters.shift()
+      waiter.resolve()
+    }
+  }
   return {
-    trySend(bytes) {
-      if (sentBytes - acknowledged + bytes > window) {
-        return { ok: false, reason: 'WindowExhausted' }
+    trySend,
+    waitForWindow(bytes) {
+      if (!Number.isFinite(bytes) || bytes < 0 || bytes > window) {
+        return Promise.reject(new RangeError(`flow payload exceeds window: ${bytes}`))
       }
-      sentBytes += bytes
-      return accepted
+      if (cancelled) return Promise.reject(cancelled)
+      if (trySend(bytes).ok) return Promise.resolve()
+      return new Promise<void>((resolve, reject) => {
+        waiters.push({ bytes, reject, resolve })
+      })
     },
     applyAck(cumulativeBytes) {
       const wasPaused = isPaused()
       if (cumulativeBytes <= acknowledged) return { resumed: false }
       acknowledged = Math.min(cumulativeBytes, sentBytes)
+      flushWaiters()
       return { resumed: wasPaused && !isPaused() }
     },
     onConsume(bytes) {
@@ -491,6 +522,11 @@ export function createFlowController(
       return { ackCumulative: consumed }
     },
     isPaused,
+    cancel(error = new Error('flow cancelled')) {
+      if (cancelled) return
+      cancelled = error
+      for (const waiter of waiters.splice(0)) waiter.reject(error)
+    },
   }
 }
 

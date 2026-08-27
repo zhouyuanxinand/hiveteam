@@ -1,12 +1,4 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -15,11 +7,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<{ close: () => Promise<void> }> = []
 const restoreEnv: Array<[string, string | undefined]> = []
 const tempDirs: string[] = []
+const pathDelimiter = process.platform === 'win32' ? ';' : ':'
 
 afterEach(async () => {
   while (servers.length > 0) {
@@ -96,9 +90,12 @@ const startServer = async (input: { dataDir?: string } = {}) => {
 
 beforeEach(() => {
   // Default for these tests: drive the dummy CLI so the happy path doesn't
-  // depend on `claude` being on PATH.
-  setEnv('HIVE_ORCHESTRATOR_COMMAND', 'bash')
-  setEnv('HIVE_ORCHESTRATOR_ARGS_JSON', JSON.stringify(['-c', 'echo queen up; sleep 60']))
+  // depend on a POSIX shell or on `claude` being on PATH.
+  setEnv('HIVE_ORCHESTRATOR_COMMAND', process.execPath)
+  setEnv(
+    'HIVE_ORCHESTRATOR_ARGS_JSON',
+    JSON.stringify(['-e', "process.stdout.write('queen up'); setInterval(() => {}, 60000)"])
+  )
 })
 
 describe('POST /api/workspaces autostart_orchestrator', () => {
@@ -305,6 +302,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     })
     servers.push({
       async close() {
+        await store.close()
         await new Promise<void>((resolve) => app.server.close(() => resolve()))
       },
     })
@@ -382,10 +380,14 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-preset-codex-'))
     tempDirs.push(binDir)
     tempDirs.push(dataDir)
-    const fakeCodex = join(binDir, 'codex')
-    writeFileSync(fakeCodex, ['#!/bin/sh', 'echo codex orchestrator up', 'sleep 60'].join('\n'))
-    chmodSync(fakeCodex, 0o755)
-    setEnv('PATH', `${binDir}:${process.env.PATH ?? ''}`)
+    writeNodeCli(
+      binDir,
+      'codex',
+      ["process.stdout.write('codex orchestrator up\\n')", 'setInterval(() => {}, 60000)'].join(
+        '\n'
+      )
+    )
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
     const codexHome = mkdtempSync(join(tmpdir(), 'hive-codex-home-'))
     tempDirs.push(codexHome)
     setEnv('CODEX_HOME', codexHome)
@@ -427,18 +429,17 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     tempDirs.push(binDir)
     tempDirs.push(dataDir)
     const argsFile = join(dataDir, 'opencode-args.txt')
-    const fakeOpenCode = join(binDir, 'opencode')
-    writeFileSync(
-      fakeOpenCode,
+    writeNodeCli(
+      binDir,
+      'opencode',
       [
-        '#!/bin/sh',
-        `printf '%s\\n' "$@" > "${argsFile}"`,
-        'echo opencode orchestrator up',
-        'sleep 60',
+        "import { writeFileSync } from 'node:fs'",
+        `writeFileSync(${JSON.stringify(argsFile)}, process.argv.slice(2).join('\\n') + '\\n')`,
+        "process.stdout.write('opencode orchestrator up\\n')",
+        'setInterval(() => {}, 60000)',
       ].join('\n')
     )
-    chmodSync(fakeOpenCode, 0o755)
-    setEnv('PATH', `${binDir}:${process.env.PATH ?? ''}`)
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
     const opencodeHome = mkdtempSync(join(tmpdir(), 'hive-opencode-home-'))
     tempDirs.push(opencodeHome)
     setEnv('HIVE_OPENCODE_DB_PATH', join(opencodeHome, 'opencode.db'))
@@ -484,19 +485,18 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     tempDirs.push(dataDir)
     const shellArgsFile = join(dataDir, 'shell-args.txt')
     const shellCommandFile = join(dataDir, 'shell-command.txt')
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
       [
-        '#!/bin/sh',
-        `printf '%s\\n' "$@" > "${shellArgsFile}"`,
-        `printf '%s\\n' "$2" > "${shellCommandFile}"`,
-        'sleep 60',
+        "import { writeFileSync } from 'node:fs'",
+        `const args = process.argv.slice(2); writeFileSync(${JSON.stringify(shellArgsFile)}, args.join('\\n') + '\\n'); writeFileSync(${JSON.stringify(shellCommandFile)}, (args.at(-1) ?? '') + '\\n')`,
+        'setInterval(() => {}, 60000)',
       ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
     setEnv('SHELL', fakeShell)
-    setEnv('PATH', `${binDir}:${process.env.PATH ?? ''}`)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
 
     const { store, baseUrl } = await startServer({ dataDir })
     const cookie = await getUiCookie(baseUrl)
@@ -523,7 +523,15 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
 
     const config = store.peekAgentLaunchConfig(body.id, `${body.id}:orchestrator`)
     expect(config).toMatchObject({
-      args: ['-lic', 'ccs --resume f500de1d-df89-470f-a2ce-e385acffef19 --label "old session"'],
+      args:
+        process.platform === 'win32'
+          ? [
+              '/d',
+              '/s',
+              '/c',
+              'ccs --resume f500de1d-df89-470f-a2ce-e385acffef19 --label "old session"',
+            ]
+          : ['-lic', 'ccs --resume f500de1d-df89-470f-a2ce-e385acffef19 --label "old session"'],
       command: fakeShell,
       commandPresetId: null,
       interactiveCommand: 'claude',
@@ -546,14 +554,18 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     tempDirs.push(binDir)
     tempDirs.push(dataDir)
     const shellCommandFile = join(dataDir, 'manual-shell-command.txt')
-    const fakeShell = join(binDir, 'fake-zsh')
-    writeFileSync(
-      fakeShell,
-      ['#!/bin/sh', `printf '%s\\n' "$2" > "${shellCommandFile}"`, 'sleep 60'].join('\n')
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-zsh',
+      [
+        "import { writeFileSync } from 'node:fs'",
+        `const args = process.argv.slice(2); writeFileSync(${JSON.stringify(shellCommandFile)}, (args.at(-1) ?? '') + '\\n')`,
+        'setInterval(() => {}, 60000)',
+      ].join('\n')
     )
-    chmodSync(fakeShell, 0o755)
     setEnv('SHELL', fakeShell)
-    setEnv('PATH', `${binDir}:${process.env.PATH ?? ''}`)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
 
     const { store, baseUrl } = await startServer({ dataDir })
     const cookie = await getUiCookie(baseUrl)
@@ -579,7 +591,10 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     expect(workspace.orchestrator_start).toEqual({ error: null, ok: false, run_id: null })
     const orchestratorId = `${workspace.id}:orchestrator`
     expect(store.peekAgentLaunchConfig(workspace.id, orchestratorId)).toMatchObject({
-      args: ['-lic', 'claude --resume f500de1d-df89-470f-a2ce-e385acffef19'],
+      args:
+        process.platform === 'win32'
+          ? ['/d', '/s', '/c', 'claude --resume f500de1d-df89-470f-a2ce-e385acffef19']
+          : ['-lic', 'claude --resume f500de1d-df89-470f-a2ce-e385acffef19'],
       command: fakeShell,
       commandPresetId: null,
       interactiveCommand: 'claude',
@@ -640,13 +655,15 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     // shells out to a missing helper) and the autostart wrapper MUST translate
     // it to the same UX string as the sync ENOENT branch.
     //
-    // We use `bash -c 'exit 127'` so the test does not depend on any specific
-    // missing binary. `config.command` is therefore `bash`, which yields
-    // `bash CLI not found in PATH` — slightly odd-looking but exactly the
-    // mechanic we want to lock in. Real users configure `claude` and see
-    // `claude CLI not found in PATH`, which reads correctly.
+    // Put a real cross-platform fixture named `bash` first on PATH. This
+    // keeps the configured command name stable without relying on the
+    // WindowsApps bash alias or on a POSIX shell being installed.
+    const binDir = mkdtempSync(join(tmpdir(), 'hive-async-127-bin-'))
+    tempDirs.push(binDir)
+    writeNodeCli(binDir, 'bash', 'process.exit(127)')
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
     setEnv('HIVE_ORCHESTRATOR_COMMAND', 'bash')
-    setEnv('HIVE_ORCHESTRATOR_ARGS_JSON', JSON.stringify(['-c', 'exit 127']))
+    setEnv('HIVE_ORCHESTRATOR_ARGS_JSON', '[]')
 
     const { store, baseUrl } = await startServer()
     const cookie = await getUiCookie(baseUrl)

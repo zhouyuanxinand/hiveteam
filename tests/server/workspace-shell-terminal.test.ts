@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
 import { getWorkspaceShellAgentId } from '../../src/server/workspace-shell-runtime.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -119,10 +120,13 @@ describe('workspace shell terminal', () => {
     const binDir = mkdtempSync(join(tmpdir(), 'hive-shell-terminal-exit-bin-'))
     tempDirs.push(workspacePath)
     tempDirs.push(binDir)
-    const fakeShell = join(binDir, 'fake-shell')
-    writeFileSync(fakeShell, ['#!/bin/sh', 'echo shell exiting', 'exit 0'].join('\n'))
-    chmodSync(fakeShell, 0o755)
+    const fakeShell = writeNodeCli(
+      binDir,
+      'fake-shell',
+      "process.stdout.write('shell exiting\\n'); process.exit(0)"
+    )
     setEnv('SHELL', fakeShell)
+    if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
     const server = await startTestServer()
 
     try {

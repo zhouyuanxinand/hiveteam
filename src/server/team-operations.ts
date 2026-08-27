@@ -43,6 +43,8 @@ export interface TeamOperationsInput {
     workspaceId: string
   }) => DispatchRecord | undefined
   markDispatchSubmitted: (dispatchId: string) => void
+  /** Optional for lightweight callers that do not persist delivery failures. */
+  markDispatchDeliveryFailed?: (dispatchId: string, error: string) => void
   reportOutbox?: ReportOutboxStore
   runDataMutation?: (mutation: () => void) => void
   workspaceStore: WorkspaceStore
@@ -96,6 +98,7 @@ export const createTeamOperations = ({
   markDispatchCancelled,
   markDispatchReportedByWorker,
   markDispatchSubmitted,
+  markDispatchDeliveryFailed,
   reportOutbox,
   runDataMutation,
   workspaceStore,
@@ -179,7 +182,10 @@ export const createTeamOperations = ({
     const worker = workspaceStore.getWorker(workspaceId, workerId)
     let replayed = 0
     for (const dispatch of listOpenWorkspaceDispatches(workspaceId)) {
-      if (dispatch.status !== 'queued' || dispatch.toAgentId !== workerId) {
+      if (
+        (dispatch.status !== 'queued' && dispatch.status !== 'failed') ||
+        dispatch.toAgentId !== workerId
+      ) {
         continue
       }
 
@@ -198,6 +204,7 @@ export const createTeamOperations = ({
         markDispatchSubmitted(dispatch.id)
         replayed += 1
       } catch (error) {
+        markDispatchDeliveryFailed?.(dispatch.id, reportForwardErrorMessage(error))
         console.error('[hive] queued dispatch replay failed', {
           dispatchId: dispatch.id,
           error: reportForwardErrorMessage(error),
@@ -241,22 +248,43 @@ export const createTeamOperations = ({
         const sender = workspaceStore.getAgent(workspaceId, input.fromAgentId)
         await ensureWorkerRun(workspaceId, workerId, input.hivePort ?? '')
         const worker = workspaceStore.getWorker(workspaceId, workerId)
-        markDispatchSubmitted(dispatch.id)
-        agentRuntime.writeSendPrompt(
-          workspaceId,
-          workerId,
-          dispatch.id,
-          sender.name,
-          worker.description,
-          text
-        )
+        // A start-triggered replay can run in the microtask immediately after
+        // ensureWorkerRun resolves. If it already accepted this dispatch,
+        // don't inject the same task a second time.
+        const replayedDispatch = findOpenDispatch(workspaceId, workerId, dispatch.id)
+        if (replayedDispatch?.status !== 'submitted') {
+          markDispatchSubmitted(dispatch.id)
+          agentRuntime.writeSendPrompt(
+            workspaceId,
+            workerId,
+            dispatch.id,
+            sender.name,
+            worker.description,
+            text
+          )
+        }
       }
 
       workspaceStore.markTaskDispatched(workspaceId, workerId)
-      return dispatch
+      // A worker-start replay may have accepted the dispatch while
+      // ensureWorkerRun was yielding. Return the durable record so callers
+      // immediately see the submitted/failed state instead of the stale
+      // queued object created above.
+      return findOpenDispatch(workspaceId, workerId, dispatch.id) ?? dispatch
     } catch (error) {
-      if (dispatch) deleteDispatch(dispatch.id)
-      deleteMessage(messageHandle)
+      if (dispatch && markDispatchDeliveryFailed) {
+        markDispatchDeliveryFailed(
+          dispatch.id,
+          error instanceof Error ? error.message : String(error)
+        )
+        // Keep the durable message and dispatch. The next worker start can
+        // replay the same task instead of silently losing it.
+      } else {
+        // Preserve rollback semantics for isolated callers that do not provide
+        // the durable failure ledger.
+        if (dispatch) deleteDispatch(dispatch.id)
+        deleteMessage(messageHandle)
+      }
       throw error
     }
   }

@@ -10,7 +10,7 @@ import { useWorkerModalResize, WORKER_MODAL_MIN } from './useWorkerModalResize.j
 import { presentWorkerRuntimeStatus } from './worker-status.js'
 
 type WorkerModalProps = {
-  commandPresetId?: string
+  commandPresetId?: string | undefined
   onClose: () => void
   onOpenModelPicker?: (worker: TeamListItem) => void
   onStart: (worker: TeamListItem) => void

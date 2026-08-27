@@ -46,7 +46,10 @@ export const createRestartPolicy = ({
     )
     const tasksContent = readTasks(snapshot.summary.path)
     const openDispatches = listOpenDispatches(workspace.id).filter(
-      (dispatch) => dispatch.status === 'queued' || dispatch.status === 'submitted'
+      (dispatch) =>
+        dispatch.status === 'queued' ||
+        dispatch.status === 'submitted' ||
+        dispatch.status === 'failed'
     )
     const relevantDispatches =
       agent.role === 'orchestrator'

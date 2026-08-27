@@ -1,10 +1,11 @@
-import { Link } from 'lucide-react'
+import { Copy, Link } from 'lucide-react'
 
 import { useI18n } from '../i18n.js'
 
 type CliBindingFieldProps = {
   command: string
   displayName: string
+  installHint?: string | null | undefined
   value: string
   onChange: (value: string) => void
   testId: string
@@ -18,11 +19,16 @@ type CliBindingFieldProps = {
 export const CliBindingField = ({
   command,
   displayName,
+  installHint,
   value,
   onChange,
   testId,
 }: CliBindingFieldProps) => {
   const { t } = useI18n()
+  const copyInstallHint = () => {
+    if (!installHint) return
+    void navigator.clipboard?.writeText(installHint)
+  }
   return (
     <div
       className="flex flex-col gap-2 rounded border p-3"
@@ -53,7 +59,21 @@ export const CliBindingField = ({
         spellCheck={false}
         data-testid={testId}
       />
-      <p className="text-xs leading-5 text-ter">{t('cliBinding.help')}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs leading-5 text-ter">{t('cliBinding.help')}</p>
+        {installHint ? (
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1 text-xs text-accent hover:underline"
+            onClick={copyInstallHint}
+            title={installHint}
+            data-testid={`${testId}-install-guide`}
+          >
+            <Copy size={12} aria-hidden />
+            {t('cliBinding.copyGuide')}
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }

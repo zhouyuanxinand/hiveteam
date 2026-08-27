@@ -3,15 +3,11 @@ import { lazy, Suspense } from 'react'
 import type { TeamListItem } from '../../src/shared/types.js'
 import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import type { useTasksFile } from './tasks/useTasksFile.js'
+import { WorkspaceTaskDrawer } from './tasks/WorkspaceTaskDrawer.js'
 import type { WorkspaceCreateInput } from './workspace/workspace-create-input.js'
 
 type TasksFileApi = ReturnType<typeof useTasksFile>
 
-const WorkspaceTaskDrawer = lazy(() =>
-  import('./tasks/WorkspaceTaskDrawer.js').then((module) => ({
-    default: module.WorkspaceTaskDrawer,
-  }))
-)
 const AddWorkspaceDialog = lazy(() =>
   import('./workspace/AddWorkspaceDialog.js').then((module) => ({
     default: module.AddWorkspaceDialog,
@@ -25,6 +21,16 @@ const WorkspaceKnowledgeDrawer = lazy(() =>
     default: module.WorkspaceKnowledgeDrawer,
   }))
 )
+const WorkspaceGitDrawer = lazy(() =>
+  import('./git/WorkspaceGitDrawer.js').then((module) => ({
+    default: module.WorkspaceGitDrawer,
+  }))
+)
+const ActivityCenterDrawer = lazy(() =>
+  import('./activity/ActivityCenterDrawer.js').then((module) => ({
+    default: module.ActivityCenterDrawer,
+  }))
+)
 
 type AppOverlaysProps = {
   addDialogTrigger: number
@@ -32,10 +38,14 @@ type AppOverlaysProps = {
   onCloseTaskGraph: () => void
   onCloseWizard: (shouldMarkSeen?: boolean) => void
   onCloseKnowledge: () => void
+  onCloseGit: () => void
+  onCloseActivity: () => void
   onCreateWorkspace: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
   onTryDemo: () => void
   taskGraphOpen: boolean
   knowledgeTab: KnowledgeTab | null
+  gitOpen: boolean
+  activityOpen: boolean
   tasksFile: TasksFileApi
   wizardOpen: boolean
   workspacePath: string | null
@@ -54,10 +64,14 @@ export const AppOverlays = ({
   onCloseTaskGraph,
   onCloseWizard,
   onCloseKnowledge,
+  onCloseGit,
+  onCloseActivity,
   onCreateWorkspace,
   onTryDemo,
   taskGraphOpen,
   knowledgeTab,
+  gitOpen,
+  activityOpen,
   tasksFile,
   wizardOpen,
   workspacePath,
@@ -71,17 +85,15 @@ export const AppOverlays = ({
       /* Dormant Task Graph/Blueprint surface. App passes `open=false` while
          TASK_GRAPH_PRIMARY_ENTRY_ENABLED is disabled; keep it wired so older
          `.hive/tasks.md` workspaces and future reactivation have a tested path. */
-      <Suspense fallback={null}>
-        <WorkspaceTaskDrawer
-          open={taskGraphOpen}
-          tasksFile={tasksFile}
-          onClose={onCloseTaskGraph}
-          workspacePath={workspacePath}
-          {...(workers ? { workers } : {})}
-          {...(onSelectOwner ? { onSelectOwner } : {})}
-          {...(connectionStale !== undefined ? { connectionStale } : {})}
-        />
-      </Suspense>
+      <WorkspaceTaskDrawer
+        open={taskGraphOpen}
+        tasksFile={tasksFile}
+        onClose={onCloseTaskGraph}
+        workspacePath={workspacePath}
+        {...(workers ? { workers } : {})}
+        {...(onSelectOwner ? { onSelectOwner } : {})}
+        {...(connectionStale !== undefined ? { connectionStale } : {})}
+      />
     ) : null}
     {workspaceId && knowledgeTab ? (
       <Suspense fallback={null}>
@@ -90,7 +102,18 @@ export const AppOverlays = ({
           onClose={onCloseKnowledge}
           open
           workspaceId={workspaceId}
+          {...(workers ? { workers } : {})}
         />
+      </Suspense>
+    ) : null}
+    {workspaceId && gitOpen ? (
+      <Suspense fallback={null}>
+        <WorkspaceGitDrawer onClose={onCloseGit} open workspaceId={workspaceId} />
+      </Suspense>
+    ) : null}
+    {workspaceId && activityOpen ? (
+      <Suspense fallback={null}>
+        <ActivityCenterDrawer onClose={onCloseActivity} open workspaceId={workspaceId} />
       </Suspense>
     ) : null}
     {addDialogTrigger > 0 ? (

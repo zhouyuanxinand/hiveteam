@@ -45,8 +45,8 @@ beforeEach(async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: uiCookie },
       body: JSON.stringify({
-        command: '/bin/bash',
-        args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+        command: process.execPath,
+        args: ['-e', 'process.stdin.resume()'],
       }),
     }
   )
@@ -78,8 +78,8 @@ beforeEach(async () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: uiCookie },
       body: JSON.stringify({
-        command: '/bin/bash',
-        args: ['-lc', `${process.execPath} -e "process.stdin.resume()"`],
+        command: process.execPath,
+        args: ['-e', 'process.stdin.resume()'],
       }),
     }
   )

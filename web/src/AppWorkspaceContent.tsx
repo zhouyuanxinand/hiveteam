@@ -15,6 +15,7 @@ type AppWorkspaceContentProps = {
   onRequestAddWorkspace: () => void
   onShellRunClosed: (workspaceId: string, runId: string) => void
   onShellRunStarted: (workspaceId: string, run: TerminalRunSummary) => void
+  onWorkersChanged?: ((workspaceId: string, workers: TeamListItem[]) => void) | undefined
   onTryDemo: () => void
   optimisticRunsByWorkspaceId: Record<string, TerminalRunSummary[]>
   orchestratorAutostartErrors: Record<string, string | null>
@@ -35,6 +36,7 @@ export const AppWorkspaceContent = ({
   onRequestAddWorkspace,
   onShellRunClosed,
   onShellRunStarted,
+  onWorkersChanged,
   onTryDemo,
   optimisticRunsByWorkspaceId,
   orchestratorAutostartErrors,
@@ -65,6 +67,7 @@ export const AppWorkspaceContent = ({
         onRequestAddWorkspace={onRequestAddWorkspace}
         onShellRunClosed={onShellRunClosed}
         onShellRunStarted={onShellRunStarted}
+        onWorkersChanged={onWorkersChanged}
         onTryDemo={onTryDemo}
         welcomeDisabledReason={bootstrapError ?? undefined}
         orchestratorAutostartError={

@@ -20,6 +20,7 @@ export const createTasksFileWatcher = ({
 }): TasksFileWatcher => {
   const watchers = new Map<string, FSWatcher>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  const pendingStarts = new Map<string, Promise<void>>()
 
   const clearTimer = (workspaceId: string) => {
     const timer = timers.get(workspaceId)
@@ -39,19 +40,25 @@ export const createTasksFileWatcher = ({
     }
   }
 
-  const stop = async (workspaceId: string) => {
+  const stopWatcher = async (workspaceId: string) => {
     clearTimer(workspaceId)
     const watcher = watchers.get(workspaceId)
     watchers.delete(workspaceId)
     await watcher?.close()
   }
 
-  return {
-    close: async () => {
-      await Promise.all(Array.from(watchers.keys(), (workspaceId) => stop(workspaceId)))
-    },
-    start: async (workspaceId, workspacePath) => {
-      await stop(workspaceId)
+  const stop = async (workspaceId: string) => {
+    // createWorkspace starts the watcher in the background. Await an in-flight
+    // start before closing its watcher; otherwise store.close() can return while
+    // chokidar is still opening a handle to the workspace on Windows.
+    await pendingStarts.get(workspaceId)
+    await stopWatcher(workspaceId)
+  }
+
+  const start = (workspaceId: string, workspacePath: string) => {
+    const startPromise = (async () => {
+      // This internal stop avoids waiting on the promise currently being built.
+      await stopWatcher(workspaceId)
       ensureTasksFile(workspacePath)
       ensureProtocolFile(workspacePath)
       const watcher = chokidar.watch(getTasksFilePath(workspacePath), {
@@ -72,7 +79,31 @@ export const createTasksFileWatcher = ({
       watcher.on('unlink', scheduleEmit)
       watchers.set(workspaceId, watcher)
       await new Promise<void>((resolve) => watcher.once('ready', () => resolve()))
+    })()
+
+    pendingStarts.set(workspaceId, startPromise)
+    void startPromise.then(
+      () => {
+        if (pendingStarts.get(workspaceId) === startPromise) pendingStarts.delete(workspaceId)
+      },
+      () => {
+        if (pendingStarts.get(workspaceId) === startPromise) pendingStarts.delete(workspaceId)
+      }
+    )
+    return startPromise
+  }
+
+  return {
+    close: async () => {
+      // Await starts first so a watcher cannot be registered after the close
+      // snapshot. This race is especially visible as EBUSY rmdir failures on
+      // Windows when a test or workspace is removed immediately after close.
+      while (pendingStarts.size > 0) {
+        await Promise.all(Array.from(pendingStarts.values()))
+      }
+      await Promise.all(Array.from(watchers.keys(), (workspaceId) => stopWatcher(workspaceId)))
     },
+    start,
     stop,
   }
 }

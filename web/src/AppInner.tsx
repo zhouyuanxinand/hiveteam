@@ -38,8 +38,14 @@ export const AppInner = () => {
   const [addDialogTrigger, setAddDialogTrigger] = useState(0)
   const [taskGraphOpen, setTaskGraphOpen] = useState(false)
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab | null>(null)
+  const [gitOpen, setGitOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
   useEffect(() => {
-    if (demoMode) setKnowledgeTab(null)
+    if (demoMode) {
+      setKnowledgeTab(null)
+      setGitOpen(false)
+      setActivityOpen(false)
+    }
   }, [demoMode])
   const toast = useToast()
   const { wizardOpen, closeWizard } = useFirstRunWizard(workspaces)
@@ -92,6 +98,8 @@ export const AppInner = () => {
     onActiveDeleted: () => {
       setTaskGraphOpen(false)
       setKnowledgeTab(null)
+      setGitOpen(false)
+      setActivityOpen(false)
     },
     selectWorkspace,
     setWorkersByWorkspaceId,
@@ -126,12 +134,30 @@ export const AppInner = () => {
         onToggleTaskGraph={() => setTaskGraphOpen((value) => !value)}
         {...(!demoMode
           ? {
-              onToggleMemory: () =>
-                setKnowledgeTab((value) => (value === 'memory' ? null : 'memory')),
-              onToggleWorkflows: () =>
-                setKnowledgeTab((value) => (value === 'workflows' ? null : 'workflows')),
+              onToggleGit: () => {
+                setGitOpen((value) => !value)
+                setKnowledgeTab(null)
+                setActivityOpen(false)
+              },
+              onToggleActivity: () => {
+                setActivityOpen((value) => !value)
+                setGitOpen(false)
+                setKnowledgeTab(null)
+              },
+              onToggleMemory: () => {
+                setGitOpen(false)
+                setActivityOpen(false)
+                setKnowledgeTab((value) => (value === 'memory' ? null : 'memory'))
+              },
+              onToggleWorkflows: () => {
+                setGitOpen(false)
+                setActivityOpen(false)
+                setKnowledgeTab((value) => (value === 'workflows' ? null : 'workflows'))
+              },
             }
           : {})}
+        gitOpen={gitOpen}
+        activityOpen={activityOpen}
         memoryOpen={knowledgeTab === 'memory'}
         workflowsOpen={knowledgeTab === 'workflows'}
         openTaskCount={openTaskCount}
@@ -171,6 +197,9 @@ export const AppInner = () => {
                 workspaceId,
               })
             }
+            onWorkersChanged={(workspaceId, nextWorkers) => {
+              setWorkersByWorkspaceId((current) => ({ ...current, [workspaceId]: nextWorkers }))
+            }}
             onTryDemo={enableDemo}
             optimisticRunsByWorkspaceId={terms.optimisticRunsByWorkspaceId}
             orchestratorAutostartErrors={wsCreate.orchestratorAutostartErrors}
@@ -187,11 +216,15 @@ export const AppInner = () => {
           onAddWorkspace={triggerAddDialog}
           onCloseTaskGraph={() => setTaskGraphOpen(false)}
           onCloseKnowledge={() => setKnowledgeTab(null)}
+          onCloseGit={() => setGitOpen(false)}
+          onCloseActivity={() => setActivityOpen(false)}
           onCloseWizard={closeWizard}
           onCreateWorkspace={wsCreate.createNewWorkspace}
           onTryDemo={enableDemo}
           taskGraphOpen={taskGraphOpen}
           knowledgeTab={knowledgeTab}
+          gitOpen={gitOpen}
+          activityOpen={activityOpen}
           tasksFile={tasksFile}
           workspacePath={eff.effectiveActiveWorkspace?.path ?? null}
           workspaceId={demoMode ? null : (activeWorkspaceId ?? null)}

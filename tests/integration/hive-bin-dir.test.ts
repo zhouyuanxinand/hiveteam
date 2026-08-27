@@ -5,13 +5,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
 
 const waitFor = async (
   assertion: () => void | Promise<void>,
-  timeoutMs = 1500,
+  timeoutMs = 5000,
   intervalMs = 20
 ) => {
   const deadline = Date.now() + timeoutMs
@@ -44,10 +45,12 @@ describe('hive bin dir', () => {
     tempDirs.push(dataDir)
 
     const scriptPath = join(workspacePath, 'which-team.js')
+    const lookupCommand = process.platform === 'win32' ? 'where.exe team' : 'which team'
     writeFileSync(
       scriptPath,
-      "import { execSync } from 'node:child_process'\nconsole.log(execSync('which team', { encoding: 'utf8' }).trim())\nsetTimeout(() => process.exit(0), 10)\n"
+      `import { execSync } from 'node:child_process'\nconsole.log(execSync(${JSON.stringify(lookupCommand)}, { encoding: 'utf8' }).trim())\nsetTimeout(() => process.exit(0), 10)\n`
     )
+    const expectedTeamPath = process.platform === 'win32' ? 'dist\\bin\\team.cmd' : '/dist/bin/team'
 
     process.env.HIVE_DATA_DIR = dataDir
     const hive = await runHiveCommand(['--port', '0'])
@@ -70,8 +73,8 @@ describe('hive bin dir', () => {
           method: 'POST',
           headers: { 'content-type': 'application/json', cookie: uiCookie },
           body: JSON.stringify({
-            command: '/bin/bash',
-            args: ['-lc', `"${process.execPath}" "${scriptPath}"`],
+            command: process.execPath,
+            args: [scriptPath],
           }),
         }
       )
@@ -106,7 +109,7 @@ describe('hive bin dir', () => {
         expect(runResponse.status).toBe(200)
         await expect(runResponse.json()).resolves.toEqual(
           expect.objectContaining({
-            output: expect.stringContaining('/dist/bin/team'),
+            output: expect.stringContaining(expectedTeamPath),
             runId: payload.runId,
             status: 'exited',
           })
@@ -120,7 +123,7 @@ describe('hive bin dir', () => {
       expect(runResponse.status).toBe(200)
       await expect(runResponse.json()).resolves.toEqual(
         expect.objectContaining({
-          output: expect.stringContaining('/dist/bin/team'),
+          output: expect.stringContaining(expectedTeamPath),
           runId: payload.runId,
           status: 'exited',
         })
@@ -142,7 +145,9 @@ describe('hive bin dir', () => {
       scriptPath,
       [
         "import { execFileSync } from 'node:child_process'",
-        "const output = execFileSync('team', ['list'], { encoding: 'utf8' })",
+        "const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'team'",
+        "const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'team.cmd list'] : ['list']",
+        "const output = execFileSync(command, args, { encoding: 'utf8' })",
         "console.log('TEAM_LIST:' + output.trim())",
       ].join('\n')
     )
@@ -200,10 +205,11 @@ describe('hive bin dir', () => {
         })
         expect(runResponse.status).toBe(200)
         const run = (await runResponse.json()) as { output: string; status: string }
-        expect(run.status).toBe('exited')
-        expect(run.output).toContain('TEAM_LIST:')
-        expect(run.output).toContain('"name":"Alice"')
-        expect(run.output).toContain('"pending_task_count":0')
+        expect(run.status, run.output).toBe('exited')
+        const output = normalizePtyText(run.output)
+        expect(output).toContain('TEAM_LIST:')
+        expect(output).toContain('"name":"Alice"')
+        expect(output).toContain('"pending_task_count":0')
       })
     } finally {
       delete process.env.HIVE_DATA_DIR

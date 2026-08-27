@@ -16,6 +16,7 @@ const outputBus = {
 }
 
 const tempDirs: string[] = []
+let activeDb: { close: () => void; open: boolean } | undefined
 
 const createClaudeSessionRoot = (cwd: string, sessionId: string) => {
   const root = join(tmpdir(), `hive-resume-failure-${crypto.randomUUID()}`)
@@ -24,9 +25,12 @@ const createClaudeSessionRoot = (cwd: string, sessionId: string) => {
   writeFileSync(join(projectDir, `${sessionId}.jsonl`), '{}\n')
   tempDirs.push(root)
   process.env.HIVE_CLAUDE_PROJECTS_DIR = root
+  return root
 }
 
 afterEach(() => {
+  if (activeDb?.open) activeDb.close()
+  activeDb = undefined
   delete process.env.HIVE_CLAUDE_PROJECTS_DIR
   for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
   vi.restoreAllMocks()
@@ -36,9 +40,11 @@ describe('claude session resume failure', () => {
   test('clears stale session id after resumed Claude run exits non-zero and next start is bare', async () => {
     const cwd = '/tmp/hive-resume-failure-workspace'
     const staleSessionId = '77777777-7777-4777-8777-777777777777'
-    createClaudeSessionRoot(cwd, staleSessionId)
+    const claudeRoot = createClaudeSessionRoot(cwd, staleSessionId)
+    const sessionPath = join(claudeRoot, encodeClaudeProjectPath(cwd), `${staleSessionId}.jsonl`)
     const dbPath = join(tmpdir(), `hive-resume-failure-db-${crypto.randomUUID()}.sqlite`)
     const db = new Database(dbPath)
+    activeDb = db
     tempDirs.push(dbPath)
     initializeRuntimeDatabase(db)
     db.prepare('INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(
@@ -71,6 +77,7 @@ describe('claude session resume failure', () => {
           const runId = `run-${runIndex}`
           startArgs.push(input.args)
           if (runId === 'run-1') {
+            rmSync(sessionPath, { force: true })
             input.onExit?.({ runId, exitCode: 1 })
           }
           return {
@@ -101,7 +108,10 @@ describe('claude session resume failure', () => {
               command: 'claude',
               args: ['--dangerously-skip-permissions'],
               resumeArgsTemplate: '--resume {session_id}',
-              sessionIdCapture: null,
+              sessionIdCapture: {
+                source: 'claude_project_jsonl_dir',
+                pattern: '~/.claude/projects/{encoded_cwd}/*.jsonl',
+              },
             },
           },
         ],

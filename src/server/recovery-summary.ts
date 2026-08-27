@@ -4,6 +4,7 @@ import { buildAgentSessionBindingMarker } from './agent-startup-instructions.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { getHiveTeamRules } from './hive-team-guidance.js'
 import type { RecoveryMessage } from './message-log-store.js'
+import { wrapUntrustedPromptData } from './prompt-safety.js'
 import { wrapSystemMessage } from './system-message.js'
 import { TASKS_RELATIVE_PATH } from './tasks-file.js'
 
@@ -12,7 +13,9 @@ const TASKS_HEAD_LIMIT = 1536
 const formatUserInputs = (messages: RecoveryMessage[]) => {
   const userInputs = messages.filter((message) => message.type === 'user_input')
   return userInputs.length > 0
-    ? userInputs.slice(-5).map((message) => `- user: ${message.text}`)
+    ? userInputs
+        .slice(-5)
+        .map((message) => `- user:\n${wrapUntrustedPromptData('report', message.text)}`)
     : ['- （最近 1 小时没有新的 user_input）']
 }
 
@@ -29,10 +32,14 @@ const formatTaskEvents = (messages: RecoveryMessage[], agent: AgentSummary) => {
   )
   return taskEvents.length > 0
     ? taskEvents.slice(-8).map((message) => {
-        if (message.type === 'send') return `- send -> ${message.to}: ${message.text}`
-        if (message.type === 'status') return `- status <- ${message.from}: ${message.text}`
+        if (message.type === 'send') {
+          return `- send -> ${message.to}:\n${wrapUntrustedPromptData('dispatch-task', message.text)}`
+        }
+        if (message.type === 'status') {
+          return `- status <- ${message.from}:\n${wrapUntrustedPromptData('status', message.text)}`
+        }
         const status = message.status ? ` [${message.status}]` : ''
-        return `- report <- ${message.from}${status}: ${message.text}`
+        return `- report <- ${message.from}${status}:\n${wrapUntrustedPromptData('report', message.text)}`
       })
     : ['- （最近没有任务事件）']
 }
@@ -53,7 +60,9 @@ const formatOpenTasks = (
 
   for (const dispatch of dispatches) {
     if (
-      (dispatch.status === 'queued' || dispatch.status === 'submitted') &&
+      (dispatch.status === 'queued' ||
+        dispatch.status === 'submitted' ||
+        dispatch.status === 'failed') &&
       targetIds.has(dispatch.toAgentId)
     ) {
       const queue = queues.get(dispatch.toAgentId) ?? []
@@ -66,7 +75,10 @@ const formatOpenTasks = (
   for (const target of targetAgents) {
     const queue = queues.get(target.id) ?? []
     for (const task of queue.slice(-8)) {
-      lines.push(`- ${target.name}: ${task.text}`)
+      const suffix = task.lastError ? `\nDelivery error: ${task.lastError}` : ''
+      lines.push(
+        `- ${target.name}:\n${wrapUntrustedPromptData('dispatch-task', task.text)}${suffix}`
+      )
     }
     if (target.pendingTaskCount > queue.length) {
       lines.push(
@@ -120,7 +132,9 @@ export const buildRecoverySummary = ({
       ...formatOpenTasks(openDispatches, agent, workers),
       '',
       `## 当前 ${TASKS_RELATIVE_PATH} 状态`,
-      tasksContent.slice(0, TASKS_HEAD_LIMIT) || '(空)',
+      tasksContent.trim()
+        ? wrapUntrustedPromptData('workflow', tasksContent.slice(0, TASKS_HEAD_LIMIT))
+        : '(空)',
       '',
       '## 当前活跃 worker',
       ...formatWorkers(workers),

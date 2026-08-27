@@ -14,6 +14,8 @@ let cleanupServer: (() => Promise<void>) | undefined
 let sandboxRoot = ''
 const nativeFetch = globalThis.fetch
 const tempDirs: string[] = []
+const WORKSPACE_PICKER_TIMEOUT_MS = 15_000
+const WORKSPACE_CREATE_TIMEOUT_MS = 30_000
 
 beforeEach(async () => {
   window.localStorage.setItem('hive.first-run-seen', '1')
@@ -58,7 +60,9 @@ describe('workspace create initial state', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'New Workspace' }))
 
-    const confirm = await screen.findByTestId('confirm-workspace-dialog')
+    const confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
     fireEvent.change(within(confirm).getByTestId('confirm-workspace-name'), {
       target: { value: 'Alpha' },
     })
@@ -78,7 +82,7 @@ describe('workspace create initial state', () => {
             .find((b) => b.classList.contains('ws-row'))
         ).toHaveAttribute('aria-current', 'true')
       },
-      { timeout: 15000 }
+      { timeout: WORKSPACE_CREATE_TIMEOUT_MS }
     )
 
     // Sub-header and footer were removed in M6 polish. Workspace identity
@@ -98,5 +102,5 @@ describe('workspace create initial state', () => {
     const drawer = await screen.findByTestId('task-graph-drawer')
     expect(within(drawer).queryByTestId('task-graph-list')).toBeNull()
     expect(within(drawer).getByText(/No tasks yet/i)).toBeInTheDocument()
-  }, 20000)
+  }, 45_000)
 })

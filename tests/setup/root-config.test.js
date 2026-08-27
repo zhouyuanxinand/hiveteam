@@ -17,7 +17,7 @@ test('public package metadata is ready for external users', () => {
 
   expect(packageJson.license).toBe('BUSL-1.1')
   expect(packageJson.description).toBe(
-    'Run Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.'
+    'HiveTeam runs Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.'
   )
   expect(packageJson.keywords).toEqual(
     expect.arrayContaining(['ai-agents', 'cli', 'collaboration', 'multi-agent', 'workspace'])
