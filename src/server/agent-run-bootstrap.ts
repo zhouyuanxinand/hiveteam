@@ -58,7 +58,13 @@ const createSessionCaptureDiscriminator = (
   if (!agent) return undefined
   const contentIncludes = [buildAgentSessionBindingMarker({ agent, workspace })]
   if (!codexSessionCapture) {
-    contentIncludes.push(buildAgentLegacyIdentityMarker({ agent, workspace }))
+    contentIncludes.push(
+      buildAgentLegacyIdentityMarker({
+        agent,
+        ...(workspace.language ? { language: workspace.language } : {}),
+        workspace,
+      })
+    )
   }
   return {
     contentIncludes,

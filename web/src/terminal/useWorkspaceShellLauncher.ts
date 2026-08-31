@@ -114,23 +114,32 @@ export const useWorkspaceShellLauncher = ({
     const isSelectedWorkspace = () => selectedWorkspaceIdRef.current === requestWorkspaceId
     const ownsInFlightMarker = () =>
       shellStartInFlightByWorkspaceRef.current.get(requestWorkspaceId) === requestSeq
+    const finishStart = () => {
+      if (!ownsInFlightMarker()) return
+      shellStartInFlightByWorkspaceRef.current.delete(requestWorkspaceId)
+      if (isSelectedWorkspace()) setShellStarting(false)
+    }
     setShellError(null)
     setShellStarting(true)
     void startWorkspaceShell(requestWorkspaceId)
       .then((run) => {
         onShellRunStarted?.(requestWorkspaceId, run)
-        if (!isSelectedWorkspace()) return
-        setShellRunId(run.run_id)
-        panelTabs.openShellTab(run.run_id)
+        if (isSelectedWorkspace()) {
+          setShellRunId(run.run_id)
+          panelTabs.openShellTab(run.run_id)
+        }
+        // Release the start lock in the same update that exposes the terminal
+        // tab. Otherwise a just-visible tab can still show a disabled "+"
+        // button for one render, dropping an immediate request for a second
+        // workspace shell.
+        finishStart()
       })
       .catch((error) => {
         if (!isSelectedWorkspace()) return
         setShellError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => {
-        if (ownsInFlightMarker())
-          shellStartInFlightByWorkspaceRef.current.delete(requestWorkspaceId)
-        if (isSelectedWorkspace()) setShellStarting(false)
+        finishStart()
       })
   }
 

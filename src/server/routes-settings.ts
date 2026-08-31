@@ -113,6 +113,10 @@ const readRoleTemplateBody = async (
 }
 
 export const settingsRoutes: RouteDefinition[] = [
+  route('GET', '/api/settings/local-retention-diagnostics', ({ request, response, store }) => {
+    requireUiTokenFromRequest(request, store.validateUiToken)
+    sendJson(response, 200, store.getLocalRetentionDiagnostics())
+  }),
   route('GET', '/api/settings/command-presets', ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     sendJson(response, 200, store.settings.listCommandPresets().map(serializeCommandPreset))

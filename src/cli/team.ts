@@ -1,5 +1,12 @@
-import { realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import {
+  buildProtocolGuide,
+  isProtocolGuideTopic,
+  PROTOCOL_GUIDE_TOPICS,
+} from '../server/hive-team-guidance.js'
 
 const REQUIRED_ENV_KEYS = [
   'HIVE_PORT',
@@ -20,8 +27,11 @@ interface HiveEnv {
 const TEAM_USAGE = [
   'Usage:',
   '  team list',
-  '  team send <worker-name> "<task>"',
+  `  team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`,
+  '  team send "<worker-name>" "<task>"',
   '  team cancel --dispatch <dispatch-id> "<reason>"',
+  '  team goal report --goal <goal-id> --status progress|done|blocked|failed "<body>"',
+  '  team goal report --goal <goal-id> --status progress|done|blocked|failed --stdin',
   '  team report "<result>" [--dispatch <dispatch-id>] [--artifact <path>]',
   '  team report --stdin [--dispatch <dispatch-id>] [--artifact <path>]',
   '  team status "<current status>" [--artifact <path>]',
@@ -33,7 +43,7 @@ const TEAM_USAGE = [
   '  ... long report ...',
   '  EOF',
   '',
-  'For role rules, workflow, and recovery instructions, see .hive/PROTOCOL.md',
+  'For focused runtime guidance, use team guide <topic>. For the full generated protocol, see .hive/PROTOCOL.md',
 ].join('\n')
 
 const getHiveEnv = (): HiveEnv => {
@@ -123,15 +133,47 @@ const REPORT_USAGE =
   'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--artifact <path>]'
 const STATUS_USAGE = 'Usage: team status (<current status> | --stdin) [--artifact <path>]'
 const CANCEL_USAGE = 'Usage: team cancel --dispatch <dispatch-id> <reason>'
+const GUIDE_USAGE = `Usage: team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`
+const GOAL_REPORT_USAGE =
+  'Usage: team goal report --goal <goal-id> --status progress|done|blocked|failed (<body> | --stdin) [--artifact <path>]'
+const GOAL_REPORT_STATUSES = new Set(['progress', 'done', 'blocked', 'failed'])
 
-const usageFor = (command: string) => (command === 'status' ? STATUS_USAGE : REPORT_USAGE)
+const usageFor = (command: string) => {
+  if (command === 'status') return STATUS_USAGE
+  if (command === 'goal report') return GOAL_REPORT_USAGE
+  return REPORT_USAGE
+}
 
 const withUsage = (message: string, command: string) => `${message}\n\n${usageFor(command)}`
+
+const readGeneratedProtocolGuide = (topic: string) => {
+  const protocolPath = join(process.cwd(), '.hive', 'PROTOCOL.md')
+  if (!existsSync(protocolPath)) return null
+
+  const doc = readFileSync(protocolPath, 'utf8')
+  const marker = `## Guide: ${topic}`
+  const start = doc.indexOf(marker)
+  if (start === -1) return null
+
+  const nextGuide = doc.indexOf('\n## Guide:', start + marker.length)
+  const reminders = doc.indexOf('\n## In-message reminders', start + marker.length)
+  const candidates = [nextGuide, reminders].filter((index) => index !== -1)
+  const end = candidates.length === 0 ? doc.length : Math.min(...candidates)
+  return doc.slice(start, end).trimEnd()
+}
 
 export interface ParsedReportArgs {
   artifacts: string[]
   dispatchId: string | undefined
   result: string | null
+  useStdin: boolean
+}
+
+export interface ParsedGoalReportArgs {
+  artifacts: string[]
+  goalId: string
+  result: string | null
+  status: 'progress' | 'done' | 'blocked' | 'failed'
   useStdin: boolean
 }
 
@@ -256,6 +298,64 @@ export const parseCancelArgs = (args: string[]): ParsedCancelArgs => {
   return { dispatchId, reason }
 }
 
+export const parseGoalReportArgs = (args: string[]): ParsedGoalReportArgs => {
+  const positionals: string[] = []
+  const artifacts: string[] = []
+  let goalId: string | undefined
+  let status: ParsedGoalReportArgs['status'] | undefined
+  let useStdin = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === undefined) continue
+
+    if (arg === '--stdin') {
+      useStdin = true
+      continue
+    }
+    if (arg === '--goal' || arg === '--status' || arg === '--artifact') {
+      const next = args[index + 1]
+      if (next === undefined || next.startsWith('--')) {
+        throw new Error(`${arg} requires a value\n\n${GOAL_REPORT_USAGE}`)
+      }
+      if (arg === '--goal') goalId = next
+      else if (arg === '--artifact') artifacts.push(next)
+      else if (GOAL_REPORT_STATUSES.has(next)) {
+        status = next as ParsedGoalReportArgs['status']
+      } else {
+        throw new Error(
+          `--status must be one of: progress, done, blocked, failed\n\n${GOAL_REPORT_USAGE}`
+        )
+      }
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--')) throw new Error(`Unknown argument: ${arg}\n\n${GOAL_REPORT_USAGE}`)
+    positionals.push(arg)
+  }
+
+  if (!goalId) throw new Error(`Missing --goal <goal-id>\n\n${GOAL_REPORT_USAGE}`)
+  if (!status) throw new Error(`Missing --status <status>\n\n${GOAL_REPORT_USAGE}`)
+  if (useStdin && positionals.length > 0) {
+    throw new Error(
+      `--stdin is mutually exclusive with a positional body; pass the body on stdin or as an argument, not both\n\n${GOAL_REPORT_USAGE}`
+    )
+  }
+  if (!useStdin && positionals.length === 0) {
+    throw new Error(
+      `Missing <body> (or pass --stdin to read it from stdin)\n\n${GOAL_REPORT_USAGE}`
+    )
+  }
+  if (positionals.length > 1) {
+    throw new Error(
+      `Expected exactly one body positional, got ${positionals.length}: ${positionals
+        .map((value) => JSON.stringify(value))
+        .join(', ')}\n\n${GOAL_REPORT_USAGE}`
+    )
+  }
+  return { artifacts, goalId, result: useStdin ? null : (positionals[0] ?? null), status, useStdin }
+}
+
 export const readStdinToString = async (command = 'report'): Promise<string> => {
   if (process.stdin.isTTY) {
     throw new Error(
@@ -284,6 +384,15 @@ export const runTeamCommand = async (argv: string[]) => {
     return
   }
 
+  if (command === 'guide') {
+    const topic = args[0]
+    if (!topic || args.length !== 1 || !isProtocolGuideTopic(topic)) {
+      throw new Error(GUIDE_USAGE)
+    }
+    console.log(readGeneratedProtocolGuide(topic) ?? buildProtocolGuide(topic))
+    return
+  }
+
   if (command === 'list') {
     const env = getHiveEnv()
     const baseUrl = getBaseUrl(env)
@@ -307,7 +416,7 @@ export const runTeamCommand = async (argv: string[]) => {
     const [workerName, ...taskParts] = args
     const task = taskParts.join(' ').trim()
     if (!workerName || !task || uuidPattern.test(workerName)) {
-      throw new Error('Usage: team send <worker-name> <task>')
+      throw new Error('Usage: team send "<worker-name>" "<task>"')
     }
 
     const env = getHiveEnv()
@@ -335,6 +444,29 @@ export const runTeamCommand = async (argv: string[]) => {
       token: env.HIVE_AGENT_TOKEN,
       reason: cancel.reason,
     })
+    return
+  }
+
+  if (command === 'goal') {
+    const [subcommand, ...goalArgs] = args
+    if (subcommand !== 'report') throw new Error(GOAL_REPORT_USAGE)
+    const report = parseGoalReportArgs(goalArgs)
+    const body = report.useStdin ? await readStdinToString('goal report') : (report.result ?? '')
+    const env = getHiveEnv()
+    const baseUrl = getBaseUrl(env)
+    const response = await postJson(baseUrl, '/api/team/goal/report', {
+      artifacts: report.artifacts,
+      from_agent_id: env.HIVE_AGENT_ID,
+      goal_id: report.goalId,
+      project_id: env.HIVE_PROJECT_ID,
+      result: body,
+      status: report.status,
+      token: env.HIVE_AGENT_TOKEN,
+    })
+    const payload = (await response.json()) as { cursor: number; goal_id: string; status: string }
+    console.log(
+      JSON.stringify({ cursor: payload.cursor, goal_id: payload.goal_id, status: payload.status })
+    )
     return
   }
 

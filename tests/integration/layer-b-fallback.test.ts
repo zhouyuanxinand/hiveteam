@@ -252,11 +252,6 @@ describe('Layer B fallback integration', () => {
       const orchestratorId = `${workspace.id}:orchestrator`
       const bob = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Bob', 'tester')
 
-      await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/user-input`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ text: '让 worker 评估一下项目目标' }),
-      })
       await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, bob.id, {
         command: process.execPath,
         args: [bobScript],
@@ -277,6 +272,15 @@ describe('Layer B fallback integration', () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.output).toContain('ARGS:')
       })
+      const inputResponse = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/user-input`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ text: '让 worker 评估一下项目目标' }),
+        }
+      )
+      expect(inputResponse.status).toBe(202)
       await waitForPtyOutputFlush()
       server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
       await waitFor(async () => {
@@ -297,8 +301,8 @@ describe('Layer B fallback integration', () => {
         expect(state.output).toContain('Bob')
         expect(state.output).toContain('Hive worker 是右侧卡片里的真实 CLI agent')
         expect(state.output).toContain('先执行 `team list` 确认真实 Hive worker')
-        expect(state.output).toContain('如果只有一个可用 worker，直接用 `team send <worker-name>')
-        expect(state.output).toContain('team send <worker-name> "<task>"')
+        expect(state.output).toContain('如果只有一个可用 worker，直接用 `team send "<worker-name>"')
+        expect(state.output).toContain('team send "<worker-name>" "<task>"')
         expect(state.output).toContain('不要使用你所在 CLI 的内置 subagent / 子代理工具')
       })
       server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\n')
@@ -335,15 +339,6 @@ describe('Layer B fallback integration', () => {
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({ content: '# Tasks\n- [ ] layer b fallback\n' }),
       })
-      await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/user-input`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ text: '请继续修复 restart bug' }),
-      })
-      expect(listRecoverySourceMessages(server.dataDir)).toContainEqual(
-        expect.objectContaining({ type: 'user_input', text: '请继续修复 restart bug' })
-      )
-
       await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, bob.id, {
         command: process.execPath,
         args: [bobScript],
@@ -360,6 +355,18 @@ describe('Layer B fallback integration', () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.output).toContain('ARGS:')
       })
+      const inputResponse = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/user-input`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ text: '请继续修复 restart bug' }),
+        }
+      )
+      expect(inputResponse.status).toBe(202)
+      expect(listRecoverySourceMessages(server.dataDir)).toContainEqual(
+        expect.objectContaining({ type: 'user_input', text: '请继续修复 restart bug' })
+      )
       await waitForPtyOutputFlush()
       server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
       await waitFor(async () => {
@@ -499,12 +506,6 @@ describe('Layer B fallback integration', () => {
         headers: { 'content-type': 'application/json', cookie },
         body: JSON.stringify({ content: '# Tasks\n- [ ] recover after failed resume\n' }),
       })
-      await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/user-input`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ text: '恢复后检查 Layer B 摘要' }),
-      })
-
       await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, bob.id, {
         command: process.execPath,
         args: [bobScript],
@@ -527,6 +528,15 @@ describe('Layer B fallback integration', () => {
         // Layer B input is only injected after the failed resume below.
         expect(state.output).toContain('ARGS:')
       })
+      const inputResponse = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/user-input`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ text: '恢复后检查 Layer B 摘要' }),
+        }
+      )
+      expect(inputResponse.status).toBe(202)
       server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)

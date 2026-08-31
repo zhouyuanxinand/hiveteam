@@ -241,6 +241,13 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
                           </div>
                           <p title={dispatch.text}>{dispatch.text}</p>
                           {dispatch.lastError ? <small>{dispatch.lastError}</small> : null}
+                          {!dispatch.lastError && dispatch.reportDelivery?.lastError ? (
+                            <small>
+                              {t('activity.reportDeliveryQueued', {
+                                error: dispatch.reportDelivery.lastError,
+                              })}
+                            </small>
+                          ) : null}
                         </article>
                       ))}
                     </div>

@@ -15,6 +15,7 @@ const areWorkersEqual = (a: TeamListItem[], b: TeamListItem[]): boolean => {
     const other = b[index]
     return (
       other !== undefined &&
+      worker.avatar === other.avatar &&
       worker.id === other.id &&
       worker.lastPtyLine === other.lastPtyLine &&
       worker.name === other.name &&

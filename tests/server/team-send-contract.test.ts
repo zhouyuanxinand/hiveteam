@@ -44,6 +44,6 @@ describe('team send contract', () => {
   test('team send rejects direct worker id usage', async () => {
     await expect(
       runTeamCommand(['send', '123e4567-e89b-12d3-a456-426614174000', 'Implement login'])
-    ).rejects.toThrow('Usage: team send <worker-name> <task>')
+    ).rejects.toThrow('Usage: team send "<worker-name>" "<task>"')
   })
 })

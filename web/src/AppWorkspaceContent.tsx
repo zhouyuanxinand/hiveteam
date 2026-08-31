@@ -1,6 +1,7 @@
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
 import type { OrchestratorStartResult, TerminalRunSummary } from './api.js'
 import { DemoWorkspaceView } from './demo/DemoWorkspaceView.js'
+import type { DemoReplaySnapshot } from './demo/demo-fixture.js'
 import { WorkspaceDetail } from './WorkspaceDetail.js'
 import { WorkspaceTerminalPanels } from './WorkspaceTerminalPanels.js'
 import type { WorkerActions } from './worker/useWorkerActions.js'
@@ -10,6 +11,7 @@ type AppWorkspaceContentProps = {
   activeWorkspace: WorkspaceSummary | undefined
   bootstrapError: string | null
   demoMode: boolean
+  demoReplay: DemoReplaySnapshot
   onDeleteWorkspace: (workspace: WorkspaceSummary) => Promise<void>
   onExitDemo: () => void
   onRequestAddWorkspace: () => void
@@ -31,6 +33,7 @@ export const AppWorkspaceContent = ({
   activeWorkspace,
   bootstrapError,
   demoMode,
+  demoReplay,
   onDeleteWorkspace,
   onExitDemo,
   onRequestAddWorkspace,
@@ -46,7 +49,7 @@ export const AppWorkspaceContent = ({
   workerActions,
   workers,
 }: AppWorkspaceContentProps) => {
-  if (demoMode) return <DemoWorkspaceView onExit={onExitDemo} />
+  if (demoMode) return <DemoWorkspaceView onExit={onExitDemo} replay={demoReplay} />
 
   return (
     <>
@@ -63,6 +66,7 @@ export const AppWorkspaceContent = ({
         onDeleteWorker={workerActions.deleteWorker}
         onDeleteWorkspace={onDeleteWorkspace}
         onStartWorker={workerActions.startWorker}
+        onStopWorker={workerActions.stopWorkerRun}
         onOrchestratorResult={recordOrchestratorResult}
         onRequestAddWorkspace={onRequestAddWorkspace}
         onShellRunClosed={onShellRunClosed}

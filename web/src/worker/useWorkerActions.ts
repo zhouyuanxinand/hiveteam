@@ -26,10 +26,12 @@ interface UseWorkerActionsInput {
     threadId?: string | null
     workspaceId: string
   }) => void
+  onWorkerRunStopped?: (input: { runId: string; workspaceId: string }) => void
   setWorkersByWorkspaceId: React.Dispatch<React.SetStateAction<Record<string, TeamListItem[]>>>
 }
 
 export interface CreateWorkerActionInput {
+  avatar: string | null
   commandPresetId: string
   name: string
   model?: string
@@ -52,10 +54,11 @@ export const useWorkerActions = ({
   activeWorkspaceId,
   onWorkerDeleted,
   onWorkerRunStarted,
+  onWorkerRunStopped,
   setWorkersByWorkspaceId,
 }: UseWorkerActionsInput): WorkerActions => {
   const createWorkerAction = useCallback<WorkerActions['createWorker']>(
-    async ({ commandPresetId, model, name, role, roleDescription, startupCommand }) => {
+    async ({ avatar, commandPresetId, model, name, role, roleDescription, startupCommand }) => {
       if (!activeWorkspaceId) return { error: 'No active workspace', runId: null }
       const startupClean = startupCommand.trim()
       const result = await createWorker(activeWorkspaceId, {
@@ -63,6 +66,7 @@ export const useWorkerActions = ({
         // the Orchestrator has a dispatch. A real dispatch starts a stopped
         // worker on demand; users can still start it explicitly from the card.
         autostart: false,
+        avatar,
         command_preset_id: commandPresetId || null,
         description: roleDescription.trim(),
         model: model?.trim() || null,
@@ -132,14 +136,19 @@ export const useWorkerActions = ({
     [activeWorkspaceId, onWorkerRunStarted]
   )
 
-  const stopWorkerRunAction = useCallback<WorkerActions['stopWorkerRun']>(async (runId) => {
-    try {
-      await stopAgentRun(runId)
-      return { error: null }
-    } catch (error) {
-      return { error: error instanceof Error ? error.message : String(error) }
-    }
-  }, [])
+  const stopWorkerRunAction = useCallback<WorkerActions['stopWorkerRun']>(
+    async (runId) => {
+      const workspaceId = activeWorkspaceId
+      try {
+        await stopAgentRun(runId)
+        if (workspaceId) onWorkerRunStopped?.({ runId, workspaceId })
+        return { error: null }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) }
+      }
+    },
+    [activeWorkspaceId, onWorkerRunStopped]
+  )
 
   return {
     createWorker: createWorkerAction,

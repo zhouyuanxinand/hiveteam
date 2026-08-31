@@ -6,7 +6,7 @@ import type { TerminalRunSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { Confirm } from '../ui/Confirm.js'
 import { EmptyState } from '../ui/EmptyState.js'
-import { DispatchPulse } from './DispatchPulse.js'
+import { WorkerAvatarDialog } from './WorkerAvatarDialog.js'
 import { WorkerCard, type WorkerCardActionKind } from './WorkerCard.js'
 import { presentWorkerStatus, type WorkerStatusKind } from './worker-status.js'
 
@@ -21,11 +21,13 @@ type WorkersPaneProps = {
   onRenameWorker: (worker: TeamListItem, newName: string) => Promise<{ error: string | null }>
   onScenarioClick?: () => void
   onStartWorker: (worker: TeamListItem) => void
+  onStopWorker?: (worker: TeamListItem, runId: string) => void
+  onUpdateWorkerAvatar?: (worker: TeamListItem, avatar: string | null) => Promise<void>
   shellTerminalAvailable?: boolean
+  stoppingWorkerId?: string | null
   startingWorkerId: string | null
   terminalRuns: TerminalRunSummary[]
   workers: TeamListItem[]
-  workspaceId?: string
 }
 
 const SECTION_ORDER: WorkerStatusKind[] = ['working', 'idle', 'stopped']
@@ -66,11 +68,13 @@ export const WorkersPane = ({
   onRenameWorker,
   onScenarioClick,
   onStartWorker,
+  onStopWorker,
+  onUpdateWorkerAvatar,
   shellTerminalAvailable = true,
+  stoppingWorkerId = null,
   startingWorkerId,
   terminalRuns,
   workers,
-  workspaceId,
 }: WorkersPaneProps) => {
   const { t } = useI18n()
   const { sections, summary } = useMemo(() => summarizeWorkers(workers), [workers])
@@ -80,6 +84,7 @@ export const WorkersPane = ({
   )
   const [pendingDelete, setPendingDelete] = useState<TeamListItem | null>(null)
   const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null)
+  const [editingAvatarWorker, setEditingAvatarWorker] = useState<TeamListItem | null>(null)
   const [renameBusyWorkerId, setRenameBusyWorkerId] = useState<string | null>(null)
 
   const handleAction = (kind: WorkerCardActionKind, worker: TeamListItem) => {
@@ -87,8 +92,18 @@ export const WorkersPane = ({
       onStartWorker(worker)
       return
     }
+    if (kind === 'stop') {
+      const runId = runIdsByAgentId.get(worker.id)
+      if (runId) onStopWorker?.(worker, runId)
+      return
+    }
     if (kind === 'rename') {
       setEditingWorkerId(worker.id)
+      return
+    }
+    if (kind === 'avatar') {
+      if (!onUpdateWorkerAvatar) return
+      setEditingAvatarWorker(worker)
       return
     }
     if (kind === 'delete') {
@@ -196,7 +211,6 @@ export const WorkersPane = ({
       </div>
 
       <div className="workers-pane-body scroll-y flex-1 px-2 py-2">
-        {workspaceId ? <DispatchPulse workers={workers} workspaceId={workspaceId} /> : null}
         {workers.length === 0 ? (
           <EmptyState
             icon={<UserPlus size={28} />}
@@ -240,9 +254,10 @@ export const WorkersPane = ({
                   {section.workers.map((worker) => (
                     <li key={worker.id}>
                       <WorkerCard
+                        canEditAvatar={onUpdateWorkerAvatar !== undefined}
                         hasRun={runIdsByAgentId.has(worker.id)}
                         isEditing={editingWorkerId === worker.id}
-                        isPending={startingWorkerId === worker.id}
+                        isPending={startingWorkerId === worker.id || stoppingWorkerId === worker.id}
                         onAction={handleAction}
                         onCancelRename={() => setEditingWorkerId(null)}
                         onClick={onOpenWorker}
@@ -272,6 +287,14 @@ export const WorkersPane = ({
         confirmKind="danger"
         onConfirm={confirmDelete}
       />
+      {editingAvatarWorker && onUpdateWorkerAvatar ? (
+        <WorkerAvatarDialog
+          key={editingAvatarWorker.id}
+          worker={editingAvatarWorker}
+          onClose={() => setEditingAvatarWorker(null)}
+          onSave={(avatar) => onUpdateWorkerAvatar(editingAvatarWorker, avatar)}
+        />
+      ) : null}
     </div>
   )
 }

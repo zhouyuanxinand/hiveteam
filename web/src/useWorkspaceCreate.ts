@@ -5,6 +5,7 @@ import {
   createWorkspace,
   type OrchestratorStartResult,
 } from './api.js'
+import { useI18n } from './i18n.js'
 import type { WorkspaceCreateInput } from './workspace/workspace-create-input.js'
 
 interface UseWorkspaceCreateInput {
@@ -32,6 +33,7 @@ export const useWorkspaceCreate = ({
   onWorkspaceCreated,
   onError,
 }: UseWorkspaceCreateInput): UseWorkspaceCreateOutput => {
+  const { language } = useI18n()
   const [orchestratorAutostartErrors, setErrors] = useState<Record<string, string | null>>({})
   const [orchestratorAutostartRunIds, setRunIds] = useState<Record<string, string | null>>({})
 
@@ -49,12 +51,13 @@ export const useWorkspaceCreate = ({
         const response = await createWorkspace({
           name: input.name,
           path: input.path,
+          language: input.language ?? language,
           autostart_orchestrator: true,
           command_preset_id: input.commandPresetId,
           startup_command: input.startupCommand ?? null,
         })
         recordOrchestratorResult(response.id, response.orchestrator_start)
-        onWorkspaceCreated({ id: response.id, name: response.name, path: response.path })
+        onWorkspaceCreated(response)
         return response
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to create workspace'
@@ -62,7 +65,7 @@ export const useWorkspaceCreate = ({
         throw error
       }
     },
-    [onWorkspaceCreated, onError, recordOrchestratorResult]
+    [language, onWorkspaceCreated, onError, recordOrchestratorResult]
   )
 
   return {

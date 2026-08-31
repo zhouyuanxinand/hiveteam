@@ -1,14 +1,15 @@
 import { useI18n } from '../i18n.js'
 import { WorkersPane } from '../worker/WorkersPane.js'
 import { DemoBanner } from './DemoBanner.js'
-import { DEMO_TERMINAL_SCROLLBACK, DEMO_WORKERS } from './demo-fixture.js'
+import type { DemoReplaySnapshot } from './demo-fixture.js'
 
 type DemoWorkspaceViewProps = {
   onExit: () => void
+  replay: DemoReplaySnapshot
 }
 
 /**
- * Renders a static demo workspace layout without any server-calling hooks.
+ * Renders a self-running demo replay without any server-calling hooks.
  *
  * Design decision: TerminalView is tightly coupled to WebSocket subscriptions
  * and portal-based PTY mounting. Rather than extending that surface with
@@ -16,7 +17,7 @@ type DemoWorkspaceViewProps = {
  * inside each worker's scrollback slot. This keeps the demo path self-contained
  * and avoids xterm.js setup in a read-only context.
  */
-export const DemoWorkspaceView = ({ onExit }: DemoWorkspaceViewProps) => {
+export const DemoWorkspaceView = ({ onExit, replay }: DemoWorkspaceViewProps) => {
   const { t } = useI18n()
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -49,7 +50,7 @@ export const DemoWorkspaceView = ({ onExit }: DemoWorkspaceViewProps) => {
               wordBreak: 'break-all',
             }}
           >
-            {DEMO_TERMINAL_SCROLLBACK['demo-orch']}
+            {replay.terminalScrollback['demo-orch']}
           </pre>
         </div>
         <WorkersPane
@@ -60,7 +61,7 @@ export const DemoWorkspaceView = ({ onExit }: DemoWorkspaceViewProps) => {
           onStartWorker={() => {}}
           startingWorkerId={null}
           terminalRuns={[]}
-          workers={DEMO_WORKERS}
+          workers={replay.workers}
         />
       </div>
     </div>

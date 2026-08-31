@@ -1,5 +1,6 @@
-import { Bell, Check, Info, Play, Volume2, VolumeX } from 'lucide-react'
+import { Bell, Check, HardDrive, Info, Play, Volume2, VolumeX } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { getLocalRetentionDiagnostics, type LocalRetentionDiagnostics } from '../api.js'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { Tooltip } from '../ui/Tooltip.js'
@@ -88,11 +89,34 @@ const DETAIL_OPTIONS: DetailOption[] = [
 export const NotificationSettingsButton = () => {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
+  const [diagnostics, setDiagnostics] = useState<LocalRetentionDiagnostics | null>(null)
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
+  const [diagnosticsError, setDiagnosticsError] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const { notify, previewSound, requestDesktopNotifications, settings, updateSettings } =
     useNotifications()
   const desktopUnsupported = typeof window !== 'undefined' && !('Notification' in window)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setDiagnosticsLoading(true)
+    setDiagnosticsError(false)
+    void getLocalRetentionDiagnostics()
+      .then((value) => {
+        if (!cancelled) setDiagnostics(value)
+      })
+      .catch(() => {
+        if (!cancelled) setDiagnosticsError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setDiagnosticsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   // Memoize translated option rows so each render of the popover doesn't
   // re-create the array. Keys depend on the current language (re-derived via
@@ -312,6 +336,35 @@ export const NotificationSettingsButton = () => {
               </span>
             </span>
           </label>
+
+          <section className="mb-3 rounded border p-2" style={{ borderColor: 'var(--border)' }}>
+            <div className="mb-2 flex items-center gap-1.5 text-ter text-xs uppercase tracking-wider">
+              <HardDrive size={12} aria-hidden />
+              {t('notifications.diagnostics.database')}
+            </div>
+            {diagnosticsLoading ? (
+              <div className="text-ter text-xs">{t('notifications.diagnostics.loading')}</div>
+            ) : diagnosticsError ? (
+              <div className="text-ter text-xs">{t('notifications.diagnostics.error')}</div>
+            ) : diagnostics ? (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                <span className="text-ter">{t('notifications.diagnostics.storage')}</span>
+                <span className="text-right text-sec">
+                  {t('notifications.diagnostics.schema', { version: diagnostics.schemaVersion })}
+                </span>
+                <span className="text-ter">{t('notifications.diagnostics.size')}</span>
+                <span className="text-right text-sec">
+                  {diagnostics.databaseBytes === null
+                    ? '—'
+                    : `${(diagnostics.databaseBytes / 1024).toFixed(1)} KB`}
+                </span>
+                <span className="col-span-2 text-ter">
+                  {t('notifications.diagnostics.records')}:{' '}
+                  {Object.values(diagnostics.records).reduce((sum, count) => sum + count, 0)}
+                </span>
+              </div>
+            ) : null}
+          </section>
 
           <div
             className="flex justify-end gap-2 border-t pt-3"

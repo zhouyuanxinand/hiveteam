@@ -22,6 +22,17 @@ export interface DispatchRecord {
   attemptCount?: number
   lastAttemptAt?: number
   lastError?: string
+  /**
+   * A worker can complete its dispatch while the durable report to the
+   * Orchestrator remains queued. Keep this separate from a failed dispatch so
+   * the worker is not shown as having unfinished work again.
+   */
+  reportDelivery?: {
+    attemptCount: number
+    deliveredAt: number | null
+    lastAttemptAt: number | null
+    lastError: string | null
+  }
 }
 
 interface DispatchRow {
@@ -42,6 +53,11 @@ interface DispatchRow {
   failure_attempts?: number | null
   failure_last_attempt_at?: number | null
   failure_last_error?: string | null
+  report_outbox_id?: number | null
+  report_delivery_attempts?: number | null
+  report_delivered_at?: number | null
+  report_last_delivery_attempt_at?: number | null
+  report_last_delivery_error?: string | null
 }
 
 interface CreateDispatchInput {
@@ -104,6 +120,14 @@ const toRecord = (row: DispatchRow): DispatchRecord => {
     record.lastAttemptAt = row.failure_last_attempt_at ?? 0
     record.lastError = row.failure_last_error ?? 'Dispatch delivery failed'
   }
+  if (row.report_outbox_id !== null && row.report_outbox_id !== undefined) {
+    record.reportDelivery = {
+      attemptCount: row.report_delivery_attempts ?? 0,
+      deliveredAt: row.report_delivered_at ?? null,
+      lastAttemptAt: row.report_last_delivery_attempt_at ?? null,
+      lastError: row.report_last_delivery_error ?? null,
+    }
+  }
   return record
 }
 
@@ -112,9 +136,15 @@ const dispatchSelect = `
          f.dispatch_id AS failure_dispatch_id,
          f.attempts AS failure_attempts,
          f.last_attempt_at AS failure_last_attempt_at,
-         f.last_error AS failure_last_error
+         f.last_error AS failure_last_error,
+         r.id AS report_outbox_id,
+         r.delivery_attempts AS report_delivery_attempts,
+         r.delivered_at AS report_delivered_at,
+         r.last_delivery_attempt_at AS report_last_delivery_attempt_at,
+         r.last_delivery_error AS report_last_delivery_error
     FROM dispatches d
     LEFT JOIN dispatch_delivery_failures f ON f.dispatch_id = d.id
+    LEFT JOIN report_outbox r ON r.dispatch_id = d.id
 `
 
 export const createDispatchLedgerStore = (db: Database) => {

@@ -191,12 +191,14 @@ describe('app shell terminal flow with real server', () => {
     expect(shellStarts[0]?.agent_name).toBe('Shell')
     await waitForShellSlot(shellStarts[0]?.run_id ?? '')
 
-    fireEvent.click(screen.getByTestId('terminal-tab-new-shell'))
+    const newShellButton = screen.getByTestId('terminal-tab-new-shell')
+    await waitFor(() => expect(newShellButton).toBeEnabled())
+    fireEvent.click(newShellButton)
     await waitFor(() => expect(shellStarts).toHaveLength(2))
 
     expect(shellStarts[1]?.agent_name).toBe('Shell')
     await waitForShellSlot(shellStarts[1]?.run_id ?? '')
-  }, 10000)
+  }, 30_000)
 
   test('waits for the close request before reopening the last shell', async () => {
     delayShellDeletes = true

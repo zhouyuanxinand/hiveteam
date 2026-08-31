@@ -8,6 +8,7 @@ const tempDir = mkdtempSync(join(tmpdir(), 'hive-pack-smoke-'))
 let packedFile
 const binLinkName = (name) => (process.platform === 'win32' ? `${name}.cmd` : name)
 const runtimeStartTimeoutMs = process.platform === 'win32' ? 60_000 : 5_000
+const npmInstallTimeoutMs = process.platform === 'win32' ? 180_000 : 60_000
 const activeNodeDir = dirname(process.execPath)
 const activeNpmCli = join(activeNodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
 
@@ -30,6 +31,10 @@ const runNpm = (args, options = {}) => {
   return process.platform === 'win32'
     ? execFileSync('cmd.exe', ['/d', '/s', '/c', 'npm', ...args], withActiveNodeOptions(options))
     : execFileSync('npm', args, withActiveNodeOptions(options))
+}
+
+const logPhase = (phase) => {
+  process.stdout.write(`[pack-smoke] ${phase}\n`)
 }
 
 const removePath = (path) => {
@@ -78,6 +83,7 @@ const stopChild = async (child) => {
 }
 
 try {
+  logPhase('packing')
   const packJson = runNpm(['pack', '--json'], {
     cwd: root,
     encoding: 'utf8',
@@ -86,9 +92,23 @@ try {
   const [packResult] = JSON.parse(packJson)
   packedFile = resolve(root, packResult.filename)
 
-  runNpm(['install', '--silent', '--prefix', tempDir, packedFile], {
-    stdio: 'inherit',
-  })
+  logPhase('installing packaged runtime')
+  runNpm(
+    [
+      'install',
+      '--silent',
+      '--no-audit',
+      '--no-fund',
+      '--prefer-offline',
+      '--prefix',
+      tempDir,
+      packedFile,
+    ],
+    {
+      stdio: 'inherit',
+      timeout: npmInstallTimeoutMs,
+    }
+  )
 
   const packageName = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name
   const packageRoot = join(tempDir, 'node_modules', ...packageName.split('/'))
@@ -106,6 +126,7 @@ try {
   if (!existsSync(internalTeam)) throw new Error('Internal dist/bin/team is missing')
   if (!existsSync(internalTeamCmd)) throw new Error('Internal dist/bin/team.cmd is missing')
 
+  logPhase('starting packaged runtime')
   const child = spawn(hiveBin, ['--port', '0'], {
     env: withActiveNodeEnv({
       HIVE_DATA_DIR: join(tempDir, 'data'),
@@ -168,7 +189,9 @@ try {
         `Packaged internal team launcher failed: ${workspace.orchestrator_start?.error ?? 'unknown'}`
       )
     }
+    logPhase('runtime responded')
   } finally {
+    logPhase('stopping packaged runtime')
     await stopChild(child)
   }
 
@@ -176,6 +199,7 @@ try {
     console.warn(stderr.trim())
   }
 } finally {
+  logPhase('cleaning temporary files')
   if (packedFile) removePath(packedFile)
   removePath(tempDir)
 }

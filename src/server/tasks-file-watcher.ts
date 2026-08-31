@@ -3,13 +3,14 @@ import { readFile } from 'node:fs/promises'
 
 import chokidar, { type FSWatcher } from 'chokidar'
 
+import type { WorkspaceLanguage } from '../shared/types.js'
 import { ensureProtocolFile, ensureTasksFile, getTasksFilePath } from './tasks-file.js'
 
 const DEBOUNCE_MS = 100
 
 export interface TasksFileWatcher {
   close: () => Promise<void>
-  start: (workspaceId: string, workspacePath: string) => Promise<void>
+  start: (workspaceId: string, workspacePath: string, language?: WorkspaceLanguage) => Promise<void>
   stop: (workspaceId: string) => Promise<void>
 }
 
@@ -55,12 +56,16 @@ export const createTasksFileWatcher = ({
     await stopWatcher(workspaceId)
   }
 
-  const start = (workspaceId: string, workspacePath: string) => {
+  const start = (
+    workspaceId: string,
+    workspacePath: string,
+    language: WorkspaceLanguage = 'zh'
+  ) => {
     const startPromise = (async () => {
       // This internal stop avoids waiting on the promise currently being built.
       await stopWatcher(workspaceId)
       ensureTasksFile(workspacePath)
-      ensureProtocolFile(workspacePath)
+      ensureProtocolFile(workspacePath, language)
       const watcher = chokidar.watch(getTasksFilePath(workspacePath), {
         ignoreInitial: true,
       })

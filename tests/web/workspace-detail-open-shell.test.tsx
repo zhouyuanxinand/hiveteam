@@ -60,7 +60,7 @@ const renderWorkspaceDetail = ({
   selectedWorkspace = workspace,
   terminalRuns = [],
 }: {
-  onShellRunStarted?: (workspaceId: string, run: TerminalRunSummary) => void
+  onShellRunStarted?: ((workspaceId: string, run: TerminalRunSummary) => void) | undefined
   selectedWorkspace?: WorkspaceSummary
   terminalRuns?: TerminalRunSummary[]
 } = {}) => renderWorkspaceDetailUi({ onShellRunStarted, selectedWorkspace, terminalRuns })
@@ -70,7 +70,7 @@ const renderWorkspaceDetailUi = ({
   selectedWorkspace,
   terminalRuns,
 }: {
-  onShellRunStarted?: (workspaceId: string, run: TerminalRunSummary) => void
+  onShellRunStarted?: ((workspaceId: string, run: TerminalRunSummary) => void) | undefined
   selectedWorkspace: WorkspaceSummary
   terminalRuns: TerminalRunSummary[]
 }) =>
@@ -82,6 +82,7 @@ const renderWorkspaceDetailUi = ({
           onDeleteWorker={vi.fn()}
           onDeleteWorkspace={vi.fn()}
           onStartWorker={vi.fn()}
+          onStopWorker={vi.fn(async () => ({ error: null }))}
           onOrchestratorResult={vi.fn()}
           onRequestAddWorkspace={vi.fn()}
           onShellRunStarted={onShellRunStarted}
@@ -100,7 +101,7 @@ const workspaceDetailUi = ({
   selectedWorkspace,
   terminalRuns,
 }: {
-  onShellRunStarted?: (workspaceId: string, run: TerminalRunSummary) => void
+  onShellRunStarted?: ((workspaceId: string, run: TerminalRunSummary) => void) | undefined
   selectedWorkspace: WorkspaceSummary
   terminalRuns: TerminalRunSummary[]
 }) => (
@@ -111,6 +112,7 @@ const workspaceDetailUi = ({
         onDeleteWorker={vi.fn()}
         onDeleteWorkspace={vi.fn()}
         onStartWorker={vi.fn()}
+        onStopWorker={vi.fn(async () => ({ error: null }))}
         onOrchestratorResult={vi.fn()}
         onRequestAddWorkspace={vi.fn()}
         onShellRunStarted={onShellRunStarted}

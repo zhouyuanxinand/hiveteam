@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-
+import type { WorkspaceLanguage } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import {
   type AgentLaunchConfigInput,
@@ -10,6 +10,7 @@ import { createAgentRuntime } from './agent-runtime.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
 import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
+import { createExternalGoalStore } from './external-goal-store.js'
 import { createGitTurnCoordinator, type GitTurnCoordinator } from './git-turn-coordinator.js'
 import { createGitWorkspaceService } from './git-workspace-service.js'
 import { createMessageLogStore } from './message-log-store.js'
@@ -53,7 +54,9 @@ export interface RuntimeStoreServices {
   agentRuntime: ReturnType<typeof createAgentRuntime>
   interruptedRuns: InterruptedAgentRun[]
   db: ReturnType<typeof openRuntimeDatabase>
+  dataDir: string | null
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
+  externalGoalStore: ReturnType<typeof createExternalGoalStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
   memoryStore: ReturnType<typeof createTeamMemoryStore>
   memoryDreamStore: ReturnType<typeof createTeamMemoryDreamStore>
@@ -111,6 +114,7 @@ export const createRuntimeStoreServices = (
   const git = createGitWorkspaceService(db)
   const messageLogStore = createMessageLogStore(db)
   const dispatchLedgerStore = createDispatchLedgerStore(db)
+  const externalGoalStore = createExternalGoalStore(db)
   const reportOutbox = createReportOutboxStore(db)
   const agentRunStore = createAgentRunStore(db)
   const agentSessionStore = createAgentSessionStore(db)
@@ -146,7 +150,7 @@ export const createRuntimeStoreServices = (
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
   const startExistingWorkspaceWatches = () => {
     for (const workspace of workspaceStore.listWorkspaces()) {
-      void tasksFileWatcher.start(workspace.id, workspace.path)
+      void tasksFileWatcher.start(workspace.id, workspace.path, workspace.language ?? 'zh')
     }
   }
   const restartPolicy = buildRuntimeRestartPolicy({
@@ -177,7 +181,9 @@ export const createRuntimeStoreServices = (
     },
     restartPolicy,
     (workspaceId, agentId) => workspaceStore.getAgent(workspaceId, agentId),
-    createTeamMemoryDigestProvider(memoryStore, settings)
+    createTeamMemoryDigestProvider(memoryStore, settings),
+    (workspaceId): WorkspaceLanguage =>
+      workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
   )
   const teamOps = createTeamOperations({
     agentRuntime,
@@ -219,7 +225,9 @@ export const createRuntimeStoreServices = (
     agentRuntime,
     interruptedRuns,
     db,
+    dataDir: options.dataDir ?? null,
     dispatchLedgerStore,
+    externalGoalStore,
     messageLogStore,
     memoryStore,
     memoryDreamStore,
@@ -313,6 +321,7 @@ export const createRuntimeStoreLifecycle = ({
         .agents.filter(
           (agent) =>
             !services.agentRuntime.getActiveRunByAgentId(workspace.id, agent.id) &&
+            !services.workspaceStore.isAgentManuallyStopped?.(workspace.id, agent.id) &&
             services.agentRuntime.peekAgentLaunchConfig(workspace.id, agent.id)
         )
         .map(async (agent) => {
@@ -372,6 +381,18 @@ export const createRuntimeStoreLifecycle = ({
         }
 
         const settings = services.workspaceStore.getWorkspaceRecoverySettings(candidate.workspaceId)
+        if (
+          services.workspaceStore.isAgentManuallyStopped?.(candidate.workspaceId, candidate.agentId)
+        ) {
+          results.push({
+            agentId: candidate.agentId,
+            error: 'Agent was manually stopped; start it manually to resume.',
+            ok: false,
+            runId: null,
+            workspaceId: candidate.workspaceId,
+          })
+          continue
+        }
         if (!settings.autoResumeOnRestart) {
           console.info(`[hive] auto-resume skipped: workspace ${candidate.workspaceId} is disabled`)
           results.push({
@@ -511,7 +532,11 @@ export const createRuntimeStoreLifecycle = ({
     },
     startWorkspaceWatch: async (workspaceId: string) => {
       const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
-      await services.tasksFileWatcher.start(workspaceId, workspace.summary.path)
+      await services.tasksFileWatcher.start(
+        workspaceId,
+        workspace.summary.path,
+        workspace.summary.language ?? 'zh'
+      )
     },
     writeRunInput: (runId: string, input: Buffer | string) => {
       if (!agentManager) throw new Error('Agent manager is required for PTY stdin writes')

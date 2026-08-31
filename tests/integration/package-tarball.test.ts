@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { delimiter, dirname, join } from 'node:path'
 
@@ -14,23 +14,63 @@ interface PackResult {
   version: string
 }
 
+const PACK_SMOKE_TIMEOUT_MS = process.platform === 'win32' ? 210_000 : 120_000
+
+const terminateProcessTree = (pid: number) => {
+  if (process.platform === 'win32') {
+    try {
+      execFileSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
+      return
+    } catch {
+      // Fall back to Node's child handle below when taskkill is unavailable.
+    }
+  }
+}
+
 const runPackSmoke = () =>
   new Promise<void>((resolve, reject) => {
-    execFile(
-      process.execPath,
-      ['scripts/pack-smoke.mjs'],
-      { encoding: 'utf8', timeout: 120_000 },
-      (error, stdout, stderr) => {
-        if (error) {
-          const output = [stdout, stderr].filter(Boolean).join('\n').trim()
-          if (output) error.message = `${error.message}\n${output}`
-          reject(error)
-          return
-        }
-        if (stderr) console.warn(stderr.trim())
-        resolve()
+    const child = spawn(process.execPath, ['scripts/pack-smoke.mjs'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+
+    const settle = (error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      const output = [stdout, stderr].filter(Boolean).join('\n').trim()
+      if (error) {
+        if (output) error.message = `${error.message}\n${output}`
+        reject(error)
+        return
       }
-    )
+      if (stderr) console.warn(stderr.trim())
+      resolve()
+    }
+
+    const timeout = setTimeout(() => {
+      const error = new Error(`pack smoke timed out after ${PACK_SMOKE_TIMEOUT_MS}ms`)
+      if (child.pid) terminateProcessTree(child.pid)
+      child.kill('SIGKILL')
+      setTimeout(() => settle(error), 2_000)
+    }, PACK_SMOKE_TIMEOUT_MS)
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    child.once('error', (error) => settle(error))
+    child.once('close', (code, signal) => {
+      if (code === 0) {
+        settle()
+        return
+      }
+      settle(new Error(`pack smoke exited with ${signal ?? `code ${code ?? 'unknown'}`}`))
+    })
   })
 
 const activeNodeDir = dirname(process.execPath)
@@ -90,7 +130,11 @@ describe('npm package tarball', () => {
     expect(paths).not.toContain('bin/team')
   })
 
-  test('published tarball installs and starts the packaged runtime', async () => {
-    await runPackSmoke()
-  }, 120_000)
+  test(
+    'published tarball installs and starts the packaged runtime',
+    async () => {
+      await runPackSmoke()
+    },
+    PACK_SMOKE_TIMEOUT_MS + 5_000
+  )
 })

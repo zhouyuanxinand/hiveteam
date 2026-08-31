@@ -86,6 +86,7 @@ describe('AppWorkspaceContent', () => {
         activeWorkspace={workspace}
         bootstrapError={null}
         demoMode={false}
+        demoReplay={{ phase: 0, tasksMd: '', terminalScrollback: {}, workers: [] }}
         onDeleteWorkspace={vi.fn()}
         onExitDemo={vi.fn()}
         onRequestAddWorkspace={vi.fn()}

@@ -1,9 +1,12 @@
 import type { IncomingMessage } from 'node:http'
 
+import { isWorkspaceLanguage } from '../shared/types.js'
+import { normalizeWorkerAvatar } from '../shared/worker-avatar.js'
 import {
   resolveCommandPresetLaunchConfig,
   resolveStartupCommandLaunchConfig,
 } from './agent-launch-resolver.js'
+import { BadRequestError } from './http-errors.js'
 import { autostartAgent, autostartOrchestrator } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
@@ -20,6 +23,14 @@ import { serializeTeamListItem } from './team-list-serializer.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 import { validateWorkspacePath } from './workspace-path-validation.js'
 import { getOrchestratorId } from './workspace-store-support.js'
+
+const readWorkerAvatar = (value: unknown) => {
+  try {
+    return normalizeWorkerAvatar(value)
+  } catch (error) {
+    throw new BadRequestError(error instanceof Error ? error.message : 'Avatar is invalid')
+  }
+}
 
 const getSerializedWorker = (workspaceId: string, workerId: string, store: RuntimeStore) => {
   const worker = store.listWorkers(workspaceId).find((item) => item.id === workerId)
@@ -84,7 +95,8 @@ export const workspaceRoutes: RouteDefinition[] = [
     const body = await readJsonBody<CreateWorkspaceBody>(request)
     const startupCommand = typeof body.startup_command === 'string' ? body.startup_command : null
     const workspacePath = validateWorkspacePath(body.path)
-    const workspace = store.createWorkspace(workspacePath, body.name)
+    const language = isWorkspaceLanguage(body.language) ? body.language : 'zh'
+    const workspace = store.createWorkspace(workspacePath, body.name, language)
     seedOrchestratorLaunchConfig(
       store,
       store.settings,
@@ -204,7 +216,10 @@ export const workspaceRoutes: RouteDefinition[] = [
       if (presetId && !startupCommand?.trim() && !launchConfig) {
         throw new Error(`Command preset not found: ${presetId}`)
       }
-      const worker = store.addWorker(workspaceId, body)
+      const worker = store.addWorker(workspaceId, {
+        ...body,
+        avatar: readWorkerAvatar(body.avatar),
+      })
       if (launchConfig) {
         try {
           store.configureAgentLaunch(workspaceId, worker.id, launchConfig)
@@ -274,12 +289,19 @@ export const workspaceRoutes: RouteDefinition[] = [
       }
 
       requireUiTokenFromRequest(request, store.validateUiToken)
-      const body = await readJsonBody<{ name?: string }>(request)
-      if (typeof body.name !== 'string') {
-        sendJson(response, 400, { error: 'name is required' })
-        return
+      const body = await readJsonBody<{ avatar?: unknown; name?: unknown }>(request)
+      const hasName = Object.hasOwn(body, 'name')
+      const hasAvatar = Object.hasOwn(body, 'avatar')
+      if (!hasName && !hasAvatar) {
+        throw new BadRequestError('name or avatar is required')
       }
-      store.renameWorker(workspaceId, workerId, body.name)
+      if (hasName) {
+        if (typeof body.name !== 'string') throw new BadRequestError('name must be a string')
+        store.renameWorker(workspaceId, workerId, body.name)
+      }
+      if (hasAvatar) {
+        store.setWorkerAvatar(workspaceId, workerId, readWorkerAvatar(body.avatar))
+      }
       sendJson(response, 200, getSerializedWorker(workspaceId, workerId, store))
     }
   ),

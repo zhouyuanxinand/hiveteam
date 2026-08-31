@@ -9,6 +9,7 @@ import {
   renameWorker,
   setWorkspaceAutoResumeOnRestart,
   type TerminalRunSummary,
+  updateWorkerAvatar,
 } from './api.js'
 import { useI18n } from './i18n.js'
 import { WorkspaceNotifications } from './notifications/WorkspaceNotifications.js'
@@ -44,6 +45,7 @@ type WorkspaceDetailProps = {
   onDeleteWorker: (workerId: string) => Promise<void>
   onDeleteWorkspace: (workspace: WorkspaceSummary) => Promise<void>
   onStartWorker: (workerId: string) => Promise<{ error: string | null; runId: string | null }>
+  onStopWorker: (runId: string) => Promise<{ error: string | null }>
   onOrchestratorResult: (workspaceId: string, result: OrchestratorStartResult) => void
   onRequestAddWorkspace: () => void
   onShellRunClosed?: ((workspaceId: string, runId: string) => void) | undefined
@@ -63,6 +65,7 @@ export const WorkspaceDetail = ({
   onDeleteWorker,
   onDeleteWorkspace,
   onStartWorker,
+  onStopWorker,
   onOrchestratorResult,
   onRequestAddWorkspace,
   onShellRunClosed,
@@ -82,6 +85,8 @@ export const WorkspaceDetail = ({
   const [deleteWorkerError, setDeleteWorkerError] = useState<string | null>(null)
   const [startWorkerError, setStartWorkerError] = useState<string | null>(null)
   const [startingWorkerId, setStartingWorkerId] = useState<string | null>(null)
+  const [stopWorkerError, setStopWorkerError] = useState<string | null>(null)
+  const [stoppingWorkerId, setStoppingWorkerId] = useState<string | null>(null)
   const [terminalPanelHidden, setTerminalPanelHidden] = useState(false)
   const [autoResumeOnRestart, setAutoResumeOnRestart] = useState<boolean | undefined>(undefined)
   const [autoResumeBusy, setAutoResumeBusy] = useState(false)
@@ -152,6 +157,10 @@ export const WorkspaceDetail = ({
     if (startWorkerError) toast.show({ kind: 'error', message: startWorkerError })
   }, [startWorkerError, toast])
 
+  useEffect(() => {
+    if (stopWorkerError) toast.show({ kind: 'error', message: stopWorkerError })
+  }, [stopWorkerError, toast])
+
   // Shell-start failures no longer have a dialog banner — surface via toast.
   useEffect(() => {
     if (shellError) toast.show({ kind: 'error', message: shellError })
@@ -165,6 +174,8 @@ export const WorkspaceDetail = ({
     setDeleteWorkerError(null)
     setStartWorkerError(null)
     setStartingWorkerId(null)
+    setStopWorkerError(null)
+    setStoppingWorkerId(null)
     setTerminalPanelHidden(false)
   }, [workspace?.id])
 
@@ -225,6 +236,20 @@ export const WorkspaceDetail = ({
       .finally(() => setStartingWorkerId(null))
   }
 
+  const handleStopWorker = (worker: TeamListItem, runId: string) => {
+    setStopWorkerError(null)
+    setStoppingWorkerId(worker.id)
+    void onStopWorker(runId)
+      .then(({ error }) => {
+        if (error) setStopWorkerError(t('worker.stopFailed', { message: error, name: worker.name }))
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        setStopWorkerError(t('worker.stopFailed', { message, name: worker.name }))
+      })
+      .finally(() => setStoppingWorkerId(null))
+  }
+
   const handleRenameWorker = async (
     worker: TeamListItem,
     newName: string
@@ -240,6 +265,21 @@ export const WorkspaceDetail = ({
       const message = error instanceof Error ? error.message : String(error)
       toast.show({ kind: 'error', message: t('worker.renameFailed', { message }) })
       return { error: message }
+    }
+  }
+
+  const handleUpdateWorkerAvatar = async (worker: TeamListItem, avatar: string | null) => {
+    try {
+      const updated = await updateWorkerAvatar(workspace.id, worker.id, avatar)
+      onWorkersChanged?.(
+        workspace.id,
+        workers.map((current) => (current.id === updated.id ? updated : current))
+      )
+      toast.show({ kind: 'success', message: t('worker.avatarUpdated') })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      toast.show({ kind: 'error', message: t('worker.avatarUpdateFailed', { message }) })
+      throw error
     }
   }
 
@@ -337,10 +377,12 @@ export const WorkspaceDetail = ({
             onRenameWorker={handleRenameWorker}
             onScenarioClick={() => setScenarioOpen(true)}
             onStartWorker={handleStartWorker}
+            onStopWorker={handleStopWorker}
+            onUpdateWorkerAvatar={handleUpdateWorkerAvatar}
+            stoppingWorkerId={stoppingWorkerId}
             startingWorkerId={startingWorkerId}
             terminalRuns={terminalRuns}
             workers={workers}
-            workspaceId={workspace.id}
           />
           {terminalPanelHidden ? null : (
             <TerminalBottomPanel
@@ -401,11 +443,13 @@ export const WorkspaceDetail = ({
           }
         >
           <AddWorkerDialog
+            avatar={composer.avatar}
             commandPresets={composer.commandPresets}
             commandPresetId={composer.commandPresetId}
             creating={composer.creating}
             customTemplates={composer.customTemplates}
             onApplyMarketplaceImport={composer.applyMarketplaceImport}
+            onAvatarChange={composer.setAvatar}
             onClose={() => setComposerOpen(false)}
             onDeleteTemplate={composer.deleteTemplate}
             onNameChange={composer.setWorkerName}

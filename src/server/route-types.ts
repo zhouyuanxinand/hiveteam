@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import type { WorkerRole } from '../shared/types.js'
+import type { WorkerRole, WorkspaceLanguage } from '../shared/types.js'
 import type { PickFolderResponse } from './fs-pick-folder.js'
 import type {
   OpenCommandResult,
@@ -38,6 +38,8 @@ export interface CancelTaskBody {
 }
 
 export interface CreateWorkspaceBody {
+  /** Prompt/protocol language for this workspace. Defaults to Chinese. */
+  language?: WorkspaceLanguage
   path: string
   name: string
   /** Default true. When false, skip orchestrator PTY spawn after creation. */
@@ -50,6 +52,7 @@ export interface CreateWorkspaceBody {
 
 export interface CreateWorkerBody {
   autostart?: boolean
+  avatar?: string | null
   command_preset_id?: string | null
   description?: string
   /** Optional model id. Built-in CLIs receive it as `--model <id>`. */

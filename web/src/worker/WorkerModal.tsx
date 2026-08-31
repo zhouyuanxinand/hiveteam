@@ -23,8 +23,10 @@ type WorkerModalProps = {
 /**
  * Worker detail dialog — pure PTY view. All control actions (Stop / Restart /
  * Delete / Start) live on the WorkerCard's hover cluster now; this dialog
- * only handles "watch the terminal" + "close". The empty-state Start button
- * is the lone exception so a stopped agent is restartable from inside.
+ * only handles "watch the terminal" + "close". Desktop users close it by
+ * clicking the overlay; touch/full-screen layouts retain a visible close
+ * affordance. The empty-state Start button is the lone exception so a stopped
+ * agent is restartable from inside.
  */
 export const WorkerModal = ({
   commandPresetId,
@@ -127,7 +129,8 @@ export const WorkerModal = ({
                   <button
                     type="button"
                     aria-label="Close worker detail"
-                    className="float-action absolute top-4 right-4 z-10"
+                    className="worker-modal__close float-action absolute top-4 right-4 z-10"
+                    data-testid="worker-modal-close"
                   >
                     <X size={14} aria-hidden />
                   </button>
@@ -147,6 +150,7 @@ export const WorkerModal = ({
                 ) : (
                   <div className="m-auto flex max-w-[400px] flex-col items-center gap-3 px-6 text-center">
                     <CliAgentAvatar
+                      avatar={worker.avatar}
                       commandPresetId={worker.commandPresetId}
                       workerRole={worker.role}
                       size={48}

@@ -20,7 +20,10 @@ export const useAppShortcuts = ({
     const indexShortcuts = (workspaces ?? []).slice(0, 9).map((ws, idx) => ({
       key: String(idx + 1),
       mod: true,
-      handler: () => onSelectWorkspace(ws.id),
+      handler: (): undefined => {
+        onSelectWorkspace(ws.id)
+        return undefined
+      },
     }))
 
     return [
@@ -28,8 +31,9 @@ export const useAppShortcuts = ({
         key: 'n',
         mod: true,
         shift: true,
-        handler: () => {
+        handler: (): undefined => {
           if (!bootstrapError) onTriggerAddDialog()
+          return undefined
         },
       },
       ...indexShortcuts,

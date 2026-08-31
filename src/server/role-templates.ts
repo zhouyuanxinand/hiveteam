@@ -1,4 +1,4 @@
-import type { WorkerRole } from '../shared/types.js'
+import type { AgentSummary, WorkerRole, WorkspaceLanguage } from '../shared/types.js'
 
 import { TASKS_RELATIVE_PATH } from './tasks-file.js'
 
@@ -46,7 +46,63 @@ export const CUSTOM_ROLE_DESCRIPTION = [
   '- 完成标准：交付时需要说明哪些结果、风险和阻塞。',
 ].join('\n')
 
-export const getDefaultRoleDescription = (role: WorkerRole | 'orchestrator') => {
+export const ORCHESTRATOR_ROLE_DESCRIPTION_EN = [
+  'You are the Hive Orchestrator. Respond directly to the user and coordinate the real members shown in the right-side team panel.',
+  'How to work:',
+  '- Clarify the goal and split it into small dispatchable tasks.',
+  `- Maintain ${TASKS_RELATIVE_PATH} so the current plan, progress, and blockers stay traceable.`,
+  '- Use member reports to move the work forward instead of unnecessarily returning a choice to the user.',
+].join('\n')
+
+export const CODER_ROLE_DESCRIPTION_EN = [
+  'You are an implementation Coder. Turn clear tasks into minimal, correct code changes.',
+  'How to work:',
+  '- Read relevant files and existing patterns before editing.',
+  '- Prefer small scoped changes; avoid unrelated refactors and scope creep.',
+  '- After editing, run validation commands that cover the risk; if you cannot validate, say why.',
+  'Delivery must include changed files, validation results, and remaining risks or blockers.',
+].join('\n')
+
+export const REVIEWER_ROLE_DESCRIPTION_EN = [
+  'You are a quality-focused Reviewer. Inspect the work without replacing the Orchestrator or changing code by default.',
+  'How to work:',
+  '- Look first for real bugs, regressions, edge cases, and missing tests.',
+  '- For each finding, give severity, file/line, trigger, and the smallest repair suggestion.',
+  '- When there are no high-risk findings, state the remaining risk and unverified scope clearly.',
+  'Order delivery by severity and list blocking findings first.',
+].join('\n')
+
+export const TESTER_ROLE_DESCRIPTION_EN = [
+  'You are a verification-focused Tester responsible for reproduction, testing, and evidence-based validation.',
+  'How to work:',
+  '- Define the behavior, entry point, and failure condition to verify.',
+  '- Prefer real commands and real paths; add the smallest test when needed.',
+  '- Record commands, results, key output, and uncovered scenarios.',
+  'Separate passed, failed, unverified, and next-step recommendations in delivery.',
+].join('\n')
+
+export const CUSTOM_ROLE_DESCRIPTION_EN = [
+  "You are a custom team member. Replace this text with the member's behavior contract.",
+  'Consider including:',
+  '- Goal: what this member mainly owns.',
+  '- Boundaries: what it may and must not do.',
+  '- Working method: how it investigates, edits, validates, or reviews.',
+  '- Done criteria: which results, risks, and blockers delivery must explain.',
+].join('\n')
+
+const ROLE_DESCRIPTIONS_EN: Record<WorkerRole | 'orchestrator', string> = {
+  orchestrator: ORCHESTRATOR_ROLE_DESCRIPTION_EN,
+  coder: CODER_ROLE_DESCRIPTION_EN,
+  reviewer: REVIEWER_ROLE_DESCRIPTION_EN,
+  tester: TESTER_ROLE_DESCRIPTION_EN,
+  custom: CUSTOM_ROLE_DESCRIPTION_EN,
+}
+
+export const getDefaultRoleDescription = (
+  role: WorkerRole | 'orchestrator',
+  language: WorkspaceLanguage = 'zh'
+) => {
+  if (language === 'en') return ROLE_DESCRIPTIONS_EN[role]
   switch (role) {
     case 'orchestrator':
       return ORCHESTRATOR_ROLE_DESCRIPTION
@@ -59,4 +115,21 @@ export const getDefaultRoleDescription = (role: WorkerRole | 'orchestrator') => 
     case 'custom':
       return CUSTOM_ROLE_DESCRIPTION
   }
+}
+
+/**
+ * Preserve user-authored contracts while translating only built-in defaults
+ * when a workspace language changes or a legacy row is opened in an English
+ * workspace.
+ */
+export const getLocalizedAgentDescription = (
+  agent: Pick<AgentSummary, 'description' | 'role'>,
+  language: WorkspaceLanguage = 'zh'
+) => {
+  const zh = getDefaultRoleDescription(agent.role, 'zh')
+  const en = getDefaultRoleDescription(agent.role, 'en')
+  if (agent.description === zh || agent.description === en) {
+    return getDefaultRoleDescription(agent.role, language)
+  }
+  return agent.description
 }

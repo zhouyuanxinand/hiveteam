@@ -53,6 +53,10 @@ interface AgentManager {
 
 const createRunId = () => randomUUID()
 const WINDOWS_PTY_RELEASE_SETTLE_MS = 500
+const isClosedPtyResizeError = (error: unknown) =>
+  /cannot resize a pty that has already exited|pty seems to have been killed already|pty is not active|already exited/i.test(
+    error instanceof Error ? error.message : String(error)
+  )
 
 const waitForWindowsPtyRelease = async () => {
   if (process.platform !== 'win32') return
@@ -160,7 +164,17 @@ export const createAgentManager = ({
     },
 
     resizeRun(runId, cols, rows) {
-      getRunRecord(runId).process.resize(cols, rows)
+      const run = getRunRecord(runId)
+      // Browser layout observers can deliver one last resize after the PTY
+      // exit event. Treat that normal teardown race as a no-op instead of
+      // surfacing node-pty's "Cannot resize a pty that has already exited" to
+      // the terminal UI.
+      if (run.status === 'exited' || run.status === 'error' || run.process.isStopped()) return
+      try {
+        run.process.resize(cols, rows)
+      } catch (error) {
+        if (!isClosedPtyResizeError(error)) throw error
+      }
     },
 
     resumeRun(runId) {

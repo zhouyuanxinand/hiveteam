@@ -19,12 +19,34 @@ describe('team cli help', () => {
     const output = logSpy.mock.calls.map((call) => call.join(' ')).join('\n')
     expect(output).toContain('Usage:')
     expect(output).toContain('team list')
-    expect(output).toContain('team send <worker-name> "<task>"')
+    expect(output).toContain('team guide <core|dispatch|tasks|memory|workflow|member>')
+    expect(output).toContain('team send "<worker-name>" "<task>"')
     expect(output).toContain('team cancel --dispatch <dispatch-id> "<reason>"')
+    expect(output).toContain(
+      'team goal report --goal <goal-id> --status progress|done|blocked|failed'
+    )
     expect(output).toContain('team report "<result>"')
     expect(output).toContain('team status "<current status>"')
     expect(output).not.toContain('--success')
     expect(output).not.toContain('--failed')
+  })
+
+  test('prints a focused generated guide without requiring Hive agent environment', async () => {
+    process.env = {}
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    await expect(runTeamCommand(['guide', 'dispatch'])).resolves.toBeUndefined()
+
+    const output = logSpy.mock.calls.map((call) => call.join(' ')).join('\n')
+    expect(output).toContain('## Guide: dispatch')
+    expect(output).toContain('team send "<worker-name>" "<task>"')
+    expect(output).toContain('team goal report --goal <goal-id>')
+  })
+
+  test('rejects an unknown guide topic with the guide usage', async () => {
+    await expect(runTeamCommand(['guide', 'unknown'])).rejects.toThrow(
+      'Usage: team guide <core|dispatch|tasks|memory|workflow|member>'
+    )
   })
 
   test('team report warns when Hive records the report but cannot live-deliver it', async () => {

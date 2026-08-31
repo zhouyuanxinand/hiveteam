@@ -1,9 +1,41 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
+
+import type { DispatchRecord } from '../../src/server/dispatch-ledger-store.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTeamOperations } from '../../src/server/team-operations.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
+})
+
+type DispatchFixtureInput = Pick<
+  DispatchRecord,
+  'fromAgentId' | 'id' | 'toAgentId' | 'workspaceId'
+> &
+  Partial<Pick<DispatchRecord, 'sequence' | 'status' | 'text'>>
+
+const createDispatchRecord = ({
+  fromAgentId,
+  id,
+  sequence = null,
+  status = 'queued',
+  text = 'Implement login',
+  toAgentId,
+  workspaceId,
+}: DispatchFixtureInput): DispatchRecord => ({
+  artifacts: [],
+  createdAt: Date.now(),
+  deliveredAt: null,
+  fromAgentId,
+  id,
+  reportedAt: null,
+  reportText: null,
+  sequence,
+  status,
+  submittedAt: null,
+  text,
+  toAgentId,
+  workspaceId,
 })
 
 describe('team atomicity', () => {
@@ -33,7 +65,9 @@ describe('team atomicity', () => {
       deleteDispatch,
       deleteMessage,
       findOpenDispatch: vi.fn(),
+      findOpenDispatchById: vi.fn(),
       insertMessage,
+      markDispatchCancelled: vi.fn(),
       markDispatchReportedByWorker: vi.fn(),
       markDispatchSubmitted: vi.fn(),
       workspaceStore: {
@@ -81,20 +115,12 @@ describe('team atomicity', () => {
     if (!orchestrator) {
       throw new Error('Expected orchestrator')
     }
-    const dispatch = {
-      artifacts: [],
-      createdAt: Date.now(),
-      deliveredAt: null,
+    const dispatch = createDispatchRecord({
       fromAgentId: orchestrator.id,
       id: 'dispatch-1',
-      reportedAt: null,
-      reportText: null,
-      status: 'queued',
-      submittedAt: null,
-      text: 'Implement login',
       toAgentId: worker.id,
       workspaceId: workspace.id,
-    } as const
+    })
     const deleteDispatch = vi.fn()
     const deleteMessage = vi.fn()
 
@@ -110,7 +136,9 @@ describe('team atomicity', () => {
       deleteDispatch,
       deleteMessage,
       findOpenDispatch: vi.fn(),
+      findOpenDispatchById: vi.fn(),
       insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
       markDispatchReportedByWorker: vi.fn(),
       markDispatchSubmitted: vi.fn(),
       workspaceStore: {
@@ -135,6 +163,72 @@ describe('team atomicity', () => {
     )
   })
 
+  test('dispatchTask keeps a manually stopped worker queued without restarting it', async () => {
+    const store = createRuntimeStore()
+    const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
+    const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+    const orchestrator = store.getWorkspaceSnapshot(workspace.id).agents[0]
+    if (!orchestrator) {
+      throw new Error('Expected orchestrator')
+    }
+    const dispatch = createDispatchRecord({
+      fromAgentId: orchestrator.id,
+      id: 'dispatch-manually-stopped',
+      toAgentId: worker.id,
+      workspaceId: workspace.id,
+    })
+    const startAgent = vi.fn()
+    const writeSendPrompt = vi.fn()
+    const markDispatchSubmitted = vi.fn()
+    const markTaskDispatched = vi.fn()
+    const workspaceStore = {
+      getAgent: store.getAgent,
+      getWorker: store.getWorker,
+      getWorkerByName: (workspaceId: string, workerName: string) => {
+        const candidate = store
+          .getWorkspaceSnapshot(workspaceId)
+          .agents.find((agent) => agent.name === workerName && agent.role !== 'orchestrator')
+        if (!candidate) throw new Error(`Worker not found: ${workerName}`)
+        return candidate
+      },
+      getWorkspaceSnapshot: store.getWorkspaceSnapshot,
+      isAgentManuallyStopped: vi.fn(() => true),
+      markTaskDispatched,
+      markTaskReported: vi.fn(),
+    }
+
+    const ops = createTeamOperations({
+      agentRuntime: {
+        getActiveRunByAgentId: vi.fn(() => undefined),
+        peekAgentLaunchConfig: vi.fn(() => ({ command: 'node' })),
+        startAgent,
+        writeReportPrompt: vi.fn(),
+        writeSendPrompt,
+        writeUserInputPrompt: vi.fn(),
+      } as never,
+      createDispatch: vi.fn(() => dispatch),
+      deleteDispatch: vi.fn(),
+      deleteMessage: vi.fn(),
+      findOpenDispatch: vi.fn(() => dispatch),
+      findOpenDispatchById: vi.fn(),
+      insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
+      markDispatchReportedByWorker: vi.fn(),
+      markDispatchSubmitted,
+      workspaceStore: workspaceStore as never,
+    })
+
+    const result = await ops.dispatchTask(workspace.id, worker.id, 'Implement login', {
+      fromAgentId: orchestrator.id,
+    })
+
+    expect(result).toEqual(dispatch)
+    expect(startAgent).not.toHaveBeenCalled()
+    expect(writeSendPrompt).not.toHaveBeenCalled()
+    expect(markDispatchSubmitted).not.toHaveBeenCalled()
+    expect(markTaskDispatched).toHaveBeenCalledWith(workspace.id, worker.id)
+  })
+
   test('dispatchTask revalidates worker after startup before writing stdin', async () => {
     const store = createRuntimeStore()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
@@ -143,20 +237,12 @@ describe('team atomicity', () => {
     if (!orchestrator) {
       throw new Error('Expected orchestrator')
     }
-    const dispatch = {
-      artifacts: [],
-      createdAt: Date.now(),
-      deliveredAt: null,
+    const dispatch = createDispatchRecord({
       fromAgentId: orchestrator.id,
       id: 'dispatch-1',
-      reportedAt: null,
-      reportText: null,
-      status: 'queued',
-      submittedAt: null,
-      text: 'Implement login',
       toAgentId: worker.id,
       workspaceId: workspace.id,
-    } as const
+    })
     const deleteDispatch = vi.fn()
     const deleteMessage = vi.fn()
     const markDispatchSubmitted = vi.fn()
@@ -178,7 +264,9 @@ describe('team atomicity', () => {
       deleteDispatch,
       deleteMessage,
       findOpenDispatch: vi.fn(),
+      findOpenDispatchById: vi.fn(),
       insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
       markDispatchReportedByWorker: vi.fn(),
       markDispatchSubmitted,
       workspaceStore: {
@@ -246,21 +334,13 @@ describe('team atomicity', () => {
     const store = createRuntimeStore()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
-    const dispatch = {
-      artifacts: [],
-      createdAt: Date.now(),
-      deliveredAt: null,
+    const dispatch = createDispatchRecord({
       fromAgentId: `${workspace.id}:orchestrator`,
       id: 'dispatch-1',
-      reportedAt: null,
-      reportText: null,
       sequence: 1,
-      status: 'queued',
-      submittedAt: null,
-      text: 'Implement login',
       toAgentId: worker.id,
       workspaceId: workspace.id,
-    } as const
+    })
     const deleteMessage = vi.fn()
     const markTaskReported = vi.fn()
     const writeReportPrompt = vi.fn()
@@ -276,7 +356,9 @@ describe('team atomicity', () => {
       deleteDispatch: vi.fn(),
       deleteMessage,
       findOpenDispatch: vi.fn(() => dispatch),
+      findOpenDispatchById: vi.fn(),
       insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
       markDispatchReportedByWorker: vi.fn(() => {
         throw new Error('dispatch ledger failed')
       }),
@@ -304,23 +386,20 @@ describe('team atomicity', () => {
     const store = createRuntimeStore()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
-    const dispatch = {
-      artifacts: [],
-      createdAt: Date.now(),
-      deliveredAt: null,
+    const dispatch = createDispatchRecord({
       fromAgentId: `${workspace.id}:orchestrator`,
       id: 'dispatch-1',
-      reportedAt: null,
-      reportText: null,
       sequence: 1,
-      status: 'queued',
-      submittedAt: null,
-      text: 'Implement login',
       toAgentId: worker.id,
       workspaceId: workspace.id,
-    } as const
+    })
     const deleteMessage = vi.fn()
-    const markDispatchReportedByWorker = vi.fn(() => ({ ...dispatch, status: 'reported' }))
+    const markDispatchReportedByWorker = vi.fn(
+      (): DispatchRecord => ({
+        ...dispatch,
+        status: 'reported',
+      })
+    )
     const markTaskReported = vi.fn()
     const reportForwardError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -337,7 +416,9 @@ describe('team atomicity', () => {
       deleteDispatch: vi.fn(),
       deleteMessage,
       findOpenDispatch: vi.fn(() => dispatch),
+      findOpenDispatchById: vi.fn(),
       insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
       markDispatchReportedByWorker,
       markDispatchSubmitted: vi.fn(),
       workspaceStore: {

@@ -1,4 +1,4 @@
-import type { WorkspaceSummary } from '../shared/types.js'
+import type { WorkspaceLanguage, WorkspaceSummary } from '../shared/types.js'
 
 import type { PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
@@ -70,7 +70,8 @@ export interface AgentRuntime {
     dispatchId: string,
     fromAgentName: string,
     workerDescription: string,
-    text: string
+    text: string,
+    language?: WorkspaceLanguage
   ) => void
   writeCancelPrompt: (
     workspaceId: string,

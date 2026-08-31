@@ -126,6 +126,7 @@ export const createTeamOperations = ({
       drainingReportOutboxIds.add(entry.id)
       attempted += 1
       try {
+        reportOutbox.markDeliveryAttempt(entry.id)
         void agentRuntime
           .deliverSystemMessageToAgent(workspaceId, targetAgentId, entry.payload, {
             requireActiveRun: true,
@@ -134,12 +135,14 @@ export const createTeamOperations = ({
             reportOutbox.markDelivered(entry.id)
           })
           .catch((error: unknown) => {
+            reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
             console.error('[hive] swallowed:teamReport.outboxDrain', error)
           })
           .finally(() => {
             drainingReportOutboxIds.delete(entry.id)
           })
       } catch (error) {
+        reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
         drainingReportOutboxIds.delete(entry.id)
         firstSyncError ??= reportForwardErrorMessage(error)
         console.error('[hive] swallowed:teamReport.outboxDrain', error)
@@ -150,7 +153,14 @@ export const createTeamOperations = ({
 
   const ensureWorkerRun = async (workspaceId: string, workerId: string, hivePort: string) => {
     if (agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) {
-      return
+      return true
+    }
+
+    // A manual stop is an explicit user choice. Keep the dispatch durable and
+    // queued until the user starts this worker again; dispatching must not
+    // silently undo that choice by starting a new PTY.
+    if (workspaceStore.isAgentManuallyStopped?.(workspaceId, workerId)) {
+      return false
     }
 
     const config = agentRuntime.peekAgentLaunchConfig(workspaceId, workerId)
@@ -169,6 +179,7 @@ export const createTeamOperations = ({
         workspaceStore.markAgentStopped(workspaceId, workerId)
         throw new ConflictError(`${config.command} failed to start`)
       }
+      return true
     } catch (error) {
       workspaceStore.markAgentStopped(workspaceId, workerId)
       throw error
@@ -177,9 +188,11 @@ export const createTeamOperations = ({
 
   const replayQueuedDispatches = (workspaceId: string, workerId: string) => {
     if (workspaceStore.getAgent(workspaceId, workerId).role === 'orchestrator') return 0
+    if (workspaceStore.isAgentManuallyStopped?.(workspaceId, workerId)) return 0
     if (!agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) return 0
 
     const worker = workspaceStore.getWorker(workspaceId, workerId)
+    const language = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
     let replayed = 0
     for (const dispatch of listOpenWorkspaceDispatches(workspaceId)) {
       if (
@@ -199,7 +212,8 @@ export const createTeamOperations = ({
           dispatch.id,
           sender?.name ?? 'Hive',
           worker.description,
-          dispatch.text
+          dispatch.text,
+          language
         )
         markDispatchSubmitted(dispatch.id)
         replayed += 1
@@ -246,22 +260,26 @@ export const createTeamOperations = ({
 
       if (input.fromAgentId) {
         const sender = workspaceStore.getAgent(workspaceId, input.fromAgentId)
-        await ensureWorkerRun(workspaceId, workerId, input.hivePort ?? '')
+        const workerStarted = await ensureWorkerRun(workspaceId, workerId, input.hivePort ?? '')
         const worker = workspaceStore.getWorker(workspaceId, workerId)
-        // A start-triggered replay can run in the microtask immediately after
-        // ensureWorkerRun resolves. If it already accepted this dispatch,
-        // don't inject the same task a second time.
-        const replayedDispatch = findOpenDispatch(workspaceId, workerId, dispatch.id)
-        if (replayedDispatch?.status !== 'submitted') {
-          markDispatchSubmitted(dispatch.id)
-          agentRuntime.writeSendPrompt(
-            workspaceId,
-            workerId,
-            dispatch.id,
-            sender.name,
-            worker.description,
-            text
-          )
+        const language = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
+        if (workerStarted) {
+          // A start-triggered replay can run in the microtask immediately after
+          // ensureWorkerRun resolves. If it already accepted this dispatch,
+          // don't inject the same task a second time.
+          const replayedDispatch = findOpenDispatch(workspaceId, workerId, dispatch.id)
+          if (replayedDispatch?.status !== 'submitted') {
+            markDispatchSubmitted(dispatch.id)
+            agentRuntime.writeSendPrompt(
+              workspaceId,
+              workerId,
+              dispatch.id,
+              sender.name,
+              worker.description,
+              text,
+              language
+            )
+          }
         }
       }
 

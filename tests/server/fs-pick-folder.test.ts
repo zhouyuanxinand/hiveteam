@@ -105,6 +105,9 @@ describe('pickFolder — platform dispatch', () => {
     expect(calls[0]?.command).toBe('powershell.exe')
     expect(calls[0]?.args).toContain('-STA')
     expect(calls[0]?.args.join(' ')).toContain('FolderBrowserDialog')
+    expect(calls[0]?.args.join(' ')).toContain(
+      'Documents inside it are detected after you click OK'
+    )
     expect(calls[0]?.args.join(' ')).toContain('ToBase64String')
     expect(calls[0]?.timeout).toBeUndefined()
   })

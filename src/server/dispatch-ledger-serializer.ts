@@ -16,4 +16,14 @@ export const serializeDispatchRecord = (record: DispatchRecord) => ({
   ...(record.attemptCount !== undefined ? { attempt_count: record.attemptCount } : {}),
   ...(record.lastAttemptAt !== undefined ? { last_attempt_at: record.lastAttemptAt } : {}),
   ...(record.lastError !== undefined ? { last_error: record.lastError } : {}),
+  ...(record.reportDelivery
+    ? {
+        report_delivery: {
+          attempt_count: record.reportDelivery.attemptCount,
+          delivered_at: record.reportDelivery.deliveredAt,
+          last_attempt_at: record.reportDelivery.lastAttemptAt,
+          last_error: record.reportDelivery.lastError,
+        },
+      }
+    : {}),
 })

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+import type { WorkspaceLanguage } from '../shared/types.js'
 import { buildProtocolDoc } from './hive-team-guidance.js'
 
 interface TasksFileService {
@@ -45,10 +46,10 @@ export const ensureTasksFile = (workspacePath: string) => {
  * on every workspace open means a Hive version bump that changes the rules
  * propagates without manual intervention.
  */
-export const ensureProtocolFile = (workspacePath: string) => {
+export const ensureProtocolFile = (workspacePath: string, language: WorkspaceLanguage = 'zh') => {
   ensureTasksDir(workspacePath)
   const protocolFilePath = getProtocolFilePath(workspacePath)
-  const desired = buildProtocolDoc()
+  const desired = buildProtocolDoc(language)
   const current = existsSync(protocolFilePath) ? readFileSync(protocolFilePath, 'utf8') : null
   if (current === desired) return desired
   writeFileSync(protocolFilePath, desired, 'utf8')

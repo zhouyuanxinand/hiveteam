@@ -22,7 +22,7 @@ const SELECTED_BORDER = 'color-mix(in oklab, var(--accent) 55%, transparent)'
 
 interface RowProps {
   label: string
-  count?: number
+  count?: number | undefined
   active: boolean
   onClick: () => void
 }

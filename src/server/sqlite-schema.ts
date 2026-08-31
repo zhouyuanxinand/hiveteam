@@ -21,8 +21,14 @@ import { applySchemaVersion23 } from './sqlite-schema-v23.js'
 import { applySchemaVersion24 } from './sqlite-schema-v24.js'
 import { applySchemaVersion25 } from './sqlite-schema-v25.js'
 import { applySchemaVersion26 } from './sqlite-schema-v26.js'
+import { applySchemaVersion27 } from './sqlite-schema-v27.js'
+import { applySchemaVersion28 } from './sqlite-schema-v28.js'
+import { applySchemaVersion29 } from './sqlite-schema-v29.js'
+import { applySchemaVersion30 } from './sqlite-schema-v30.js'
+import { applySchemaVersion31 } from './sqlite-schema-v31.js'
+import { applySchemaVersion32 } from './sqlite-schema-v32.js'
 
-export const CURRENT_SCHEMA_VERSION = 26
+export const CURRENT_SCHEMA_VERSION = 32
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -35,6 +41,7 @@ export const initializeRuntimeDatabase = (db: Database) => {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       path TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'zh',
       auto_resume INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL
     );
@@ -43,8 +50,10 @@ export const initializeRuntimeDatabase = (db: Database) => {
       id TEXT PRIMARY KEY,
       workspace_id TEXT NOT NULL,
       name TEXT NOT NULL,
+      avatar TEXT,
       description TEXT,
       last_session_id TEXT,
+      manual_stop INTEGER NOT NULL DEFAULT 0,
       role TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
@@ -130,7 +139,10 @@ export const initializeRuntimeDatabase = (db: Database) => {
       dispatch_id TEXT NOT NULL UNIQUE,
       payload TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      delivered_at INTEGER
+      delivered_at INTEGER,
+      delivery_attempts INTEGER NOT NULL DEFAULT 0,
+      last_delivery_attempt_at INTEGER,
+      last_delivery_error TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_report_outbox_pending
@@ -357,5 +369,45 @@ export const initializeRuntimeDatabase = (db: Database) => {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(26, Date.now())
   } else {
     applySchemaVersion26(db)
+  }
+
+  if (!appliedVersions.has(27)) {
+    applySchemaVersion27(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(27, Date.now())
+  } else {
+    applySchemaVersion27(db)
+  }
+
+  if (!appliedVersions.has(28)) {
+    applySchemaVersion28(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(28, Date.now())
+  } else {
+    applySchemaVersion28(db)
+  }
+
+  if (!appliedVersions.has(29)) {
+    applySchemaVersion29(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(29, Date.now())
+  }
+
+  if (!appliedVersions.has(30)) {
+    applySchemaVersion30(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(30, Date.now())
+  } else {
+    applySchemaVersion30(db)
+  }
+
+  if (!appliedVersions.has(31)) {
+    applySchemaVersion31(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(31, Date.now())
+  } else {
+    applySchemaVersion31(db)
+  }
+
+  if (!appliedVersions.has(32)) {
+    applySchemaVersion32(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(32, Date.now())
+  } else {
+    applySchemaVersion32(db)
   }
 }

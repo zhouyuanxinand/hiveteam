@@ -9,9 +9,14 @@ import type {
   TeamMemoryDreamSuggestion,
   TeamMemoryEntry,
   TeamMemoryKind,
+  TeamMemoryProcedureRef,
   TeamMemoryScope,
 } from '../shared/team-memory.js'
-import { isTeamMemoryKind, isTeamMemoryScope } from '../shared/team-memory.js'
+import {
+  isTeamMemoryKind,
+  isTeamMemoryScope,
+  normalizeTeamMemoryProcedureRef,
+} from '../shared/team-memory.js'
 import { sanitizePromptData } from './prompt-safety.js'
 import type { TeamMemoryStore, UpdateTeamMemoryInput } from './team-memory-store.js'
 
@@ -21,6 +26,7 @@ interface DreamSourceSnapshot {
   id: string
   kind: TeamMemoryKind
   pinned: boolean
+  procedureRef: TeamMemoryProcedureRef | null
   scope: TeamMemoryScope
   status: TeamMemoryEntry['status']
   tags: string[]
@@ -64,15 +70,41 @@ const parseJson = <T>(value: string, fallback: T): T => {
   }
 }
 
+const normalizeStoredProcedureRef = (value: unknown): TeamMemoryProcedureRef | null => {
+  try {
+    return normalizeTeamMemoryProcedureRef(value)
+  } catch {
+    // A pre-validation Dream record must remain readable. Invalid legacy data
+    // is rejected before it can be submitted instead of breaking the drawer.
+    return null
+  }
+}
+
 const normalizeSuggestion = (suggestion: TeamMemoryDreamSuggestion): TeamMemoryDreamSuggestion => ({
   body: sanitizePromptData(suggestion.body, 4_000).trim(),
   kind: suggestion.kind,
+  procedureRef: normalizeStoredProcedureRef(suggestion.procedureRef),
   scope: suggestion.scope,
   sourceMemoryIds: [...new Set(suggestion.sourceMemoryIds)].slice(0, 50),
   tags: [...new Set(suggestion.tags.map((tag) => tag.trim()).filter(Boolean))]
     .slice(0, 20)
     .map((tag) => tag.slice(0, 64)),
 })
+
+const normalizeSnapshot = (snapshot: DreamSourceSnapshot): DreamSourceSnapshot => ({
+  ...snapshot,
+  procedureRef: normalizeStoredProcedureRef(snapshot.procedureRef),
+})
+
+const requireProcedureReferences = (suggestions: TeamMemoryDreamSuggestion[]) => {
+  if (
+    suggestions.some(
+      (suggestion) => suggestion.kind === 'procedure_ref' && !suggestion.procedureRef
+    )
+  ) {
+    throw new Error('procedure_ref Dream suggestions require a procedure_ref')
+  }
+}
 
 const fromRow = (row: DreamRow): TeamMemoryDreamRun => ({
   createdAt: row.created_at,
@@ -142,6 +174,7 @@ const parseReviewSuggestions = (text: string): TeamMemoryDreamSuggestion[] => {
         normalizeSuggestion({
           body: suggestion.body as string,
           kind: suggestion.kind as TeamMemoryKind,
+          procedureRef: normalizeStoredProcedureRef(suggestion.procedure_ref),
           scope: suggestion.scope as TeamMemoryScope,
           sourceMemoryIds: Array.isArray(suggestion.source_memory_ids)
             ? suggestion.source_memory_ids.filter((id): id is string => typeof id === 'string')
@@ -159,20 +192,26 @@ const parseReviewSuggestions = (text: string): TeamMemoryDreamSuggestion[] => {
 }
 
 const createSuggestions = (entries: TeamMemoryEntry[]): TeamMemoryDreamSuggestion[] => {
-  const groups = new Map<TeamMemoryKind, TeamMemoryEntry[]>()
+  const groups = new Map<string, TeamMemoryEntry[]>()
   for (const entry of entries) {
     if (entry.disabled || entry.status !== 'active') continue
-    const group = groups.get(entry.kind) ?? []
+    if (entry.kind === 'procedure_ref' && !entry.procedureRef) continue
+    const key =
+      entry.kind === 'procedure_ref'
+        ? `${entry.kind}\u0000${entry.procedureRef?.type ?? ''}\u0000${entry.procedureRef?.id ?? ''}`
+        : entry.kind
+    const group = groups.get(key) ?? []
     group.push(entry)
-    groups.set(entry.kind, group)
+    groups.set(key, group)
   }
   return [...groups.entries()]
-    .map(([kind, group]) => ({
+    .map(([, group]) => ({
       body:
         group.length === 1
           ? (group[0]?.body ?? '')
           : group.map((entry) => `- ${entry.body}`).join('\n'),
-      kind,
+      kind: group[0]?.kind ?? 'fact',
+      procedureRef: group[0]?.procedureRef ?? null,
       scope: 'workspace' as const,
       sourceMemoryIds: group.map((entry) => entry.id),
       tags: [...new Set(group.flatMap((entry) => entry.tags))].slice(0, 20),
@@ -206,7 +245,9 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
         'SELECT source_snapshots_json FROM memory_dream_runs WHERE workspace_id = ? AND id = ?'
       )
       .get(workspaceId, dreamId) as { source_snapshots_json: string } | undefined
-    return row ? parseJson<DreamSourceSnapshot[]>(row.source_snapshots_json, []) : []
+    return row
+      ? parseJson<DreamSourceSnapshot[]>(row.source_snapshots_json, []).map(normalizeSnapshot)
+      : []
   }
 
   return {
@@ -223,6 +264,7 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
           id: entry.id,
           kind: entry.kind,
           pinned: entry.pinned,
+          procedureRef: entry.procedureRef,
           scope: entry.scope,
           status: entry.status,
           tags: entry.tags,
@@ -362,6 +404,7 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
       const normalized = suggestions
         .map(normalizeSuggestion)
         .filter((suggestion) => suggestion.body)
+      requireProcedureReferences(normalized)
       db.prepare(
         'UPDATE memory_dream_runs SET suggestions_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?'
       ).run(JSON.stringify(normalized), Date.now(), workspaceId, dreamId)
@@ -371,6 +414,7 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
       const current = get(workspaceId, dreamId)
       if (!current) return undefined
       if (current.status !== 'review') throw new Error('This Dream has already been submitted')
+      requireProcedureReferences(current.suggestions)
       const snapshots = getSnapshots(workspaceId, dreamId)
       const createdIds: string[] = []
       const now = Date.now()
@@ -386,6 +430,7 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
             createdByAgentId: actor.id,
             createdByAgentName: actor.name,
             kind: suggestion.kind,
+            procedureRef: suggestion.procedureRef,
             scope: suggestion.scope,
             source: 'dream',
             status: 'active',
@@ -418,6 +463,7 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
         disabled: snapshot.disabled,
         kind: snapshot.kind,
         pinned: snapshot.pinned,
+        procedureRef: snapshot.procedureRef,
         scope: snapshot.scope,
         status: snapshot.status,
         tags: snapshot.tags,

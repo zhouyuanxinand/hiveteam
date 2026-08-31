@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { listenOnFetchSafePort } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<{ close: () => Promise<void> }> = []
@@ -24,9 +25,7 @@ const startServer = async () => {
   const store = createRuntimeStore({ agentManager: createAgentManager() })
   const app = createApp({ store })
 
-  await new Promise<void>((resolve) => {
-    app.server.listen(0, '127.0.0.1', () => resolve())
-  })
+  const port = await listenOnFetchSafePort(app.server)
 
   servers.push({
     async close() {
@@ -35,14 +34,9 @@ const startServer = async () => {
     },
   })
 
-  const address = app.server.address()
-  if (!address || typeof address === 'string') {
-    throw new Error('Server did not bind to an inet port')
-  }
-
   return {
     store,
-    baseUrl: `http://127.0.0.1:${address.port}`,
+    baseUrl: `http://127.0.0.1:${port}`,
   }
 }
 
@@ -62,9 +56,7 @@ const startServerWithVersionInfo = async () => {
     },
   })
 
-  await new Promise<void>((resolve) => {
-    app.server.listen(0, '127.0.0.1', () => resolve())
-  })
+  const port = await listenOnFetchSafePort(app.server)
 
   servers.push({
     async close() {
@@ -73,13 +65,8 @@ const startServerWithVersionInfo = async () => {
     },
   })
 
-  const address = app.server.address()
-  if (!address || typeof address === 'string') {
-    throw new Error('Server did not bind to an inet port')
-  }
-
   return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
+    baseUrl: `http://127.0.0.1:${port}`,
   }
 }
 
@@ -142,6 +129,7 @@ describe('runtime http app', () => {
     await expect(response.json()).resolves.toEqual([
       {
         id: expect.any(String),
+        language: 'zh',
         name: 'Alpha',
         path: '/tmp/hive-alpha',
       },
@@ -167,6 +155,7 @@ describe('runtime http app', () => {
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toEqual({
       id: expect.any(String),
+      language: 'zh',
       name: 'Beta',
       path: realpathSync(workspacePath),
       orchestrator_start: { ok: false, error: null, run_id: null },
@@ -323,6 +312,52 @@ describe('runtime http app', () => {
     ])
   })
 
+  test('worker avatars are persisted locally, can be cleared, and reject unsafe image data', async () => {
+    const { store, baseUrl } = await startServer()
+    const workspace = store.createWorkspace('/tmp/hive-avatar', 'Avatar')
+    const cookie = await getUiCookie(baseUrl)
+    const avatar =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Jr0YAAAAASUVORK5CYII='
+
+    const createResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/workers`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ avatar, name: 'Portrait', role: 'coder' }),
+    })
+    expect(createResponse.status).toBe(201)
+    const created = (await createResponse.json()) as { avatar?: string; id: string }
+    expect(created.avatar).toBe(avatar)
+    expect(store.listWorkers(workspace.id)).toEqual([
+      expect.objectContaining({ avatar, id: created.id, name: 'Portrait' }),
+    ])
+
+    const clearResponse = await fetch(
+      `${baseUrl}/api/workspaces/${workspace.id}/workers/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ avatar: null }),
+      }
+    )
+    expect(clearResponse.status).toBe(200)
+    const cleared = (await clearResponse.json()) as Record<string, unknown>
+    expect(cleared).not.toHaveProperty('avatar')
+    expect(store.listWorkers(workspace.id)[0]).not.toHaveProperty('avatar')
+
+    const unsafeResponse = await fetch(
+      `${baseUrl}/api/workspaces/${workspace.id}/workers/${created.id}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify({ avatar: 'data:image/svg+xml;base64,PHN2Zy8+' }),
+      }
+    )
+    expect(unsafeResponse.status).toBe(400)
+    await expect(unsafeResponse.json()).resolves.toEqual({
+      error: 'Avatar must be a PNG, JPEG, or WebP image.',
+    })
+  })
+
   test('DELETE /api/workspaces/:id/workers/:workerId stops active run and removes worker', async () => {
     const { store, baseUrl } = await startServer()
     const workspace = store.createWorkspace('/tmp/hive-alpha', 'Alpha')
@@ -387,8 +422,6 @@ describe('runtime http app', () => {
       role: 'coder',
     })
 
-    store.recordUserInput(workspace.id, orchestrator.id, 'bootstrap')
-
     const workerStartResponse = await fetch(
       `${baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/config`,
       {
@@ -437,6 +470,8 @@ describe('runtime http app', () => {
       }
     )
     expect(orchRunStart.status).toBe(201)
+
+    store.recordUserInput(workspace.id, orchestrator.id, 'bootstrap')
 
     const orchestratorToken = store.peekAgentToken(orchestrator.id)
     const workerToken = store.peekAgentToken(worker.id)

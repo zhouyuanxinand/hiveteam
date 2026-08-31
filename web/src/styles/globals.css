@@ -1441,39 +1441,6 @@ html, body {
   gap: 10px;
 }
 
-/* Dispatch pulse — a lightweight visual handoff from Orchestrator to worker.
-   The moving segment is decorative; status text remains the source of truth. */
-.dispatch-pulse {
-  margin: 0 0 10px;
-  padding: 9px 10px;
-  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--accent) 5%, var(--bg-1));
-}
-.dispatch-pulse-heading,
-.dispatch-pulse-item {
-  display: flex;
-  align-items: center;
-}
-.dispatch-pulse-heading { justify-content: space-between; gap: 8px; margin-bottom: 7px; }
-.dispatch-pulse-title { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; font-weight: 650; }
-.dispatch-pulse-title svg { color: var(--accent); }
-.dispatch-pulse-count { min-width: 18px; padding: 2px 5px; border-radius: 999px; background: var(--bg-3); color: var(--accent); font-family: var(--font-mono); font-size: 10px; text-align: center; }
-.dispatch-pulse-list { display: grid; gap: 4px; }
-.dispatch-pulse-item { min-width: 0; gap: 7px; padding: 4px 0; }
-.dispatch-pulse-line { position: relative; display: inline-flex; width: 42px; flex: none; align-items: center; justify-content: space-between; color: var(--accent); }
-.dispatch-pulse-line--failed { color: var(--status-red); }
-.dispatch-pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 15%, transparent); }
-.dispatch-pulse-travel { position: absolute; left: 9px; right: 10px; height: 1px; overflow: hidden; background: color-mix(in oklab, currentColor 38%, var(--border)); }
-.dispatch-pulse-travel::after { display: block; width: 12px; height: 1px; background: currentColor; content: ''; animation: dispatch-pulse-travel 1.15s linear infinite; }
-@keyframes dispatch-pulse-travel { from { transform: translateX(-14px); } to { transform: translateX(38px); } }
-.dispatch-pulse-route { min-width: 0; flex: 1; overflow: hidden; color: var(--text-secondary); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.dispatch-pulse-route span { padding: 0 5px; color: var(--accent); }
-.dispatch-pulse-state { display: inline-flex; flex: none; align-items: center; gap: 3px; color: var(--status-yellow); font-size: 10px; white-space: nowrap; }
-.dispatch-pulse-state--submitted { color: var(--accent); }
-.dispatch-pulse-state--failed { color: var(--status-red); }
-@media (prefers-reduced-motion: reduce) { .dispatch-pulse-travel::after { animation: none; } }
-
 /* Worker cards keep identity, role, activity and state in stable rows so a
    mixed-status team can be scanned without opening each terminal. */
 .worker-card-shell {
@@ -1510,7 +1477,10 @@ html, body {
   min-width: 0;
   align-items: center;
   gap: 10px;
-  padding-right: 54px;
+  /* Four compact card actions (start, avatar, rename, remove) float in the
+     upper-right corner. Reserve their full hit-target width so long names
+     never render underneath the controls. */
+  padding-right: 116px;
 }
 .worker-card__identity {
   display: flex;
@@ -1574,22 +1544,6 @@ html, body {
   padding-top: 8px;
   border-top: 1px solid var(--border);
 }
-.worker-card__pending {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  overflow: hidden;
-  padding: 3px 6px;
-  border: 1px solid color-mix(in oklab, var(--status-orange) 38%, var(--border));
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--status-orange) 12%, transparent);
-  color: var(--status-orange);
-  font-size: 10px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Stopped worker — the card visually steps back so a grid mixing working
    and stopped agents reads at a glance. Reduced opacity + slight desat
    on the card body. Hover restores full saturation so the user can still
@@ -1673,6 +1627,24 @@ html, body {
   background: color-mix(in oklab, var(--status-red) 14%, transparent);
   border-color: color-mix(in oklab, var(--status-red) 40%, var(--border-bright));
   color: var(--status-red);
+}
+
+/* Hover-only controls are unreachable on touch devices. Keep the compact
+   action row visible there; the card already reserves room for all actions. */
+@media (hover: none) {
+  .worker-card__actions {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+/* Member terminals close by clicking the desktop overlay. A touch device has
+   no reliable outside target once the terminal is full-screen, so retain a
+   conventional top-right close affordance there. */
+.worker-modal__close { display: none; }
+@media (hover: none), (pointer: coarse) {
+  .worker-modal__close { display: inline-flex; }
 }
 
 /* Workspace knowledge — one responsive surface for Memory and Workflows.
@@ -1834,6 +1806,14 @@ html, body {
   white-space: nowrap;
 }
 .workspace-memory-enabled input { accent-color: var(--accent); }
+.workspace-memory-dream-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.workspace-memory-dream-schedule input { accent-color: var(--accent); }
 .workspace-memory-add { margin-left: auto; white-space: nowrap; }
 .workspace-knowledge-error {
   flex: none;
@@ -1899,6 +1879,57 @@ html, body {
   color: var(--text-primary);
   font-size: 12px;
 }
+.workspace-memory-procedure-ref {
+  min-width: 0;
+  margin: 9px 0 0;
+  padding: 8px 9px 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.workspace-memory-procedure-ref legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.workspace-memory-procedure-ref__fields {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.workspace-memory-procedure-ref__fields label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+.workspace-memory-procedure-ref__fields select,
+.workspace-memory-procedure-ref__fields input {
+  width: 100%;
+  min-width: 0;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.workspace-memory-procedure-ref-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: -2px 0 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.workspace-memory-procedure-ref-summary code {
+  overflow-wrap: anywhere;
+  color: var(--accent);
+  font-size: inherit;
+}
+.workspace-memory-procedure-ref-summary strong { color: var(--text-primary); font-weight: 600; }
 .workspace-memory-composer__actions {
   display: flex;
   justify-content: flex-end;
@@ -2010,6 +2041,7 @@ html, body {
   .workspace-knowledge-body { padding: 12px 14px 24px; }
   .workspace-memory-composer__fields { grid-template-columns: 1fr 1fr; }
   .workspace-memory-composer__fields input { grid-column: 1 / -1; }
+  .workspace-memory-procedure-ref__fields { grid-template-columns: 1fr; }
   .workspace-workflow-card { grid-template-columns: auto minmax(0, 1fr); }
   .workspace-workflow-card__actions {
     grid-column: 2;

@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { ChevronDown, ChevronRight, Folder, GitBranch } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder, GitBranch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import type { CommandPreset, FsProbeResponse } from '../api.js'
@@ -152,6 +152,39 @@ export const ConfirmWorkspaceDialog = ({
                 </div>
               ) : probe?.ok ? (
                 <span className="text-xs text-ter">{t('workspace.git.none')}</span>
+              ) : null}
+
+              {(probe?.documents?.length ?? 0) > 0 ? (
+                <div
+                  className="flex flex-col gap-1.5 rounded border px-3 py-2"
+                  style={{
+                    background: 'color-mix(in oklab, var(--accent) 7%, transparent)',
+                    borderColor: 'color-mix(in oklab, var(--accent) 24%, var(--border))',
+                  }}
+                  data-testid="confirm-workspace-documents"
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-sec">
+                    <FileText size={14} aria-hidden />
+                    {t('workspace.documents.detected', { count: probe?.documents?.length ?? 0 })}
+                  </span>
+                  <span className="text-xs text-ter">
+                    {t('workspace.documents.generationHint')}
+                  </span>
+                  <ul className="flex max-h-20 flex-col gap-0.5 overflow-y-auto mono text-xs text-sec">
+                    {(probe?.documents ?? []).slice(0, 5).map((document) => (
+                      <li key={document.path} className="truncate" title={document.relative_path}>
+                        {document.relative_path}
+                      </li>
+                    ))}
+                  </ul>
+                  {(probe?.documents?.length ?? 0) > 5 ? (
+                    <span className="text-xs text-ter">
+                      {t('workspace.documents.more', {
+                        count: (probe?.documents?.length ?? 0) - 5,
+                      })}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
 
               <label className="flex flex-col gap-2">

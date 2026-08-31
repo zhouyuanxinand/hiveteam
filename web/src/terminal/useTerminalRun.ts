@@ -77,6 +77,7 @@ export const useTerminalRun = (
     let onCompositionStart: ((event: Event) => void) | undefined
     let onCompositionEnd: ((event: Event) => void) | undefined
     let restored = false
+    let terminalExited = false
     const isComposingRef = { current: false }
 
     void Promise.all([
@@ -256,7 +257,7 @@ export const useTerminalRun = (
         terminal.focus()
       }
       const resize = () => {
-        if (!containerRef.current || !isContainerResizable()) return
+        if (terminalExited || !containerRef.current || !isContainerResizable()) return
         refreshTerminal()
         const { pixelHeight, pixelWidth } = getContainerPixels()
         client?.resize(terminal?.cols ?? 80, terminal?.rows ?? 24, pixelWidth, pixelHeight)
@@ -283,6 +284,7 @@ export const useTerminalRun = (
           setError(message)
         },
         onExit() {
+          terminalExited = true
           setStatus('stopped')
         },
         onOutput(chunk, acknowledge) {

@@ -1,4 +1,4 @@
-import type { AgentStatus, AgentSummary, WorkerRole } from '../shared/types.js'
+import type { AgentStatus, AgentSummary, WorkerRole, WorkspaceLanguage } from '../shared/types.js'
 import { getDefaultRoleDescription } from './role-templates.js'
 
 export interface MessageKindRecord {
@@ -10,15 +10,18 @@ export interface MessageKindRecord {
 export interface WorkspaceRow {
   auto_resume: number | null
   id: string
+  language: WorkspaceLanguage | null
   name: string
   path: string
 }
 
 export interface WorkerRow {
+  avatar: string | null
   id: string
   workspace_id: string
   name: string
   description: string | null
+  manual_stop: number | null
   role: WorkerRole
 }
 
@@ -26,11 +29,14 @@ export interface WorkspaceSummaryRow extends WorkspaceRow {}
 
 export const getOrchestratorId = (workspaceId: string) => `${workspaceId}:orchestrator`
 
-export const createOrchestrator = (workspaceId: string): AgentSummary => ({
+export const createOrchestrator = (
+  workspaceId: string,
+  language: WorkspaceLanguage = 'zh'
+): AgentSummary => ({
   id: getOrchestratorId(workspaceId),
   workspaceId,
   name: 'Orchestrator',
-  description: getDefaultRoleDescription('orchestrator'),
+  description: getDefaultRoleDescription('orchestrator', language),
   role: 'orchestrator',
   status: 'stopped',
   pendingTaskCount: 0,

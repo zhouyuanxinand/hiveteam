@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Database } from 'better-sqlite3'
 
-import type { AgentSummary } from '../shared/types.js'
+import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
 import { ConflictError } from './http-errors.js'
 import { getDefaultRoleDescription } from './role-templates.js'
 import type { WorkerInput, WorkspaceRecord, WorkspaceStore } from './workspace-store-contract.js'
@@ -10,6 +10,8 @@ import {
   getAgentRecord,
   getWorkerByNameRecord,
   getWorkerRecord,
+  isAgentManuallyStopped,
+  markAgentManuallyStopped,
   markAgentStarted,
   markAgentStopped,
   markTaskCancelled,
@@ -53,29 +55,41 @@ export const createWorkspaceStore = (
         throw new ConflictError(`Worker name already exists: ${name}`)
       }
       const worker: AgentSummary = {
+        ...(input.avatar ? { avatar: input.avatar } : {}),
         id: randomUUID(),
         workspaceId,
         name,
-        description: input.description ?? getDefaultRoleDescription(input.role),
+        description:
+          input.description ??
+          getDefaultRoleDescription(input.role, workspace.summary.language ?? 'zh'),
         role: input.role,
         status: 'stopped',
         pendingTaskCount: 0,
       }
       db.prepare(
-        'INSERT INTO workers (id, workspace_id, name, description, role, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(worker.id, workspaceId, worker.name, worker.description, worker.role, Date.now())
+        'INSERT INTO workers (id, workspace_id, name, avatar, description, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        worker.id,
+        workspaceId,
+        worker.name,
+        worker.avatar ?? null,
+        worker.description,
+        worker.role,
+        Date.now()
+      )
       workspace.agents.push(worker)
       return worker
     },
-    createWorkspace(path, name) {
-      const summary = { id: randomUUID(), name, path }
+    createWorkspace(path, name, language: WorkspaceLanguage = 'zh') {
+      const summary = { id: randomUUID(), language, name, path }
       db.prepare(
-        'INSERT INTO workspaces (id, name, path, auto_resume, created_at) VALUES (?, ?, ?, ?, ?)'
-      ).run(summary.id, name, path, 1, Date.now())
+        'INSERT INTO workspaces (id, name, path, language, auto_resume, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(summary.id, name, path, language, 1, Date.now())
       workspaces.set(summary.id, {
         autoResumeOnRestart: true,
+        manualStoppedAgentIds: new Set<string>(),
         summary,
-        agents: [createOrchestrator(summary.id)],
+        agents: [createOrchestrator(summary.id, language)],
       })
       return summary
     },
@@ -113,6 +127,20 @@ export const createWorkspaceStore = (
       worker.name = trimmed
       return worker
     },
+    setWorkerAvatar(workspaceId, workerId, avatar) {
+      const worker = getWorkerRecord(workspaces, workspaceId, workerId)
+      db.prepare('UPDATE workers SET avatar = ? WHERE workspace_id = ? AND id = ?').run(
+        avatar,
+        workspaceId,
+        workerId
+      )
+      if (avatar) {
+        worker.avatar = avatar
+      } else {
+        delete worker.avatar
+      }
+      return worker
+    },
     deleteWorker(workspaceId, workerId) {
       const workspace = getWorkspace(workspaceId)
       getWorkerRecord(workspaces, workspaceId, workerId)
@@ -136,6 +164,7 @@ export const createWorkspaceStore = (
         )
       })()
       workspace.agents = workspace.agents.filter((agent) => agent.id !== workerId)
+      workspace.manualStoppedAgentIds?.delete(workerId)
     },
     getAgent: (workspaceId, agentId) => getAgentRecord(workspaces, workspaceId, agentId),
     getWorker: (workspaceId, workerId) => getWorkerRecord(workspaces, workspaceId, workerId),
@@ -152,7 +181,8 @@ export const createWorkspaceStore = (
     listWorkers(workspaceId) {
       return getWorkspace(workspaceId)
         .agents.filter(isWorkerAgent)
-        .map(({ id, name, role, status, pendingTaskCount }) => ({
+        .map(({ avatar, id, name, role, status, pendingTaskCount }) => ({
+          ...(avatar ? { avatar } : {}),
           id,
           name,
           role,
@@ -171,8 +201,23 @@ export const createWorkspaceStore = (
       )
       workspace.autoResumeOnRestart = enabled
     },
-    markAgentStarted: (workspaceId, agentId) => markAgentStarted(workspaces, workspaceId, agentId),
+    markAgentStarted(workspaceId, agentId) {
+      markAgentStarted(workspaces, workspaceId, agentId)
+      db.prepare('UPDATE workers SET manual_stop = 0 WHERE workspace_id = ? AND id = ?').run(
+        workspaceId,
+        agentId
+      )
+    },
     markAgentStopped: (workspaceId, agentId) => markAgentStopped(workspaces, workspaceId, agentId),
+    markAgentManuallyStopped(workspaceId, agentId) {
+      markAgentManuallyStopped(workspaces, workspaceId, agentId)
+      db.prepare('UPDATE workers SET manual_stop = 1 WHERE workspace_id = ? AND id = ?').run(
+        workspaceId,
+        agentId
+      )
+    },
+    isAgentManuallyStopped: (workspaceId, agentId) =>
+      isAgentManuallyStopped(workspaces, workspaceId, agentId),
     markTaskDispatched: (workspaceId, workerId) =>
       markTaskDispatched(workspaces, workspaceId, workerId),
     markTaskCancelled: (workspaceId, workerId) =>

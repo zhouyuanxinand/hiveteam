@@ -2,10 +2,19 @@ export const agentStatuses = ['idle', 'working', 'stopped'] as const
 
 export type AgentStatus = (typeof agentStatuses)[number]
 
+export const workspaceLanguages = ['zh', 'en'] as const
+
+export type WorkspaceLanguage = (typeof workspaceLanguages)[number]
+
+export const isWorkspaceLanguage = (value: unknown): value is WorkspaceLanguage =>
+  typeof value === 'string' && (workspaceLanguages as readonly string[]).includes(value)
+
 export type WorkerRole = 'coder' | 'reviewer' | 'tester' | 'custom'
 
 export interface WorkspaceSummary {
   id: string
+  /** Language used for generated Hive role contracts and protocol prompts. */
+  language?: WorkspaceLanguage
   name: string
   path: string
 }
@@ -15,6 +24,8 @@ export interface WorkspaceRecoverySettings {
 }
 
 export interface AgentSummary {
+  /** Locally stored PNG/JPEG/WebP data URL selected for this worker. */
+  avatar?: string
   id: string
   workspaceId: string
   name: string
@@ -25,6 +36,8 @@ export interface AgentSummary {
 }
 
 export interface TeamListItem {
+  /** Locally stored PNG/JPEG/WebP data URL selected for this worker. */
+  avatar?: string
   id: string
   name: string
   role: WorkerRole
@@ -51,6 +64,7 @@ export interface TeamListItem {
  * Internal TS code uses TeamListItem (camelCase); serializers/deserializers convert.
  */
 export interface TeamListItemPayload {
+  avatar?: string
   id: string
   name: string
   role: WorkerRole

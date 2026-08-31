@@ -21,6 +21,7 @@ beforeEach(async () => {
   mkdirSync(join(sandboxRoot, 'projects'), { recursive: true })
   mkdirSync(join(sandboxRoot, 'projects', 'my-app', '.git'), { recursive: true })
   writeFileSync(join(sandboxRoot, 'projects', 'my-app', '.git', 'HEAD'), 'ref: refs/heads/main\n')
+  writeFileSync(join(sandboxRoot, 'requirements.docx'), 'docx placeholder')
   mkdirSync(join(sandboxRoot, '.hidden-dotdir'), { recursive: true })
   writeFileSync(join(sandboxRoot, 'projects', 'file-not-dir.txt'), 'nope')
   mkdirSync(join(outsideRoot, 'secret'), { recursive: true })
@@ -62,6 +63,16 @@ describe('GET /api/fs/browse', () => {
     expect(body.parent_path).toBeNull()
     const names = (body.entries as Array<{ name: string }>).map((entry) => entry.name)
     expect(names).toEqual(['projects'])
+    expect(body.documents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          extension: '.docx',
+          kind: 'document',
+          name: 'requirements.docx',
+          relative_path: 'requirements.docx',
+        }),
+      ])
+    )
   })
 
   test('descends into a subdirectory and detects .git repositories', async () => {
@@ -106,6 +117,20 @@ describe('GET /api/fs/probe', () => {
     expect(body.suggested_name).toBe('my-app')
     // Git may report the configured branch name, or fall back to the platform default.
     expect([null, 'main', 'master']).toContain(body.current_branch)
+  })
+
+  test('reports supported reference documents for a selected directory', async () => {
+    const body = await probe(sandboxRoot)
+    expect(body.ok).toBe(true)
+    expect(body.documents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          extension: '.docx',
+          kind: 'document',
+          path: join(sandboxRoot, 'requirements.docx'),
+        }),
+      ])
+    )
   })
 
   test('returns ok=false for paths outside the sandbox', async () => {

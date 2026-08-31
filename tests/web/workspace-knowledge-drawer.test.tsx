@@ -20,7 +20,8 @@ describe('workspace knowledge drawer', () => {
   test('switches between searchable Memory and Workflows surfaces', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.endsWith('/memory/settings')) return jsonResponse({ enabled: true })
+      if (url.endsWith('/memory/settings'))
+        return jsonResponse({ dream_enabled: false, enabled: true })
       if (url.includes('/memory?')) {
         return jsonResponse([
           {
@@ -34,6 +35,7 @@ describe('workspace knowledge drawer', () => {
             kind: 'decision',
             last_injected_at: null,
             pinned: true,
+            procedure_ref: null,
             scope: 'workspace',
             source: 'manual',
             status: 'active',
@@ -79,5 +81,67 @@ describe('workspace knowledge drawer', () => {
     expect(await screen.findByText('Release check')).toBeInTheDocument()
     expect(screen.getByText('.hive/workflows/release-check.ts')).toBeInTheDocument()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+  })
+
+  test('collects and displays structured procedure references', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/memory/settings')) {
+        return jsonResponse({ dream_enabled: false, enabled: true })
+      }
+      if (url.includes('/memory?')) {
+        return jsonResponse([
+          {
+            body: 'Run the release checklist before deployment.',
+            confidence: 1,
+            created_at: 100,
+            created_by_agent_id: null,
+            created_by_agent_name: null,
+            disabled: false,
+            id: 'memory-procedure',
+            kind: 'procedure_ref',
+            last_injected_at: null,
+            pinned: false,
+            procedure_ref: {
+              id: '.hive/workflows/release-check.ts',
+              title: 'Release checklist',
+              type: 'workflow',
+            },
+            scope: 'workspace',
+            source: 'manual',
+            status: 'active',
+            tags: [],
+            updated_at: 200,
+            workspace_id: 'workspace-1',
+          },
+        ])
+      }
+      if (url.endsWith('/memory') && init?.method === 'POST') {
+        return jsonResponse({}, 201)
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <WorkspaceKnowledgeDrawer
+        initialTab="memory"
+        onClose={vi.fn()}
+        open
+        workspaceId="workspace-1"
+      />
+    )
+
+    expect(await screen.findByText('.hive/workflows/release-check.ts')).toBeInTheDocument()
+    expect(screen.getByText('Release checklist')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add memory' }))
+    fireEvent.change(screen.getByLabelText('Memory kind'), {
+      target: { value: 'procedure_ref' },
+    })
+
+    expect(screen.getByText('Procedure reference')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reference type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reference ID')).toBeInTheDocument()
   })
 })

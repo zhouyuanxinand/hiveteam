@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -44,13 +45,12 @@ describe('team scenario routes', () => {
     }
     expect(body.created).toHaveLength(3)
     expect(body.started).toEqual([])
-    expect(body.workers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ command_preset_id: preset.id, name: 'Builder' }),
-        expect.objectContaining({ command_preset_id: preset.id, name: 'Reviewer' }),
-        expect.objectContaining({ command_preset_id: preset.id, name: 'Tester' }),
-      ])
-    )
+    expect(body.workers).toHaveLength(3)
+    expect(new Set(body.workers.map((worker) => worker.name)).size).toBe(3)
+    for (const worker of body.workers) {
+      expect(worker.command_preset_id).toBe(preset.id)
+      expect(WORKER_NAME_POOL).toContain(worker.name)
+    }
   })
 
   test('returns an install guide instead of starting a missing CLI', async () => {

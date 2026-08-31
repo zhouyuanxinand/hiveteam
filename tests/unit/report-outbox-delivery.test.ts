@@ -99,4 +99,74 @@ describe('report outbox delivery', () => {
     expect(reportOutbox.pendingCount(workspaceId, orchestratorId)).toBe(0)
     db.close()
   })
+
+  test('keeps a failed terminal write pending with a visible retry diagnostic', async () => {
+    const db = new Database(':memory:')
+    initializeRuntimeDatabase(db)
+    const reportOutbox = createReportOutboxStore(db)
+    const workspaceId = 'workspace-2'
+    const workerId = 'worker-2'
+    const orchestratorId = `${workspaceId}:orchestrator`
+    const dispatch = {
+      artifacts: [],
+      createdAt: 1,
+      deliveredAt: null,
+      fromAgentId: orchestratorId,
+      id: 'dispatch-2',
+      reportedAt: null,
+      reportText: null,
+      sequence: 1,
+      status: 'submitted' as const,
+      submittedAt: 1,
+      text: 'Review the deployment',
+      toAgentId: workerId,
+      workspaceId,
+    }
+    const reportedDispatch = { ...dispatch, status: 'reported' as const }
+    const deliverSystemMessageToAgent = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('PTY exited before input was accepted'))
+      .mockResolvedValueOnce()
+    const ops = createTeamOperations({
+      agentRuntime: {
+        deliverSystemMessageToAgent,
+        getActiveRunByAgentId: vi.fn(() => ({ runId: 'orchestrator-run' })),
+        writeReportPrompt: vi.fn(),
+      } as never,
+      createDispatch: vi.fn(),
+      deleteDispatch: vi.fn(),
+      deleteMessage: vi.fn(),
+      findOpenDispatch: vi.fn(() => dispatch),
+      findOpenDispatchById: vi.fn(),
+      insertMessage: vi.fn(() => ({ sequence: 1 })),
+      markDispatchCancelled: vi.fn(),
+      markDispatchReportedByWorker: vi.fn(() => reportedDispatch),
+      markDispatchSubmitted: vi.fn(),
+      reportOutbox,
+      runDataMutation: (mutation) => db.transaction(mutation)(),
+      workspaceStore: {
+        getWorker: vi.fn(() => ({ id: workerId, name: 'Bob' })),
+        markTaskReported: vi.fn(),
+      } as never,
+    })
+
+    ops.reportTask(workspaceId, workerId, {
+      requireActiveRun: true,
+      text: 'Deployment review is complete',
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(reportOutbox.listPending(workspaceId, orchestratorId)).toEqual([
+      expect.objectContaining({
+        deliveredAt: null,
+        deliveryAttemptCount: 1,
+        lastDeliveryError: 'PTY exited before input was accepted',
+      }),
+    ])
+
+    ops.drainReportOutbox(workspaceId, orchestratorId)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(reportOutbox.pendingCount(workspaceId, orchestratorId)).toBe(0)
+    db.close()
+  })
 })

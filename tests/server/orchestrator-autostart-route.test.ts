@@ -250,7 +250,9 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
       .filter((run) => run.agent_id === `${body.id}:orchestrator`)
     expect(orchestratorRuns).toHaveLength(1)
 
-    store.stopAgentRun(startBodies[0].run_id)
+    const firstStart = startBodies[0]
+    if (!firstStart) throw new Error('Expected an Orchestrator start response')
+    store.stopAgentRun(firstStart.run_id)
     await waitFor(() => {
       if (!spawnedPid) throw new Error('Expected spawned pid')
       expect(isProcessAlive(spawnedPid)).toBe(false)

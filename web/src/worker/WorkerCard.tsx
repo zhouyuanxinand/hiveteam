@@ -1,4 +1,4 @@
-import { Pencil, Play, Trash2 } from 'lucide-react'
+import { ImagePlus, Pencil, Play, Square, Trash2 } from 'lucide-react'
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -26,9 +26,10 @@ const statusKey = (status: WorkerStatusKind) => {
   return 'common.stopped'
 }
 
-export type WorkerCardActionKind = 'start' | 'rename' | 'delete'
+export type WorkerCardActionKind = 'start' | 'stop' | 'avatar' | 'rename' | 'delete'
 
 type WorkerCardProps = {
+  canEditAvatar?: boolean
   hasRun: boolean
   isEditing?: boolean
   isPending?: boolean
@@ -41,6 +42,7 @@ type WorkerCardProps = {
 }
 
 export const WorkerCard = ({
+  canEditAvatar = false,
   hasRun,
   isEditing = false,
   isPending = false,
@@ -111,6 +113,7 @@ export const WorkerCard = ({
         <div className="worker-card__content">
           <div className="worker-card__identity-row">
             <CliAgentAvatar
+              avatar={worker.avatar}
               commandPresetId={worker.commandPresetId}
               workerRole={worker.role}
               size={40}
@@ -166,18 +169,24 @@ export const WorkerCard = ({
               <span className={status.dotClass} aria-hidden />
               {t(statusKey(status.kind))}
             </span>
-            {worker.pendingTaskCount > 0 ? (
-              <span className="worker-card__pending" role="status">
-                {t('worker.pendingDispatch', { count: worker.pendingTaskCount })}
-              </span>
-            ) : null}
           </div>
         </div>
       </div>
 
       {onAction && !isEditing ? (
         <div className="worker-card__actions">
-          {!hasRun ? (
+          {hasRun ? (
+            <CardActionBtn
+              title={t('common.stop')}
+              onClick={handleAction('stop')}
+              disabled={isPending}
+              variant="danger"
+              testId={`worker-card-stop-${worker.id}`}
+              ariaLabel={t('worker.stopAria', { name: worker.name })}
+            >
+              <Square size={11} fill="currentColor" aria-hidden />
+            </CardActionBtn>
+          ) : (
             <CardActionBtn
               title={t('common.start')}
               onClick={handleAction('start')}
@@ -187,6 +196,17 @@ export const WorkerCard = ({
               ariaLabel={t('worker.startAria', { name: worker.name })}
             >
               <Play size={12} aria-hidden />
+            </CardActionBtn>
+          )}
+          {canEditAvatar ? (
+            <CardActionBtn
+              title={t('worker.editAvatar')}
+              onClick={handleAction('avatar')}
+              disabled={isPending}
+              testId={`worker-card-avatar-${worker.id}`}
+              ariaLabel={t('worker.editAvatarAria', { name: worker.name })}
+            >
+              <ImagePlus size={12} aria-hidden />
             </CardActionBtn>
           ) : null}
           <CardActionBtn

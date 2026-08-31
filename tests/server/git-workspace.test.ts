@@ -103,7 +103,7 @@ describe('Git workspace service', () => {
 
     const reverted = await store.git.revertSnapshot({
       commitSha: snapshot.commit?.sha ?? '',
-      expectedHead: snapshot.commit?.sha,
+      expectedHead: snapshot.commit?.sha ?? null,
       workspaceId: workspace.id,
       workspacePath: repository,
     })

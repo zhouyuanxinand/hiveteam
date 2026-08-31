@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import type { Database as SqliteDatabase } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -18,7 +19,7 @@ afterEach(async () => {
   }
 })
 
-const expectDispatchSchema = (db: Database) => {
+const expectDispatchSchema = (db: SqliteDatabase) => {
   const dispatchTable = db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'dispatches'")
     .get() as { name: string } | undefined
@@ -33,7 +34,7 @@ const expectDispatchSchema = (db: Database) => {
   expect(dispatchIndexes.has('idx_dispatches_open_by_worker')).toBe(true)
 }
 
-const indexColumns = (db: Database, indexName: string) =>
+const indexColumns = (db: SqliteDatabase, indexName: string) =>
   (db.prepare(`PRAGMA index_info(${indexName})`).all() as Array<{ name: string }>).map(
     (column) => column.name
   )
@@ -116,9 +117,32 @@ describe('schema version', () => {
         (index) => index.name
       )
     )
+    const memoryColumns = new Set(
+      (db.prepare('PRAGMA table_info(memory_entries)').all() as Array<{ name: string }>).map(
+        (column) => column.name
+      )
+    )
+    const memoryIndexes = new Set(
+      (db.prepare('PRAGMA index_list(memory_entries)').all() as Array<{ name: string }>).map(
+        (index) => index.name
+      )
+    )
+    const externalGoalSessionColumns = new Set(
+      (
+        db.prepare('PRAGMA table_info(external_goal_sessions)').all() as Array<{ name: string }>
+      ).map((column) => column.name)
+    )
+    const externalGoalEventColumns = new Set(
+      (db.prepare('PRAGMA table_info(external_goal_events)').all() as Array<{ name: string }>).map(
+        (column) => column.name
+      )
+    )
 
     expect(workerColumns.has('last_session_id')).toBe(true)
+    expect(workerColumns.has('avatar')).toBe(true)
+    expect(workspaceColumns.has('language')).toBe(true)
     expect(workspaceColumns.has('auto_resume')).toBe(true)
+    expect(workerColumns.has('manual_stop')).toBe(true)
     expect(agentRunColumns.has('pid')).toBe(true)
     expect(agentRunColumns.has('ended_at')).toBe(true)
     expect(agentRunColumns.has('consecutive_fast_exits')).toBe(true)
@@ -184,9 +208,44 @@ describe('schema version', () => {
         'payload',
         'created_at',
         'delivered_at',
+        'delivery_attempts',
+        'last_delivery_attempt_at',
+        'last_delivery_error',
       ])
     )
     expect(reportOutboxIndexes.has('idx_report_outbox_pending')).toBe(true)
+    expect(memoryColumns.has('ref_type')).toBe(true)
+    expect(memoryColumns.has('ref_id')).toBe(true)
+    expect(memoryColumns.has('ref_title')).toBe(true)
+    expect(memoryIndexes.has('idx_memory_entries_ref')).toBe(true)
+    expect(externalGoalSessionColumns).toEqual(
+      new Set([
+        'id',
+        'workspace_id',
+        'source',
+        'status',
+        'goal',
+        'context_json',
+        'title',
+        'summary',
+        'created_at',
+        'updated_at',
+        'closed_at',
+      ])
+    )
+    expect(externalGoalEventColumns).toEqual(
+      new Set([
+        'id',
+        'goal_id',
+        'workspace_id',
+        'sequence',
+        'kind',
+        'status',
+        'body',
+        'artifacts_json',
+        'created_at',
+      ])
+    )
     expectDispatchSchema(db)
 
     const presetCount = db
@@ -212,6 +271,12 @@ describe('schema version', () => {
     })
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(21)).toEqual({
       version: 21,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(31)).toEqual({
+      version: 31,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(32)).toEqual({
+      version: 32,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })
@@ -1162,6 +1227,124 @@ describe('schema version', () => {
 
     expect(migratedColumns.has('kind')).toBe(false)
     expect(message).toEqual({ type: 'send', text: 'hello' })
+    db.close()
+  })
+
+  test('migration removes retired Sentinel workers and only their related runtime records', () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-schema-sentinel-removal-'))
+    tempDirs.push(dataDir)
+
+    const db = new Database(join(dataDir, 'runtime.sqlite'))
+    initializeRuntimeDatabase(db)
+    db.prepare('DELETE FROM schema_version WHERE version = ?').run(29)
+
+    db.prepare(
+      `INSERT INTO role_templates (
+         id, name, role_type, description, default_command, default_args, default_env,
+         is_builtin, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('sentinel', 'Sentinel', 'sentinel', 'retired', 'codex', '[]', '{}', 1, 1, 1)
+    db.prepare(
+      `INSERT INTO workers (id, workspace_id, name, description, role, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('sentinel-1', 'workspace-1', 'Sentinel', 'retired', 'sentinel', 1)
+    db.prepare(
+      `INSERT INTO workers (id, workspace_id, name, description, role, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('coder-1', 'workspace-1', 'Coder', 'keep', 'coder', 1)
+    db.prepare(
+      `INSERT INTO messages (
+         workspace_id, worker_id, type, from_agent_id, to_agent_id, text, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('workspace-1', 'sentinel-1', 'send', 'sentinel-1', 'coder-1', 'remove me', 1)
+    db.prepare(
+      `INSERT INTO messages (
+         workspace_id, worker_id, type, from_agent_id, to_agent_id, text, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('workspace-1', 'coder-1', 'send', 'coder-1', 'workspace-1:orchestrator', 'keep me', 1)
+    db.prepare(
+      `INSERT INTO dispatches (
+         id, workspace_id, from_agent_id, to_agent_id, text, status, created_at, artifacts
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      'sentinel-dispatch',
+      'workspace-1',
+      'sentinel-1',
+      'coder-1',
+      'remove me',
+      'queued',
+      1,
+      '[]'
+    )
+    db.prepare(
+      `INSERT INTO report_outbox (
+         workspace_id, target_agent_id, dispatch_id, payload, created_at
+       ) VALUES (?, ?, ?, ?, ?)`
+    ).run('workspace-1', 'workspace-1:orchestrator', 'sentinel-dispatch', '{}', 1)
+    db.prepare(
+      `INSERT INTO dispatch_delivery_failures (dispatch_id, attempts, last_error, last_attempt_at)
+       VALUES (?, ?, ?, ?)`
+    ).run('sentinel-dispatch', 1, 'retry', 1)
+    db.prepare(
+      `INSERT INTO memory_dream_reviews (
+         id, workspace_id, dream_id, worker_id, dispatch_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run('sentinel-review', 'workspace-1', 'dream-1', 'sentinel-1', 'sentinel-dispatch', 1, 1)
+    db.prepare(
+      `INSERT INTO agent_launch_configs (
+         workspace_id, agent_id, command, args_json, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('workspace-1', 'sentinel-1', 'codex', '[]', 1, 1)
+    db.prepare(
+      `INSERT INTO agent_sessions (workspace_id, agent_id, last_session_id, updated_at)
+       VALUES (?, ?, ?, ?)`
+    ).run('workspace-1', 'sentinel-1', 'session-1', 1)
+    db.prepare(
+      `INSERT INTO agent_runs (
+         run_id, agent_id, status, started_at, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('sentinel-run', 'sentinel-1', 'stopped', 1, 1, 1)
+
+    initializeRuntimeDatabase(db)
+
+    expect(db.prepare("SELECT id FROM role_templates WHERE id = 'sentinel'").all()).toEqual([])
+    expect(db.prepare("SELECT id FROM workers WHERE role = 'sentinel'").all()).toEqual([])
+    expect(db.prepare("SELECT id FROM workers WHERE id = 'coder-1'").all()).toEqual([
+      { id: 'coder-1' },
+    ])
+    expect(db.prepare("SELECT text FROM messages WHERE text = 'remove me'").all()).toEqual([])
+    expect(db.prepare("SELECT text FROM messages WHERE text = 'keep me'").all()).toEqual([
+      { text: 'keep me' },
+    ])
+    expect(db.prepare("SELECT id FROM dispatches WHERE id = 'sentinel-dispatch'").all()).toEqual([])
+    expect(
+      db
+        .prepare("SELECT dispatch_id FROM report_outbox WHERE dispatch_id = 'sentinel-dispatch'")
+        .all()
+    ).toEqual([])
+    expect(
+      db
+        .prepare(
+          "SELECT dispatch_id FROM dispatch_delivery_failures WHERE dispatch_id = 'sentinel-dispatch'"
+        )
+        .all()
+    ).toEqual([])
+    expect(
+      db.prepare("SELECT id FROM memory_dream_reviews WHERE id = 'sentinel-review'").all()
+    ).toEqual([])
+    expect(
+      db.prepare("SELECT agent_id FROM agent_launch_configs WHERE agent_id = 'sentinel-1'").all()
+    ).toEqual([])
+    expect(
+      db.prepare("SELECT agent_id FROM agent_sessions WHERE agent_id = 'sentinel-1'").all()
+    ).toEqual([])
+    expect(
+      db.prepare("SELECT agent_id FROM agent_runs WHERE agent_id = 'sentinel-1'").all()
+    ).toEqual([])
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(29)).toEqual({
+      version: 29,
+    })
+
     db.close()
   })
 })

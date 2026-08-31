@@ -1,5 +1,12 @@
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
 import type { TeamMemoryDreamReview, TeamMemoryDreamRun } from '../shared/team-memory.js'
-import type { AgentSummary, TeamListItem, WorkspaceSummary } from '../shared/types.js'
+import type {
+  AgentSummary,
+  TeamListItem,
+  WorkspaceLanguage,
+  WorkspaceSummary,
+} from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
@@ -15,13 +22,24 @@ import type { DeviceSessionProvider } from './remote-device-session.js'
 import type { RemoteDeviceStore } from './remote-device-store.js'
 import type { RemotePairing } from './remote-pairing.js'
 import type { RemoteTunnel } from './remote-tunnel.js'
+import { createRuntimeStoreExternalGoalMethods } from './runtime-store-external-goals.js'
 import {
   type AutoResumeResult,
   createRuntimeStoreLifecycle,
   createRuntimeStoreServices,
 } from './runtime-store-helpers.js'
 import type { SettingsStore } from './settings-store.js'
+import {
+  createTeamMemoryDreamScheduler,
+  type TeamMemoryDreamScheduler,
+} from './team-memory-dream-scheduler.js'
 import type { TeamMemoryDreamStore } from './team-memory-dream-store.js'
+import {
+  isWorkspaceMemoryDreamEnabled,
+  isWorkspaceMemoryEnabled,
+  readWorkspaceMemoryDreamLastScheduledAt,
+  setWorkspaceMemoryDreamLastScheduledAt,
+} from './team-memory-feature.js'
 import type { TeamMemoryStore } from './team-memory-store.js'
 import type {
   CancelTaskInput,
@@ -34,15 +52,24 @@ import type { TerminalRunSummary } from './terminal-input-profile.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
 import type { WorkerInput, WorkspaceRecord } from './workspace-store.js'
 
+export interface LocalRetentionDiagnostics {
+  databaseBytes: number | null
+  dataDir: string | null
+  records: Record<string, number>
+  schemaVersion: number
+  storage: 'local'
+}
+
 interface RuntimeStore {
   close: () => Promise<void>
   git: GitWorkspaceService
-  createWorkspace: (path: string, name: string) => WorkspaceSummary
+  createWorkspace: (path: string, name: string, language?: WorkspaceLanguage) => WorkspaceSummary
   deleteWorkspace: (workspaceId: string) => Promise<void>
   listWorkspaces: () => WorkspaceSummary[]
   addWorker: (workspaceId: string, input: WorkerInput) => AgentSummary
   deleteWorker: (workspaceId: string, workerId: string) => void
   renameWorker: (workspaceId: string, workerId: string, name: string) => AgentSummary
+  setWorkerAvatar: (workspaceId: string, workerId: string, avatar: string | null) => AgentSummary
   recordUserInput: (workspaceId: string, orchestratorId: string, text: string) => void
   dispatchTask: (
     workspaceId: string,
@@ -66,6 +93,7 @@ interface RuntimeStore {
   getWorker: (workspaceId: string, workerId: string) => AgentSummary
   getAgent: (workspaceId: string, agentId: string) => AgentSummary
   getWorkspaceRecoverySettings: (workspaceId: string) => { autoResumeOnRestart: boolean }
+  getLocalRetentionDiagnostics: () => LocalRetentionDiagnostics
   getPtyOutputBus: () => PtyOutputBus
   listTerminalRuns: (workspaceId: string) => TerminalRunSummary[]
   closeWorkspaceShell: (workspaceId: string, runId: string) => boolean
@@ -116,6 +144,19 @@ interface RuntimeStore {
     workerId: string,
     hivePort: string
   ) => Promise<TeamMemoryDreamReview>
+  cancelExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['cancelExternalGoal']
+  continueExternalGoal: ReturnType<
+    typeof createRuntimeStoreExternalGoalMethods
+  >['continueExternalGoal']
+  inspectExternalGoalWorkspace: ReturnType<
+    typeof createRuntimeStoreExternalGoalMethods
+  >['inspectExternalGoalWorkspace']
+  listExternalGoalWorkspaces: ReturnType<
+    typeof createRuntimeStoreExternalGoalMethods
+  >['listExternalGoalWorkspaces']
+  reportExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['reportExternalGoal']
+  startExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['startExternalGoal']
+  waitExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['waitExternalGoal']
   remote: {
     audit: RemoteAuditStore
     config: RemoteConfigSource
@@ -126,11 +167,13 @@ interface RuntimeStore {
     setTunnel: (tunnel: RemoteTunnel | null) => void
   }
   writeRunInput: (runId: string, input: Buffer | string) => void
+  getSupervisorToken: () => string
   getUiToken: () => string
   getRemoteTunnelSecret: () => string
   stopAgentRun: (runId: string) => void
   validateRemoteTunnelSecret: (secret: string | undefined) => boolean
   validateAgentToken: (agentId: string, token: string | undefined) => boolean
+  validateSupervisorToken: (token: string | undefined) => boolean
   validateUiToken: (token: string | undefined) => boolean
 }
 
@@ -148,6 +191,7 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const externalGoals = createRuntimeStoreExternalGoalMethods(services)
   const buildDreamPrompt = (run: TeamMemoryDreamRun) =>
     [
       '[Hive system message: Team memory Dream review]',
@@ -191,8 +235,33 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       ? { agentManager: options.agentManager, onAgentStarted: deliverPendingDreams, services }
       : { onAgentStarted: deliverPendingDreams, services }
   )
+  const stopTerminalRun = (runId: string) => {
+    if (!services.shellRuntime.hasRun(runId)) {
+      let liveRun: LiveAgentRun | null = null
+      try {
+        liveRun = services.agentRuntime.getLiveRun(runId)
+      } catch {
+        // Keep stop idempotent for a run that exited between the UI request
+        // and this lookup. The lifecycle layer still performs the final stop.
+      }
+      if (liveRun) {
+        for (const workspace of services.workspaceStore.listWorkspaces()) {
+          const agent = services.workspaceStore
+            .getWorkspaceSnapshot(workspace.id)
+            .agents.find((candidate) => candidate.id === liveRun.agentId)
+          if (!agent) continue
+          if (agent.role !== 'orchestrator') {
+            services.workspaceStore.markAgentManuallyStopped(workspace.id, agent.id)
+          }
+          break
+        }
+      }
+    }
+    lifecycle.stopTerminalRun(runId)
+  }
   const pendingGitScans = new Set<Promise<void>>()
   let closePromise: Promise<void> | null = null
+  let memoryDreamScheduler: TeamMemoryDreamScheduler | null = null
   const close = () => {
     if (closePromise) return closePromise
     closePromise = (async () => {
@@ -203,6 +272,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       while (pendingGitScans.size > 0) {
         await Promise.all(Array.from(pendingGitScans))
       }
+      await memoryDreamScheduler?.close()
       await lifecycle.close()
     })()
     return closePromise
@@ -214,8 +284,73 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     }
     services.db.transaction(mutation)()
   }
+  const getLocalRetentionDiagnostics = (): LocalRetentionDiagnostics => {
+    const count = (table: string) => {
+      const row = services.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as {
+        count?: number
+      }
+      return Number(row.count ?? 0)
+    }
+    const versionRow = services.db
+      .prepare('SELECT MAX(version) AS version FROM schema_version')
+      .get() as { version?: number | null }
+    let databaseBytes: number | null = null
+    if (services.dataDir) {
+      try {
+        databaseBytes = statSync(join(services.dataDir, 'runtime.sqlite')).size
+      } catch {
+        databaseBytes = null
+      }
+    }
+    return {
+      databaseBytes,
+      dataDir: services.dataDir,
+      records: {
+        dispatches: count('dispatches'),
+        externalGoalEvents: count('external_goal_events'),
+        externalGoalSessions: count('external_goal_sessions'),
+        gitSnapshots: count('git_snapshots'),
+        memoryEntries: count('memory_entries'),
+        memoryDreamRuns: count('memory_dream_runs'),
+        messages: count('messages'),
+        workflows: count('workflow_runs'),
+        workspaces: count('workspaces'),
+      },
+      schemaVersion: Number(versionRow.version ?? 0),
+      storage: 'local',
+    }
+  }
   const requestMemoryDream = async (workspaceId: string) =>
     deliverDream(services.memoryDreamStore.create(workspaceId))
+  memoryDreamScheduler = createTeamMemoryDreamScheduler({
+    getScheduleState: (workspaceId) => {
+      const lastScheduledAt = readWorkspaceMemoryDreamLastScheduledAt(
+        services.settings,
+        workspaceId
+      )
+      return {
+        hasReviewDraft: services.memoryDreamStore
+          .list(workspaceId, 50)
+          .some((run) => run.status === 'review'),
+        hasSourceMemory:
+          services.memoryStore.list(workspaceId, { limit: 1, status: 'active' }).length > 0,
+        hasUnreviewedActivity:
+          services.messageLogStore.listMessagesForRecovery(workspaceId, lastScheduledAt ?? 0)
+            .length > 0,
+        lastScheduledAt,
+      }
+    },
+    getWorkspaceSnapshot: (workspaceId) =>
+      services.workspaceStore.getWorkspaceSnapshot(workspaceId),
+    isEnabled: (workspaceId) =>
+      isWorkspaceMemoryEnabled(services.settings, workspaceId) &&
+      isWorkspaceMemoryDreamEnabled(services.settings, workspaceId),
+    listWorkspaces: () => services.workspaceStore.listWorkspaces(),
+    markScheduled: (workspaceId, timestamp) =>
+      setWorkspaceMemoryDreamLastScheduledAt(services.settings, workspaceId, timestamp),
+    runScheduled: requestMemoryDream,
+  })
+  memoryDreamScheduler.start()
   const requestMemoryDreamWorkerReview = async (
     workspaceId: string,
     dreamId: string,
@@ -289,8 +424,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   return {
     close,
     git: services.git,
-    createWorkspace: (path, name) => {
-      const workspace = services.workspaceStore.createWorkspace(path, name)
+    createWorkspace: (path, name, language) => {
+      const workspace = services.workspaceStore.createWorkspace(path, name, language)
       const gitScan = services.git
         .getStatus(workspace.id, workspace.path)
         .catch((error: unknown) => {
@@ -325,6 +460,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       runDataMutation(() => {
         services.memoryStore.deleteWorkspaceEntries(workspaceId)
         services.memoryDreamStore.deleteWorkspace(workspaceId)
+        services.externalGoalStore.deleteWorkspaceGoals(workspaceId)
         services.reportOutbox.deleteWorkspaceEntries(workspaceId)
         services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
         services.git.deleteWorkspace(workspaceId)
@@ -337,6 +473,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     addWorker: (workspaceId, input) => services.workspaceStore.addWorker(workspaceId, input),
     renameWorker: (workspaceId, workerId, name) =>
       services.workspaceStore.renameWorker(workspaceId, workerId, name),
+    setWorkerAvatar: (workspaceId, workerId, avatar) =>
+      services.workspaceStore.setWorkerAvatar(workspaceId, workerId, avatar),
     deleteWorker: (workspaceId, workerId) => {
       const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, workerId)
       if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
@@ -387,6 +525,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     getAgent: (workspaceId, agentId) => services.workspaceStore.getAgent(workspaceId, agentId),
     getWorkspaceRecoverySettings: (workspaceId) =>
       services.workspaceStore.getWorkspaceRecoverySettings(workspaceId),
+    getLocalRetentionDiagnostics,
     getPtyOutputBus: lifecycle.getPtyOutputBus,
     listTerminalRuns: lifecycle.listTerminalRuns,
     closeWorkspaceShell: lifecycle.closeWorkspaceShell,
@@ -416,6 +555,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     requestMemoryDream,
     requestMemoryDreamWorkerReview,
     workflows: services.workflowRuntime,
+    ...externalGoals,
     remote: {
       audit: services.remoteAudit,
       config: services.remoteConfig,
@@ -430,12 +570,14 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       },
     },
     writeRunInput: lifecycle.writeRunInput,
+    getSupervisorToken: () => services.uiAuth.getSupervisorToken(),
     getUiToken: () => services.uiAuth.getToken(),
     getRemoteTunnelSecret: () => services.uiAuth.getRemoteTunnelSecret(),
-    stopAgentRun: lifecycle.stopTerminalRun,
+    stopAgentRun: stopTerminalRun,
     validateRemoteTunnelSecret: (secret) => services.uiAuth.validateRemoteTunnelSecret(secret),
     validateAgentToken: (agentId, token) =>
       services.agentRuntime.validateAgentToken(agentId, token),
+    validateSupervisorToken: (token) => services.uiAuth.validateSupervisorToken(token),
     validateUiToken: (token) =>
       services.uiAuth.validate(token) || services.uiAuth.validateRemoteTunnelSecret(token),
   }

@@ -113,7 +113,10 @@ describe('agent run bootstrap', () => {
         description: 'Coder',
         id: 'agent-1',
         name: 'Alice',
+        pendingTaskCount: 0,
         role: 'coder',
+        status: 'stopped',
+        workspaceId: 'workspace-1',
       }
     )
 

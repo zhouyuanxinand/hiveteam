@@ -15,13 +15,14 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { TeamListItem } from '../../../src/shared/types.js'
+import type { TeamMemoryProcedureRefType } from '../../../src/shared/team-memory.js'
 import {
   createTeamMemory,
   getTeamMemorySettings,
   listTeamMemory,
   listWorkspaceWorkflowState,
   runWorkspaceWorkflow,
+  setTeamMemoryDreamEnabled,
   setTeamMemoryEnabled,
   stopWorkspaceWorkflow,
   type TeamMemoryEntry,
@@ -41,7 +42,6 @@ interface WorkspaceKnowledgeDrawerProps {
   onClose: () => void
   open: boolean
   workspaceId: string
-  workers?: readonly TeamListItem[]
 }
 
 const MEMORY_KINDS: TeamMemoryKind[] = [
@@ -52,6 +52,14 @@ const MEMORY_KINDS: TeamMemoryKind[] = [
   'procedure_ref',
 ]
 
+const PROCEDURE_REF_TYPES: TeamMemoryProcedureRefType[] = [
+  'workflow',
+  'skill',
+  'procedure',
+  'template',
+  'doc',
+]
+
 const kindKey = (kind: TeamMemoryKind) =>
   `memory.kind.${kind}` as
     | 'memory.kind.decision'
@@ -60,12 +68,14 @@ const kindKey = (kind: TeamMemoryKind) =>
     | 'memory.kind.preference'
     | 'memory.kind.procedure_ref'
 
+const procedureRefTypeKey = (type: TeamMemoryProcedureRefType): TranslationKey =>
+  `memory.procedureRef.type.${type}` as TranslationKey
+
 export const WorkspaceKnowledgeDrawer = ({
   initialTab,
   onClose,
   open,
   workspaceId,
-  workers = [],
 }: WorkspaceKnowledgeDrawerProps) => {
   const { language, t } = useI18n()
   const [tab, setTab] = useState<KnowledgeTab>(initialTab)
@@ -77,11 +87,16 @@ export const WorkspaceKnowledgeDrawer = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [memoryEnabled, setMemoryEnabledState] = useState(true)
+  const [dreamEnabled, setDreamEnabledState] = useState(false)
   const [settingsBusy, setSettingsBusy] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [newBody, setNewBody] = useState('')
   const [newKind, setNewKind] = useState<TeamMemoryKind>('decision')
+  const [newProcedureRefId, setNewProcedureRefId] = useState('')
+  const [newProcedureRefTitle, setNewProcedureRefTitle] = useState('')
+  const [newProcedureRefType, setNewProcedureRefType] =
+    useState<TeamMemoryProcedureRefType>('workflow')
   const [newScope, setNewScope] = useState<TeamMemoryScope>('workspace')
   const [newTags, setNewTags] = useState('')
   const [createBusy, setCreateBusy] = useState(false)
@@ -113,6 +128,7 @@ export const WorkspaceKnowledgeDrawer = ({
             if (!active) return
             setMemories(entries)
             setMemoryEnabledState(settings.enabled)
+            setDreamEnabledState(settings.dreamEnabled)
           })
         : listWorkspaceWorkflowState(workspaceId).then((state) => {
             if (!active) return
@@ -209,13 +225,21 @@ export const WorkspaceKnowledgeDrawer = ({
   }
 
   const handleCreate = async () => {
-    if (!newBody.trim()) return
+    if (!newBody.trim() || (newKind === 'procedure_ref' && !newProcedureRefId.trim())) return
     setCreateBusy(true)
     setError(null)
     try {
       const created = await createTeamMemory(workspaceId, {
         body: newBody,
         kind: newKind,
+        procedureRef:
+          newKind === 'procedure_ref'
+            ? {
+                id: newProcedureRefId,
+                title: newProcedureRefTitle || null,
+                type: newProcedureRefType,
+              }
+            : null,
         scope: newScope,
         tags: newTags
           .split(',')
@@ -224,6 +248,9 @@ export const WorkspaceKnowledgeDrawer = ({
       })
       if (memoryStatus === 'active') setMemories((current) => [created, ...current])
       setNewBody('')
+      setNewProcedureRefId('')
+      setNewProcedureRefTitle('')
+      setNewProcedureRefType('workflow')
       setNewTags('')
       setComposerOpen(false)
     } catch (createError) {
@@ -239,6 +266,19 @@ export const WorkspaceKnowledgeDrawer = ({
     try {
       await setTeamMemoryEnabled(workspaceId, enabled)
       setMemoryEnabledState(enabled)
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : String(settingsError))
+    } finally {
+      setSettingsBusy(false)
+    }
+  }
+
+  const handleDreamEnabledChange = async (enabled: boolean) => {
+    setSettingsBusy(true)
+    setError(null)
+    try {
+      await setTeamMemoryDreamEnabled(workspaceId, enabled)
+      setDreamEnabledState(enabled)
     } catch (settingsError) {
       setError(settingsError instanceof Error ? settingsError.message : String(settingsError))
     } finally {
@@ -402,10 +442,12 @@ export const WorkspaceKnowledgeDrawer = ({
             {tab === 'memory' ? (
               <>
                 <TeamMemoryDreamPanel
+                  dreamEnabled={dreamEnabled}
+                  onDreamEnabledChange={handleDreamEnabledChange}
                   onMemoryChanged={() => setMemoryRefresh((value) => value + 1)}
                   open={dreamOpen}
+                  settingsBusy={settingsBusy}
                   workspaceId={workspaceId}
-                  workers={workers}
                 />
                 {composerOpen ? (
                   <section className="workspace-memory-composer" aria-label={t('memory.add')}>
@@ -442,6 +484,51 @@ export const WorkspaceKnowledgeDrawer = ({
                         aria-label={t('memory.tagsAria')}
                       />
                     </div>
+                    {newKind === 'procedure_ref' ? (
+                      <fieldset className="workspace-memory-procedure-ref">
+                        <legend>{t('memory.procedureRef.title')}</legend>
+                        <div className="workspace-memory-procedure-ref__fields">
+                          <label>
+                            <span>{t('memory.procedureRef.typeLabel')}</span>
+                            <select
+                              value={newProcedureRefType}
+                              onChange={(event) =>
+                                setNewProcedureRefType(
+                                  event.target.value as TeamMemoryProcedureRefType
+                                )
+                              }
+                              aria-label={t('memory.procedureRef.typeLabel')}
+                            >
+                              {PROCEDURE_REF_TYPES.map((type) => (
+                                <option key={type} value={type}>
+                                  {t(procedureRefTypeKey(type))}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>{t('memory.procedureRef.idLabel')}</span>
+                            <input
+                              value={newProcedureRefId}
+                              onChange={(event) => setNewProcedureRefId(event.target.value)}
+                              maxLength={256}
+                              placeholder={t('memory.procedureRef.idPlaceholder')}
+                              aria-label={t('memory.procedureRef.idLabel')}
+                            />
+                          </label>
+                          <label>
+                            <span>{t('memory.procedureRef.titleLabel')}</span>
+                            <input
+                              value={newProcedureRefTitle}
+                              onChange={(event) => setNewProcedureRefTitle(event.target.value)}
+                              maxLength={160}
+                              placeholder={t('memory.procedureRef.titlePlaceholder')}
+                              aria-label={t('memory.procedureRef.titleLabel')}
+                            />
+                          </label>
+                        </div>
+                      </fieldset>
+                    ) : null}
                     <div className="workspace-memory-composer__actions">
                       <button
                         type="button"
@@ -453,7 +540,11 @@ export const WorkspaceKnowledgeDrawer = ({
                       <button
                         type="button"
                         className="icon-btn icon-btn--primary"
-                        disabled={createBusy || !newBody.trim()}
+                        disabled={
+                          createBusy ||
+                          !newBody.trim() ||
+                          (newKind === 'procedure_ref' && !newProcedureRefId.trim())
+                        }
                         onClick={() => void handleCreate()}
                       >
                         {createBusy ? t('common.saving') : t('common.save')}
@@ -486,6 +577,15 @@ export const WorkspaceKnowledgeDrawer = ({
                           {entry.disabled ? <span>{t('memory.disabled')}</span> : null}
                         </div>
                         <p>{entry.body}</p>
+                        {entry.procedureRef ? (
+                          <div className="workspace-memory-procedure-ref-summary">
+                            <span>{t(procedureRefTypeKey(entry.procedureRef.type))}</span>
+                            <code>{entry.procedureRef.id}</code>
+                            {entry.procedureRef.title ? (
+                              <strong>{entry.procedureRef.title}</strong>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {entry.tags.length ? (
                           <div className="workspace-memory-tags">
                             {entry.tags.map((tag) => (

@@ -3,10 +3,13 @@ import type { Database } from 'better-sqlite3'
 
 import {
   type CreateTeamMemoryInput,
+  isTeamMemoryProcedureRefType,
+  normalizeTeamMemoryProcedureRef,
   TEAM_MEMORY_BODY_MAX_CHARS,
   TEAM_MEMORY_SEARCH_DEFAULT_LIMIT,
   TEAM_MEMORY_SEARCH_MAX_LIMIT,
   type TeamMemoryEntry,
+  type TeamMemoryProcedureRef,
   type TeamMemoryScope,
   type TeamMemoryStatus,
 } from '../shared/team-memory.js'
@@ -22,6 +25,9 @@ interface TeamMemoryRow {
   kind: TeamMemoryEntry['kind']
   last_injected_at: number | null
   pinned: number
+  ref_id: string | null
+  ref_title: string | null
+  ref_type: string | null
   scope: TeamMemoryScope
   source: TeamMemoryEntry['source']
   status: TeamMemoryStatus
@@ -42,6 +48,7 @@ export interface UpdateTeamMemoryInput {
   disabled?: boolean
   kind?: TeamMemoryEntry['kind']
   pinned?: boolean
+  procedureRef?: TeamMemoryProcedureRef | null
   scope?: TeamMemoryScope
   status?: TeamMemoryStatus
   tags?: string[]
@@ -70,6 +77,10 @@ const fromRow = (row: TeamMemoryRow): TeamMemoryEntry => ({
   kind: row.kind,
   lastInjectedAt: row.last_injected_at,
   pinned: row.pinned === 1,
+  procedureRef:
+    row.ref_id && isTeamMemoryProcedureRefType(row.ref_type)
+      ? { id: row.ref_id, title: row.ref_title, type: row.ref_type }
+      : null,
   scope: row.scope,
   source: row.source,
   status: row.status,
@@ -94,6 +105,15 @@ const normalizeTags = (tags: string[] = []) =>
 
 const clampLimit = (limit: number | undefined) =>
   Math.max(1, Math.min(limit ?? TEAM_MEMORY_SEARCH_DEFAULT_LIMIT, TEAM_MEMORY_SEARCH_MAX_LIMIT))
+
+const requireProcedureRefForKind = (
+  kind: TeamMemoryEntry['kind'],
+  procedureRef: TeamMemoryProcedureRef | null
+) => {
+  if (kind === 'procedure_ref' && !procedureRef) {
+    throw new Error('procedure_ref memory entries require a procedure_ref')
+  }
+}
 
 export const createTeamMemoryStore = (db: Database) => {
   const selectEntries = `
@@ -131,8 +151,10 @@ export const createTeamMemoryStore = (db: Database) => {
     }
     const query = options.query?.trim().toLowerCase()
     if (query) {
-      clauses.push('(LOWER(e.body) LIKE ? OR LOWER(e.tags) LIKE ?)')
-      params.push(`%${query}%`, `%${query}%`)
+      clauses.push(
+        "(LOWER(e.body) LIKE ? OR LOWER(e.tags) LIKE ? OR LOWER(COALESCE(e.ref_id, '')) LIKE ? OR LOWER(COALESCE(e.ref_title, '')) LIKE ?)"
+      )
+      params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`)
     }
     params.push(clampLimit(options.limit))
     const rows = db
@@ -149,6 +171,8 @@ export const createTeamMemoryStore = (db: Database) => {
   return {
     create(workspaceId: string, input: CreateTeamMemoryInput) {
       const now = Date.now()
+      const procedureRef = normalizeTeamMemoryProcedureRef(input.procedureRef)
+      requireProcedureRefForKind(input.kind, procedureRef)
       const entry: TeamMemoryEntry = {
         body: normalizeBody(input.body),
         confidence: Math.max(0, Math.min(input.confidence ?? 1, 1)),
@@ -160,6 +184,7 @@ export const createTeamMemoryStore = (db: Database) => {
         kind: input.kind,
         lastInjectedAt: null,
         pinned: false,
+        procedureRef,
         scope: input.scope ?? 'workspace',
         source: input.source ?? 'manual',
         status: input.status ?? 'active',
@@ -174,8 +199,9 @@ export const createTeamMemoryStore = (db: Database) => {
         db.prepare(
           `INSERT INTO memory_entries (
              id, workspace_id, scope, fts_rowid, kind, body, tags, status, source, confidence,
-             pinned, disabled, created_at, updated_at, archived_at, last_injected_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             pinned, disabled, created_at, updated_at, archived_at, last_injected_at,
+             ref_type, ref_id, ref_title
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           entry.id,
           entry.workspaceId,
@@ -192,7 +218,10 @@ export const createTeamMemoryStore = (db: Database) => {
           now,
           now,
           entry.status === 'archived' ? now : null,
-          null
+          null,
+          entry.procedureRef?.type ?? null,
+          entry.procedureRef?.id ?? null,
+          entry.procedureRef?.title ?? null
         )
         db.prepare(
           `INSERT INTO memory_sources (
@@ -288,16 +317,21 @@ export const createTeamMemoryStore = (db: Database) => {
         disabled: input.disabled ?? current.disabled,
         kind: input.kind ?? current.kind,
         pinned: input.pinned ?? current.pinned,
+        procedureRef:
+          input.procedureRef === undefined
+            ? current.procedureRef
+            : normalizeTeamMemoryProcedureRef(input.procedureRef),
         scope: input.scope ?? current.scope,
         status: input.status ?? current.status,
         tags: input.tags === undefined ? current.tags : normalizeTags(input.tags),
       }
+      requireProcedureRefForKind(next.kind, next.procedureRef)
       const updatedAt = Date.now()
       const nextWorkspaceId = next.scope === 'user' ? null : (current.workspaceId ?? workspaceId)
       db.prepare(
         `UPDATE memory_entries
          SET body = ?, disabled = ?, kind = ?, pinned = ?, scope = ?, workspace_id = ?, status = ?, tags = ?,
-             updated_at = ?, archived_at = ?
+             updated_at = ?, archived_at = ?, ref_type = ?, ref_id = ?, ref_title = ?
          WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
       ).run(
         next.body,
@@ -310,6 +344,9 @@ export const createTeamMemoryStore = (db: Database) => {
         JSON.stringify(next.tags),
         updatedAt,
         next.status === 'archived' ? updatedAt : null,
+        next.procedureRef?.type ?? null,
+        next.procedureRef?.id ?? null,
+        next.procedureRef?.title ?? null,
         workspaceId,
         memoryId
       )

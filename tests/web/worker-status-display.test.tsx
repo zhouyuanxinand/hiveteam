@@ -44,7 +44,7 @@ describe('worker status presentation', () => {
     expect(screen.queryByLabelText('Start ember-check-23')).toBeNull()
   })
 
-  test('worker card shows pending dispatch activity without inventing a fourth status', () => {
+  test('worker card keeps queued work out of the visible status chrome', () => {
     render(
       <WorkerCard
         hasRun
@@ -55,7 +55,40 @@ describe('worker status presentation', () => {
 
     const statuses = screen.getAllByRole('status')
     expect(statuses[0]).toHaveTextContent('idle')
-    expect(screen.getByText('2 pending dispatches')).toBeInTheDocument()
+    expect(screen.queryByText('2 pending dispatches')).toBeNull()
+  })
+
+  test('running worker exposes a recoverable stop action instead of a second start action', () => {
+    const onAction = vi.fn()
+    const runningWorker = worker({ id: 'running-worker', name: 'Runny', status: 'working' })
+    render(<WorkerCard hasRun onClick={vi.fn()} onAction={onAction} worker={runningWorker} />)
+
+    fireEvent.click(screen.getByTestId('worker-card-stop-running-worker'))
+
+    expect(onAction).toHaveBeenCalledWith('stop', runningWorker)
+    expect(screen.queryByTestId('worker-card-start-running-worker')).toBeNull()
+  })
+
+  test('workers pane forwards the current run id when stopping a worker', () => {
+    const onStopWorker = vi.fn()
+    const runningWorker = worker({ id: 'running-worker', name: 'Runny', status: 'working' })
+    render(
+      <WorkersPane
+        onAddWorkerClick={vi.fn()}
+        onDeleteWorker={vi.fn()}
+        onOpenWorker={vi.fn()}
+        onRenameWorker={vi.fn()}
+        onStartWorker={vi.fn()}
+        onStopWorker={onStopWorker}
+        startingWorkerId={null}
+        terminalRuns={[terminalRun(runningWorker.id)]}
+        workers={[runningWorker]}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('worker-card-stop-running-worker'))
+
+    expect(onStopWorker).toHaveBeenCalledWith(runningWorker, 'run-running-worker')
   })
 
   test('worker name is edited directly inside its card', async () => {

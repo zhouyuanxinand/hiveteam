@@ -35,6 +35,30 @@ describe('user input recovery', () => {
         body: JSON.stringify({ name: 'Alpha', path: workspacePath }),
       })
       const workspace = (await workspaceResponse.json()) as { id: string; name: string }
+      const orchestratorId = `${workspace.id}:orchestrator`
+
+      const configResponse = await fetch(
+        `${baseUrl}/api/workspaces/${workspace.id}/agents/${orchestratorId}/config`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: uiCookie },
+          body: JSON.stringify({
+            command: process.execPath,
+            args: ['-e', 'process.stdin.resume()'],
+          }),
+        }
+      )
+      expect(configResponse.status).toBe(204)
+
+      const startResponse = await fetch(
+        `${baseUrl}/api/workspaces/${workspace.id}/agents/${orchestratorId}/start`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: uiCookie },
+          body: JSON.stringify({ hive_port: String(hive.port) }),
+        }
+      )
+      expect(startResponse.status).toBe(201)
 
       const blankInputResponse = await fetch(
         `${baseUrl}/api/workspaces/${workspace.id}/user-input`,

@@ -191,9 +191,9 @@ describe('registerServiceWorkerWithEnv', () => {
     container.controller = new MockServiceWorker()
     container.register.mockResolvedValue(registration)
 
-    let apply: ServiceWorkerUpdateApply | null = null
+    const update = { apply: null as ServiceWorkerUpdateApply | null }
     const unsubscribe = subscribeServiceWorkerUpdate((received) => {
-      if (received) apply = received
+      if (received) update.apply = received
     })
 
     const reload = vi.fn()
@@ -204,8 +204,9 @@ describe('registerServiceWorkerWithEnv', () => {
     })
     installing.transitionTo('installed')
 
-    expect(apply).not.toBeNull()
-    apply?.()
+    const apply = update.apply
+    if (!apply) throw new Error('Expected an update apply callback')
+    apply()
     expect(installing.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
     expect(reload).not.toHaveBeenCalled()
 

@@ -3,6 +3,10 @@ import { readdir, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import {
+  discoverWorkspaceDocuments,
+  type WorkspaceDocumentSummary,
+} from '../shared/workspace-documents.js'
 import { getFsBrowseRoot, isPathWithinRoot } from './fs-sandbox.js'
 
 const execFileP = promisify(execFile)
@@ -17,6 +21,7 @@ export interface FsBrowseEntry {
 
 export interface FsBrowseResponse {
   current_path: string
+  documents: WorkspaceDocumentSummary[]
   entries: FsBrowseEntry[]
   error: string | null
   ok: boolean
@@ -26,6 +31,7 @@ export interface FsBrowseResponse {
 
 export interface FsProbeResponse {
   current_branch: string | null
+  documents: WorkspaceDocumentSummary[]
   exists: boolean
   is_dir: boolean
   is_git_repository: boolean
@@ -77,6 +83,7 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
   if (!isPathWithinRoot(rootPath, candidate)) {
     return {
       current_path: rootPath,
+      documents: [],
       entries: [],
       error: 'Access denied: path is outside the browse root.',
       ok: false,
@@ -91,6 +98,7 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
   } catch (error) {
     return {
       current_path: candidate,
+      documents: [],
       entries: [],
       error: error instanceof Error ? error.message : 'Failed to stat directory',
       ok: false,
@@ -102,6 +110,7 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
   if (!dirStat.isDirectory()) {
     return {
       current_path: candidate,
+      documents: [],
       entries: [],
       error: 'The specified path is not a directory.',
       ok: false,
@@ -111,6 +120,7 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
   }
 
   const rawEntries = await readdir(candidate, { withFileTypes: true })
+  const documents = await discoverWorkspaceDocuments(candidate)
   const directoryEntries = rawEntries
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -134,6 +144,7 @@ export const browseDirectory = async (requestedPath: string): Promise<FsBrowseRe
 
   return {
     current_path: candidate,
+    documents,
     entries,
     error: null,
     ok: true,
@@ -150,6 +161,7 @@ export const probeDirectory = async (
   const candidate = resolve(rootPath, requestedPath.trim())
   const base = {
     current_branch: null,
+    documents: [] as WorkspaceDocumentSummary[],
     exists: false,
     is_dir: false,
     is_git_repository: false,
@@ -169,8 +181,10 @@ export const probeDirectory = async (
     }
     const is_git_repository = await detectGitRepository(candidate)
     const current_branch = is_git_repository ? await readCurrentBranch(candidate) : null
+    const documents = await discoverWorkspaceDocuments(candidate)
     return {
       current_branch,
+      documents,
       exists: true,
       is_dir: true,
       is_git_repository,

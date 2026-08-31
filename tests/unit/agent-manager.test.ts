@@ -141,6 +141,29 @@ describe('agent manager (unit)', () => {
     expect(() => manager.writeInput(run.runId, 'late input\n')).toThrow(/PTY is not active/)
   })
 
+  test('ignores a resize delivered after the PTY has exited', async () => {
+    const dir = join(tmpdir(), `hive-agent-${Date.now()}-resize-after-exit`)
+    mkdirSync(dir, { recursive: true })
+    tempDirs.push(dir)
+
+    const scriptPath = join(dir, 'exit-immediately.js')
+    writeFileSync(scriptPath, 'process.exit(0)\n')
+
+    const manager = createAgentManager()
+    const run = await manager.startAgent({
+      agentId: 'worker-resize-after-exit',
+      command: process.execPath,
+      args: [scriptPath],
+      cwd: dir,
+    })
+
+    await waitFor(() => {
+      expect(manager.getRun(run.runId).status).toBe('exited')
+    })
+
+    expect(() => manager.resizeRun(run.runId, 120, 40)).not.toThrow()
+  })
+
   test('exposes an output bus that streams PTY chunks to subscribers', async () => {
     const dir = join(tmpdir(), `hive-agent-${Date.now()}-bus`)
     mkdirSync(dir, { recursive: true })

@@ -30,6 +30,13 @@ const {
   updateRoleTemplate: vi.fn(),
 }))
 
+type WorkerComposerSnapshot = {
+  workerName: string
+  workerRole: string
+  roleDescription: string
+  selectedTemplateId: string | null
+}
+
 vi.mock('../../web/src/api.js', async () => {
   const actual =
     await vi.importActual<typeof import('../../web/src/api.js')>('../../web/src/api.js')
@@ -45,7 +52,11 @@ vi.mock('../../web/src/api.js', async () => {
   }
 })
 
-const Harness = ({ onSubmitCapture }: { onSubmitCapture?: (snapshot: unknown) => void }) => {
+const Harness = ({
+  onSubmitCapture,
+}: {
+  onSubmitCapture?: (snapshot: WorkerComposerSnapshot) => void
+}) => {
   const composer = useWorkerComposer({
     createWorker: async () => ({ error: null, runId: null }),
     open: true,
@@ -172,7 +183,7 @@ describe('AddWorkerDialog marketplace integration', () => {
   })
 
   test('importing an agent fills the AddWorker form with name + description and flips role to custom', async () => {
-    const submitCapture = vi.fn()
+    const submitCapture = vi.fn<(snapshot: WorkerComposerSnapshot) => void>()
     render(<Harness onSubmitCapture={submitCapture} />)
 
     fireEvent.click(screen.getByTestId('open-marketplace'))
@@ -202,12 +213,9 @@ describe('AddWorkerDialog marketplace integration', () => {
     await waitFor(() => {
       expect(submitCapture).toHaveBeenCalled()
     })
-    const snapshot = submitCapture.mock.calls[0][0] as {
-      workerName: string
-      workerRole: string
-      roleDescription: string
-      selectedTemplateId: string | null
-    }
+    const firstCall = submitCapture.mock.calls[0]
+    if (!firstCall) throw new Error('Expected the submitted worker composer snapshot')
+    const [snapshot] = firstCall
     expect(snapshot.workerName).toBe('Code Reviewer')
     expect(snapshot.workerRole).toBe('custom')
     expect(snapshot.roleDescription).toContain('You review every PR.')

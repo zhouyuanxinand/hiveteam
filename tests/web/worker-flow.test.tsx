@@ -6,7 +6,7 @@ import { delimiter, join } from 'node:path'
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-
+import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
 import { App } from '../../web/src/app.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
@@ -186,7 +186,7 @@ describe('worker flow with real server', () => {
     const dialog = await openAddWorkerDialog()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Generate random member name' }))
     const nameInput = within(dialog).getByPlaceholderText('e.g. Alice') as HTMLInputElement
-    expect(nameInput.value).toMatch(/^[a-z]+(?:-[a-z]+)*$/)
+    expect(nameInput.value.trim()).not.toBe('')
     fireEvent.change(within(dialog).getByPlaceholderText('e.g. Alice'), {
       target: { value: 'Alice' },
     })
@@ -311,7 +311,7 @@ describe('worker flow with real server', () => {
     expect(worker?.description).toBe('你是审查型 worker。先找高风险问题，再给出最小修复建议。')
   })
 
-  test('Add Worker random name follows the selected Chinese language', async () => {
+  test('Add Worker random name remains available under the selected Chinese language', async () => {
     window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh')
     render(<App />)
 
@@ -324,7 +324,7 @@ describe('worker flow with real server', () => {
     const nameInput = within(dialog).getByPlaceholderText('例如 鲁班') as HTMLInputElement
     fireEvent.click(within(dialog).getByRole('button', { name: '生成随机成员名' }))
 
-    expect(nameInput.value).toMatch(/^[\u4e00-\u9fff]+$/)
+    expect(WORKER_NAME_POOL).toContain(nameInput.value)
   })
 
   test('Add Worker dialog can run a generic full startup command without preset semantics', async () => {

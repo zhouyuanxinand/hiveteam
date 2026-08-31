@@ -10,6 +10,7 @@ import type {
 } from './route-types.js'
 import { activityRoutes } from './routes-activity.js'
 import { dispatchRoutes } from './routes-dispatches.js'
+import { externalGoalRoutes } from './routes-external-goals.js'
 import { fsRoutes } from './routes-fs.js'
 import { gitRoutes } from './routes-git.js'
 import { marketplaceRoutes } from './routes-marketplace.js'
@@ -20,6 +21,7 @@ import { runtimeRoutes } from './routes-runtime.js'
 import { settingsRoutes } from './routes-settings.js'
 import { taskRoutes } from './routes-tasks.js'
 import { teamRoutes } from './routes-team.js'
+import { teamGoalRoutes } from './routes-team-goals.js'
 import { teamScenarioRoutes } from './routes-team-scenarios.js'
 import { uiRoutes } from './routes-ui.js'
 import { versionRoutes } from './routes-version.js'
@@ -41,7 +43,9 @@ const routes: RouteDefinition[] = [
   ...taskRoutes,
   ...runtimeRoutes,
   ...remoteRoutes,
+  ...externalGoalRoutes,
   ...teamRoutes,
+  ...teamGoalRoutes,
   ...teamScenarioRoutes,
   ...fsRoutes,
   ...gitRoutes,

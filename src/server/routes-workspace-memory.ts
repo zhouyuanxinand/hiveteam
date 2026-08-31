@@ -2,15 +2,22 @@ import {
   isTeamMemoryKind,
   isTeamMemoryScope,
   isTeamMemoryStatus,
+  normalizeTeamMemoryProcedureRef,
   TEAM_MEMORY_BODY_MAX_CHARS,
   type TeamMemoryEntry,
   type TeamMemoryKind,
+  type TeamMemoryProcedureRef,
   type TeamMemoryScope,
 } from '../shared/team-memory.js'
 import { BadRequestError } from './http-errors.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
-import { isWorkspaceMemoryEnabled, setWorkspaceMemoryEnabled } from './team-memory-digest.js'
+import {
+  isWorkspaceMemoryDreamEnabled,
+  isWorkspaceMemoryEnabled,
+  setWorkspaceMemoryDreamEnabled,
+  setWorkspaceMemoryEnabled,
+} from './team-memory-feature.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 
 const serializeMemory = (entry: TeamMemoryEntry) => ({
@@ -24,6 +31,7 @@ const serializeMemory = (entry: TeamMemoryEntry) => ({
   kind: entry.kind,
   last_injected_at: entry.lastInjectedAt,
   pinned: entry.pinned,
+  procedure_ref: entry.procedureRef,
   scope: entry.scope,
   source: entry.source,
   status: entry.status,
@@ -62,6 +70,7 @@ const parseQueryOptions = (requestUrl: string | undefined) => {
 type CreateMemoryBody = {
   body?: unknown
   kind?: unknown
+  procedure_ref?: unknown
   scope?: unknown
   tags?: unknown
 }
@@ -86,10 +95,20 @@ const readCreateBody = async (request: Parameters<RouteDefinition['handler']>[0]
   if (body.tags !== undefined && !Array.isArray(body.tags)) {
     throw new BadRequestError('Memory tags must be an array')
   }
+  let procedureRef: TeamMemoryProcedureRef | null = null
+  try {
+    procedureRef = normalizeTeamMemoryProcedureRef(body.procedure_ref)
+  } catch (error) {
+    throw new BadRequestError(error instanceof Error ? error.message : String(error))
+  }
+  if (body.kind === 'procedure_ref' && !procedureRef) {
+    throw new BadRequestError('procedure_ref is required when kind is procedure_ref')
+  }
   const tags = (body.tags ?? []).filter((tag): tag is string => typeof tag === 'string')
   return {
     body: body.body,
     kind: body.kind,
+    procedureRef,
     ...(body.scope ? { scope: body.scope } : {}),
     tags,
   }
@@ -100,6 +119,7 @@ type PatchMemoryBody = {
   disabled?: unknown
   kind?: unknown
   pinned?: unknown
+  procedure_ref?: unknown
   scope?: unknown
   status?: unknown
   tags?: unknown
@@ -128,11 +148,21 @@ const readPatchBody = async (request: Parameters<RouteDefinition['handler']>[0][
   if (body.tags !== undefined && !Array.isArray(body.tags)) {
     throw new BadRequestError('Memory tags must be an array')
   }
+  const hasProcedureRef = Object.hasOwn(body, 'procedure_ref')
+  let procedureRef: TeamMemoryProcedureRef | null = null
+  if (hasProcedureRef) {
+    try {
+      procedureRef = normalizeTeamMemoryProcedureRef(body.procedure_ref)
+    } catch (error) {
+      throw new BadRequestError(error instanceof Error ? error.message : String(error))
+    }
+  }
   return {
     ...(typeof body.body === 'string' ? { body: body.body } : {}),
     ...(typeof body.disabled === 'boolean' ? { disabled: body.disabled } : {}),
     ...(isTeamMemoryKind(body.kind) ? { kind: body.kind as TeamMemoryKind } : {}),
     ...(typeof body.pinned === 'boolean' ? { pinned: body.pinned } : {}),
+    ...(hasProcedureRef ? { procedureRef } : {}),
     ...(isTeamMemoryScope(body.scope) ? { scope: body.scope as TeamMemoryScope } : {}),
     ...(isTeamMemoryStatus(body.status) ? { status: body.status } : {}),
     ...(Array.isArray(body.tags)
@@ -173,11 +203,20 @@ export const workspaceMemoryRoutes: RouteDefinition[] = [
     const workspaceId = requireWorkspaceId(context)
     const memoryId = requireMemoryId(context)
     if (!workspaceId || !memoryId) return
-    const entry = context.store.memory.update(
-      workspaceId,
-      memoryId,
-      await readPatchBody(context.request)
-    )
+    const current = context.store.memory.get(workspaceId, memoryId)
+    if (!current) {
+      sendJson(context.response, 404, { error: 'Memory entry not found' })
+      return
+    }
+    const patch = await readPatchBody(context.request)
+    const nextKind = patch.kind ?? current.kind
+    const nextProcedureRef = Object.hasOwn(patch, 'procedureRef')
+      ? patch.procedureRef
+      : current.procedureRef
+    if (nextKind === 'procedure_ref' && !nextProcedureRef) {
+      throw new BadRequestError('procedure_ref is required when kind is procedure_ref')
+    }
+    const entry = context.store.memory.update(workspaceId, memoryId, patch)
     if (!entry) {
       sendJson(context.response, 404, { error: 'Memory entry not found' })
       return
@@ -189,6 +228,7 @@ export const workspaceMemoryRoutes: RouteDefinition[] = [
     const workspaceId = requireWorkspaceId(context)
     if (!workspaceId) return
     sendJson(context.response, 200, {
+      dream_enabled: isWorkspaceMemoryDreamEnabled(context.store.settings, workspaceId),
       enabled: isWorkspaceMemoryEnabled(context.store.settings, workspaceId),
     })
   }),
@@ -196,9 +236,25 @@ export const workspaceMemoryRoutes: RouteDefinition[] = [
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
     const workspaceId = requireWorkspaceId(context)
     if (!workspaceId) return
-    const body = await readJsonBody<{ enabled?: unknown }>(context.request)
-    if (typeof body.enabled !== 'boolean') throw new BadRequestError('enabled must be a boolean')
-    setWorkspaceMemoryEnabled(context.store.settings, workspaceId, body.enabled)
-    sendJson(context.response, 200, { enabled: body.enabled })
+    const body = await readJsonBody<{ dream_enabled?: unknown; enabled?: unknown }>(context.request)
+    if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+      throw new BadRequestError('enabled must be a boolean')
+    }
+    if (body.dream_enabled !== undefined && typeof body.dream_enabled !== 'boolean') {
+      throw new BadRequestError('dream_enabled must be a boolean')
+    }
+    if (body.enabled === undefined && body.dream_enabled === undefined) {
+      throw new BadRequestError('enabled or dream_enabled is required')
+    }
+    if (typeof body.enabled === 'boolean') {
+      setWorkspaceMemoryEnabled(context.store.settings, workspaceId, body.enabled)
+    }
+    if (typeof body.dream_enabled === 'boolean') {
+      setWorkspaceMemoryDreamEnabled(context.store.settings, workspaceId, body.dream_enabled)
+    }
+    sendJson(context.response, 200, {
+      dream_enabled: isWorkspaceMemoryDreamEnabled(context.store.settings, workspaceId),
+      enabled: isWorkspaceMemoryEnabled(context.store.settings, workspaceId),
+    })
   }),
 ]

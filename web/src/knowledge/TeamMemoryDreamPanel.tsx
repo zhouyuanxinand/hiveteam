@@ -1,12 +1,13 @@
-import { CheckCircle2, RefreshCw, RotateCcw, Save, Sparkles, UsersRound } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Save, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { TeamMemoryKind } from '../../../src/shared/team-memory.js'
-import type { TeamListItem } from '../../../src/shared/types.js'
+import type {
+  TeamMemoryKind,
+  TeamMemoryProcedureRef,
+  TeamMemoryProcedureRefType,
+} from '../../../src/shared/team-memory.js'
 import {
   createTeamMemoryDream,
-  listTeamMemoryDreamReviews,
   listTeamMemoryDreams,
-  requestTeamMemoryDreamReview,
   rollbackTeamMemoryDream,
   submitTeamMemoryDream,
   type TeamMemoryDreamRun,
@@ -15,10 +16,12 @@ import {
 import { type TranslationKey, useI18n } from '../i18n.js'
 
 interface TeamMemoryDreamPanelProps {
+  dreamEnabled: boolean
+  onDreamEnabledChange: (enabled: boolean) => Promise<void>
   onMemoryChanged: () => void
   open: boolean
+  settingsBusy: boolean
   workspaceId: string
-  workers?: readonly TeamListItem[]
 }
 
 const MEMORY_KINDS: TeamMemoryKind[] = [
@@ -29,13 +32,31 @@ const MEMORY_KINDS: TeamMemoryKind[] = [
   'procedure_ref',
 ]
 
+const PROCEDURE_REF_TYPES: TeamMemoryProcedureRefType[] = [
+  'workflow',
+  'skill',
+  'procedure',
+  'template',
+  'doc',
+]
+
 const kindKey = (kind: TeamMemoryKind): TranslationKey => `memory.kind.${kind}` as TranslationKey
+const procedureRefTypeKey = (type: TeamMemoryProcedureRefType): TranslationKey =>
+  `memory.procedureRef.type.${type}` as TranslationKey
+
+const emptyProcedureRef = (): TeamMemoryProcedureRef => ({
+  id: '',
+  title: null,
+  type: 'workflow',
+})
 
 export const TeamMemoryDreamPanel = ({
+  dreamEnabled,
+  onDreamEnabledChange,
   onMemoryChanged,
   open,
+  settingsBusy,
   workspaceId,
-  workers = [],
 }: TeamMemoryDreamPanelProps) => {
   const { t } = useI18n()
   const [runs, setRuns] = useState<TeamMemoryDreamRun[]>([])
@@ -43,7 +64,6 @@ export const TeamMemoryDreamPanel = ({
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [reviewWorkerId, setReviewWorkerId] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -66,37 +86,6 @@ export const TeamMemoryDreamPanel = ({
       active = false
     }
   }, [open, workspaceId])
-
-  useEffect(() => {
-    const worker = workers[0]
-    if (worker && !workers.some((candidate) => candidate.id === reviewWorkerId)) {
-      setReviewWorkerId(worker.id)
-    }
-  }, [reviewWorkerId, workers])
-
-  useEffect(() => {
-    if (!open || !current || current.reviews.every((review) => review.status !== 'queued')) {
-      return
-    }
-    let active = true
-    const refresh = async () => {
-      try {
-        const nextReviews = await listTeamMemoryDreamReviews(workspaceId, current.id)
-        if (!active) return
-        setCurrent((previous) => (previous ? { ...previous, reviews: nextReviews } : previous))
-        setRuns((previous) =>
-          previous.map((run) => (run.id === current.id ? { ...run, reviews: nextReviews } : run))
-        )
-      } catch {
-        // The main Dream request already owns the visible error state.
-      }
-    }
-    const timer = window.setInterval(() => void refresh(), 2_000)
-    return () => {
-      active = false
-      window.clearInterval(timer)
-    }
-  }, [current, open, workspaceId])
 
   const replaceRun = (next: TeamMemoryDreamRun) => {
     setCurrent(next)
@@ -158,27 +147,6 @@ export const TeamMemoryDreamPanel = ({
     }
   }
 
-  const requestReview = async () => {
-    if (!current || current.status !== 'review' || !reviewWorkerId) return
-    setBusy(true)
-    setError(null)
-    try {
-      const review = await requestTeamMemoryDreamReview(workspaceId, current.id, reviewWorkerId)
-      setCurrent((previous) =>
-        previous ? { ...previous, reviews: [review, ...previous.reviews] } : previous
-      )
-      setRuns((previous) =>
-        previous.map((run) =>
-          run.id === current.id ? { ...run, reviews: [review, ...run.reviews] } : run
-        )
-      )
-    } catch (reviewError: unknown) {
-      setError(reviewError instanceof Error ? reviewError.message : String(reviewError))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const updateSuggestion = (
     index: number,
     patch: Partial<TeamMemoryDreamRun['suggestions'][number]>
@@ -191,6 +159,12 @@ export const TeamMemoryDreamPanel = ({
       ),
     })
   }
+
+  const hasIncompleteProcedureRef =
+    current?.status === 'review' &&
+    current.suggestions.some(
+      (suggestion) => suggestion.kind === 'procedure_ref' && !suggestion.procedureRef?.id.trim()
+    )
 
   if (!open) return null
 
@@ -205,6 +179,16 @@ export const TeamMemoryDreamPanel = ({
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-pri">{t('memory.dream.title')}</h3>
           <p className="mt-1 text-xs text-ter">{t('memory.dream.description')}</p>
+          <label className="workspace-memory-dream-schedule mt-2">
+            <input
+              type="checkbox"
+              checked={dreamEnabled}
+              disabled={settingsBusy}
+              onChange={(event) => void onDreamEnabledChange(event.target.checked)}
+            />
+            <span>{t('memory.dream.scheduleEnabled')}</span>
+          </label>
+          <p className="mt-1 text-xs text-ter">{t('memory.dream.scheduleHint')}</p>
         </div>
         <button
           type="button"
@@ -275,9 +259,16 @@ export const TeamMemoryDreamPanel = ({
                     <select
                       value={suggestion.kind}
                       disabled={current.status !== 'review' || busy}
-                      onChange={(event) =>
-                        updateSuggestion(index, { kind: event.target.value as TeamMemoryKind })
-                      }
+                      onChange={(event) => {
+                        const kind = event.target.value as TeamMemoryKind
+                        updateSuggestion(index, {
+                          kind,
+                          procedureRef:
+                            kind === 'procedure_ref'
+                              ? (suggestion.procedureRef ?? emptyProcedureRef())
+                              : null,
+                        })
+                      }}
                       className="rounded border px-2 py-1 text-xs text-pri"
                       style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}
                       aria-label={t('memory.kindAria')}
@@ -292,6 +283,71 @@ export const TeamMemoryDreamPanel = ({
                       {t('memory.dream.sourceCount', { count: suggestion.sourceMemoryIds.length })}
                     </span>
                   </div>
+                  {suggestion.kind === 'procedure_ref' ? (
+                    <fieldset className="workspace-memory-procedure-ref">
+                      <legend>{t('memory.procedureRef.title')}</legend>
+                      <div className="workspace-memory-procedure-ref__fields">
+                        <label>
+                          <span>{t('memory.procedureRef.typeLabel')}</span>
+                          <select
+                            value={suggestion.procedureRef?.type ?? 'workflow'}
+                            disabled={current.status !== 'review' || busy}
+                            onChange={(event) =>
+                              updateSuggestion(index, {
+                                procedureRef: {
+                                  ...(suggestion.procedureRef ?? emptyProcedureRef()),
+                                  type: event.target.value as TeamMemoryProcedureRefType,
+                                },
+                              })
+                            }
+                            aria-label={t('memory.procedureRef.typeLabel')}
+                          >
+                            {PROCEDURE_REF_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {t(procedureRefTypeKey(type))}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>{t('memory.procedureRef.idLabel')}</span>
+                          <input
+                            value={suggestion.procedureRef?.id ?? ''}
+                            disabled={current.status !== 'review' || busy}
+                            maxLength={256}
+                            placeholder={t('memory.procedureRef.idPlaceholder')}
+                            onChange={(event) =>
+                              updateSuggestion(index, {
+                                procedureRef: {
+                                  ...(suggestion.procedureRef ?? emptyProcedureRef()),
+                                  id: event.target.value,
+                                },
+                              })
+                            }
+                            aria-label={t('memory.procedureRef.idLabel')}
+                          />
+                        </label>
+                        <label>
+                          <span>{t('memory.procedureRef.titleLabel')}</span>
+                          <input
+                            value={suggestion.procedureRef?.title ?? ''}
+                            disabled={current.status !== 'review' || busy}
+                            maxLength={160}
+                            placeholder={t('memory.procedureRef.titlePlaceholder')}
+                            onChange={(event) =>
+                              updateSuggestion(index, {
+                                procedureRef: {
+                                  ...(suggestion.procedureRef ?? emptyProcedureRef()),
+                                  title: event.target.value || null,
+                                },
+                              })
+                            }
+                            aria-label={t('memory.procedureRef.titleLabel')}
+                          />
+                        </label>
+                      </div>
+                    </fieldset>
+                  ) : null}
                   <textarea
                     value={suggestion.body}
                     disabled={current.status !== 'review' || busy}
@@ -304,65 +360,10 @@ export const TeamMemoryDreamPanel = ({
               ))}
             </div>
           )}
-          {current.status === 'review' && workers.length > 0 ? (
-            <div className="mt-3 rounded border p-2" style={{ borderColor: 'var(--border)' }}>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-ter">
-                <UsersRound size={14} aria-hidden />
-                <span>{t('memory.dream.workerReview')}</span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <select
-                  value={reviewWorkerId}
-                  onChange={(event) => setReviewWorkerId(event.target.value)}
-                  disabled={busy}
-                  className="min-w-36 rounded border px-2 py-1.5 text-xs text-pri"
-                  style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}
-                  aria-label={t('memory.dream.workerReview')}
-                >
-                  {workers.map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {worker.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  disabled={busy || !reviewWorkerId}
-                  onClick={() => void requestReview()}
-                  data-testid="memory-dream-request-review"
-                >
-                  <RefreshCw size={13} aria-hidden /> {t('memory.dream.requestReview')}
-                </button>
-              </div>
-              {current.reviews.length > 0 ? (
-                <div className="mt-2 space-y-2" data-testid="memory-dream-reviews">
-                  {current.reviews.map((review) => (
-                    <article key={review.id} className="rounded bg-3 p-2 text-xs">
-                      <div className="flex items-center justify-between gap-2 text-ter">
-                        <span>
-                          {workers.find((worker) => worker.id === review.workerId)?.name ??
-                            review.workerId}
-                        </span>
-                        <span>
-                          {t(`memory.dream.reviewStatus.${review.status}` as TranslationKey)}
-                        </span>
-                      </div>
-                      {review.reviewText ? (
-                        <p className="mt-1 whitespace-pre-wrap text-pri">{review.reviewText}</p>
-                      ) : null}
-                      {review.suggestions.length > 0 ? (
-                        <p className="mt-1 text-ter">
-                          {t('memory.dream.reviewSuggestions', {
-                            count: review.suggestions.length,
-                          })}
-                        </p>
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+          {hasIncompleteProcedureRef ? (
+            <p className="mt-2 text-xs text-red-400" role="alert">
+              {t('memory.procedureRef.required')}
+            </p>
           ) : null}
           <div className="mt-3 flex flex-wrap justify-end gap-2">
             {current.status === 'review' ? (
@@ -370,7 +371,7 @@ export const TeamMemoryDreamPanel = ({
                 <button
                   type="button"
                   className="icon-btn"
-                  disabled={busy}
+                  disabled={busy || hasIncompleteProcedureRef}
                   onClick={() => void save()}
                   data-testid="memory-dream-save"
                 >
@@ -379,7 +380,7 @@ export const TeamMemoryDreamPanel = ({
                 <button
                   type="button"
                   className="icon-btn icon-btn--primary"
-                  disabled={busy || current.suggestions.length === 0}
+                  disabled={busy || current.suggestions.length === 0 || hasIncompleteProcedureRef}
                   onClick={() => void submit()}
                   data-testid="memory-dream-submit"
                 >

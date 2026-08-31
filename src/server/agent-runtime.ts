@@ -1,4 +1,4 @@
-import type { AgentSummary } from '../shared/types.js'
+import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
 import { createAgentLaunchCache } from './agent-launch-cache.js'
 import type { AgentManager } from './agent-manager.js'
 import { createAgentRunStarter } from './agent-run-starter.js'
@@ -26,7 +26,8 @@ export const createAgentRuntime = (
   onAgentExit: (workspaceId: string, agentId: string) => void,
   restartPolicy: RestartPolicy = createNoopRestartPolicy(),
   getAgent?: (workspaceId: string, agentId: string) => AgentSummary | undefined,
-  memoryDigestProvider?: TeamMemoryDigestProvider
+  memoryDigestProvider?: TeamMemoryDigestProvider,
+  getWorkspaceLanguage?: (workspaceId: string) => WorkspaceLanguage | undefined
 ): AgentRuntime => {
   const registry = createLiveRunRegistry()
   const launchCache = createAgentLaunchCache(agentRunStore)
@@ -46,6 +47,7 @@ export const createAgentRuntime = (
     ...(memoryDigestProvider ? { getDispatchMemoryDigest: memoryDigestProvider.forDispatch } : {}),
     getLaunchConfig: launchCache.peek,
     getWorkspaceId: launchCache.getWorkspaceId,
+    ...(getWorkspaceLanguage ? { getWorkspaceLanguage } : {}),
     registry,
     syncRun,
   })
@@ -153,14 +155,23 @@ export const createAgentRuntime = (
     writeStatusPrompt(workspaceId, workerName, _workerId, text, artifacts, input = {}) {
       stdinDispatcher.writeStatusPrompt(workspaceId, workerName, text, artifacts, input)
     },
-    writeSendPrompt(workspaceId, workerId, dispatchId, fromAgentName, workerDescription, text) {
+    writeSendPrompt(
+      workspaceId,
+      workerId,
+      dispatchId,
+      fromAgentName,
+      workerDescription,
+      text,
+      language
+    ) {
       stdinDispatcher.writeSendPrompt(
         workspaceId,
         workerId,
         dispatchId,
         fromAgentName,
         workerDescription,
-        text
+        text,
+        language
       )
     },
     writeCancelPrompt(workspaceId, workerId, dispatchId, reason, input = {}) {

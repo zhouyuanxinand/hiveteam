@@ -12,6 +12,7 @@ import type {
   TeamMemoryDreamSuggestion,
   TeamMemoryEntry,
   TeamMemoryKind,
+  TeamMemoryProcedureRef,
   TeamMemoryScope,
   TeamMemoryStatus,
 } from '../../src/shared/team-memory.js'
@@ -21,9 +22,13 @@ import type {
   TeamListItem,
   TeamListItemPayload,
   WorkerRole,
+  WorkspaceLanguage,
   WorkspaceRecoverySettings,
   WorkspaceSummary,
 } from '../../src/shared/types.js'
+import type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
+
+export type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
 
 export type {
   GitCommitPage,
@@ -37,12 +42,14 @@ export type {
   TeamMemoryDreamSuggestion,
   TeamMemoryEntry,
   TeamMemoryKind,
+  TeamMemoryProcedureRef,
   TeamMemoryScope,
   TeamMemoryStatus,
   WorkspaceGitStatus,
 }
 
 const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
+  ...(payload.avatar ? { avatar: payload.avatar } : {}),
   id: payload.id,
   name: payload.name,
   role: payload.role,
@@ -682,7 +689,16 @@ export interface CreateWorkspaceResponse extends WorkspaceSummary {
   orchestrator_start: OrchestratorStartResult
 }
 
+export interface LocalRetentionDiagnostics {
+  databaseBytes: number | null
+  dataDir: string | null
+  records: Record<string, number>
+  schemaVersion: number
+  storage: 'local'
+}
+
 export const createWorkspace = async (input: {
+  language?: WorkspaceLanguage
   name: string
   path: string
   autostart_orchestrator?: boolean
@@ -700,6 +716,14 @@ export const createWorkspace = async (input: {
   }
 
   return (await response.json()) as CreateWorkspaceResponse
+}
+
+export const getLocalRetentionDiagnostics = async (): Promise<LocalRetentionDiagnostics> => {
+  const response = await apiFetch('/api/settings/local-retention-diagnostics')
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load local diagnostics'))
+  }
+  return (await response.json()) as LocalRetentionDiagnostics
 }
 
 export const deleteWorkspace = async (workspaceId: string): Promise<void> => {
@@ -729,7 +753,7 @@ export const stopAgentRun = async (runId: string): Promise<void> => {
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error('Failed to stop agent run')
+    throw new Error(await readErrorMessage(response, 'Failed to stop agent run'))
   }
 }
 
@@ -807,6 +831,12 @@ export interface DispatchSummary {
   id: string
   lastAttemptAt?: number
   lastError?: string
+  reportDelivery?: {
+    attemptCount: number
+    deliveredAt: number | null
+    lastAttemptAt: number | null
+    lastError: string | null
+  }
   reportedAt: number | null
   reportText: string | null
   state: 'cancelled' | 'failed' | 'queued' | 'reported' | 'submitted'
@@ -825,6 +855,12 @@ interface DispatchSummaryPayload {
   id: string
   last_attempt_at?: number
   last_error?: string
+  report_delivery?: {
+    attempt_count: number
+    delivered_at: number | null
+    last_attempt_at: number | null
+    last_error: string | null
+  }
   reported_at: number | null
   report_text: string | null
   state: DispatchSummary['state']
@@ -843,6 +879,16 @@ const fromDispatchPayload = (payload: DispatchSummaryPayload): DispatchSummary =
   id: payload.id,
   ...(payload.last_attempt_at !== undefined ? { lastAttemptAt: payload.last_attempt_at } : {}),
   ...(payload.last_error !== undefined ? { lastError: payload.last_error } : {}),
+  ...(payload.report_delivery
+    ? {
+        reportDelivery: {
+          attemptCount: payload.report_delivery.attempt_count,
+          deliveredAt: payload.report_delivery.delivered_at,
+          lastAttemptAt: payload.report_delivery.last_attempt_at,
+          lastError: payload.report_delivery.last_error,
+        },
+      }
+    : {}),
   reportedAt: payload.reported_at,
   reportText: payload.report_text,
   state: payload.state,
@@ -1066,6 +1112,7 @@ interface TeamMemoryPayload {
   kind: TeamMemoryKind
   last_injected_at: number | null
   pinned: boolean
+  procedure_ref?: TeamMemoryProcedureRef | null
   scope: TeamMemoryScope
   source: TeamMemoryEntry['source']
   status: TeamMemoryStatus
@@ -1085,6 +1132,7 @@ const fromTeamMemoryPayload = (payload: TeamMemoryPayload): TeamMemoryEntry => (
   kind: payload.kind,
   lastInjectedAt: payload.last_injected_at,
   pinned: payload.pinned,
+  procedureRef: payload.procedure_ref ?? null,
   scope: payload.scope,
   source: payload.source,
   status: payload.status,
@@ -1107,10 +1155,20 @@ export const listTeamMemory = async (
 
 export const createTeamMemory = async (
   workspaceId: string,
-  input: { body: string; kind: TeamMemoryKind; scope: TeamMemoryScope; tags: string[] }
+  input: {
+    body: string
+    kind: TeamMemoryKind
+    procedureRef?: TeamMemoryProcedureRef | null
+    scope: TeamMemoryScope
+    tags: string[]
+  }
 ): Promise<TeamMemoryEntry> => {
+  const { procedureRef, ...body } = input
   const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory`, {
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...body,
+      ...(procedureRef !== undefined ? { procedure_ref: procedureRef } : {}),
+    }),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   })
@@ -1126,15 +1184,20 @@ export const updateTeamMemory = async (
     disabled: boolean
     kind: TeamMemoryKind
     pinned: boolean
+    procedureRef: TeamMemoryProcedureRef | null
     scope: TeamMemoryScope
     status: TeamMemoryStatus
     tags: string[]
   }>
 ): Promise<TeamMemoryEntry> => {
+  const { procedureRef, ...body } = input
   const response = await apiFetch(
     `/api/ui/workspaces/${workspaceId}/memory/${encodeURIComponent(memoryId)}`,
     {
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        ...body,
+        ...(procedureRef !== undefined ? { procedure_ref: procedureRef } : {}),
+      }),
       headers: { 'content-type': 'application/json' },
       method: 'PATCH',
     }
@@ -1145,12 +1208,18 @@ export const updateTeamMemory = async (
   return fromTeamMemoryPayload((await response.json()) as TeamMemoryPayload)
 }
 
-export const getTeamMemorySettings = async (workspaceId: string): Promise<{ enabled: boolean }> => {
+export const getTeamMemorySettings = async (
+  workspaceId: string
+): Promise<{ dreamEnabled: boolean; enabled: boolean }> => {
   const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/settings`)
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, 'Failed to load memory settings'))
   }
-  return (await response.json()) as { enabled: boolean }
+  const payload = (await response.json()) as { dream_enabled?: unknown; enabled: boolean }
+  return {
+    dreamEnabled: payload.dream_enabled === true,
+    enabled: payload.enabled,
+  }
 }
 
 export const setTeamMemoryEnabled = async (
@@ -1167,9 +1236,24 @@ export const setTeamMemoryEnabled = async (
   }
 }
 
+export const setTeamMemoryDreamEnabled = async (
+  workspaceId: string,
+  enabled: boolean
+): Promise<void> => {
+  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/settings`, {
+    body: JSON.stringify({ dream_enabled: enabled }),
+    headers: { 'content-type': 'application/json' },
+    method: 'PUT',
+  })
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to update Dream schedule'))
+  }
+}
+
 interface TeamMemoryDreamSuggestionPayload {
   body: string
   kind: TeamMemoryKind
+  procedure_ref?: TeamMemoryProcedureRef | null
   scope: TeamMemoryScope
   source_memory_ids: string[]
   tags: string[]
@@ -1215,6 +1299,7 @@ const fromDreamReviewPayload = (payload: TeamMemoryDreamReviewPayload): TeamMemo
   suggestions: payload.suggestions.map((suggestion) => ({
     body: suggestion.body,
     kind: suggestion.kind,
+    procedureRef: suggestion.procedure_ref ?? null,
     scope: suggestion.scope,
     sourceMemoryIds: suggestion.source_memory_ids,
     tags: suggestion.tags,
@@ -1239,6 +1324,7 @@ const fromDreamPayload = (payload: TeamMemoryDreamPayload): TeamMemoryDreamRun =
     (suggestion): TeamMemoryDreamSuggestion => ({
       body: suggestion.body,
       kind: suggestion.kind,
+      procedureRef: suggestion.procedure_ref ?? null,
       scope: suggestion.scope,
       sourceMemoryIds: suggestion.source_memory_ids,
       tags: suggestion.tags,
@@ -1274,6 +1360,7 @@ export const updateTeamMemoryDream = async (
         suggestions: suggestions.map((suggestion) => ({
           body: suggestion.body,
           kind: suggestion.kind,
+          procedure_ref: suggestion.procedureRef,
           scope: suggestion.scope,
           source_memory_ids: suggestion.sourceMemoryIds,
           tags: suggestion.tags,
@@ -1692,6 +1779,7 @@ export const createWorker = async (
   workspaceId: string,
   input: Pick<AgentSummary, 'name'> & {
     autostart?: boolean
+    avatar?: string | null
     command_preset_id?: string | null
     description?: string
     model?: string | null
@@ -1746,6 +1834,24 @@ export const renameWorker = async (
   }
 }
 
+export const updateWorkerAvatar = async (
+  workspaceId: string,
+  workerId: string,
+  avatar: string | null
+): Promise<TeamListItem> => {
+  const response = await apiFetch(`/api/workspaces/${workspaceId}/workers/${workerId}`, {
+    body: JSON.stringify({ avatar }),
+    headers: { 'content-type': 'application/json' },
+    method: 'PATCH',
+  })
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to update worker avatar'))
+  }
+
+  return fromPayload((await response.json()) as TeamListItemPayload)
+}
+
 export const getWorkspaceTasks = async (workspaceId: string): Promise<{ content: string }> => {
   const response = await apiFetch(`/api/workspaces/${workspaceId}/tasks`)
 
@@ -1782,6 +1888,7 @@ export interface FsBrowseEntryPayload {
 
 export interface FsBrowseResponse {
   current_path: string
+  documents?: WorkspaceDocumentSummary[]
   entries: FsBrowseEntryPayload[]
   error: string | null
   ok: boolean
@@ -1791,6 +1898,7 @@ export interface FsBrowseResponse {
 
 export interface FsProbeResponse {
   current_branch: string | null
+  documents?: WorkspaceDocumentSummary[]
   exists: boolean
   is_dir: boolean
   is_git_repository: boolean

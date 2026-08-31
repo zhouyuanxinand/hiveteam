@@ -1,4 +1,5 @@
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
+import { discoverWorkspaceDocuments } from '../shared/workspace-documents.js'
 import type { AgentManager } from './agent-manager.js'
 import { buildAgentRunBootstrap, startAgentRunCapture } from './agent-run-bootstrap.js'
 import { clearResumedSessionIfInvalid, handleAgentRunExit } from './agent-run-exit-handler.js'
@@ -154,16 +155,24 @@ export const createAgentRunStarter =
           agent.role === 'orchestrator' &&
           isInteractiveAgentCommand(startConfig.interactiveCommand ?? startConfig.command)
         ) {
-          postStartWriter(
-            run.runId,
-            buildAgentStartupInstructions({
-              agent,
-              ...(getStartupMemoryDigest
-                ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent) }
-                : {}),
-              workspace,
+          void discoverWorkspaceDocuments(workspace.path)
+            .then((documents) => {
+              postStartWriter(
+                run.runId,
+                buildAgentStartupInstructions({
+                  agent,
+                  documents,
+                  ...(getStartupMemoryDigest
+                    ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent) }
+                    : {}),
+                  ...(workspace.language ? { language: workspace.language } : {}),
+                  workspace,
+                })
+              )
             })
-          )
+            .catch(() => {
+              // The workspace may disappear while an agent is starting.
+            })
         }
       } catch {
         // The agent may have exited before post-start guidance could be written.

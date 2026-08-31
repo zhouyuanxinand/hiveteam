@@ -19,7 +19,35 @@ describe('post-start input writer', () => {
     expect(
       hasInteractivePromptReady('Gemini CLI\n* Type your message or @path/to/file', 'gemini')
     ).toBe(true)
+    expect(hasInteractivePromptReady('OpenCode\nAsk anything...', 'opencode')).toBe(true)
+    expect(
+      hasInteractivePromptReady('OpenCode\n▣ assistant · model · 123ms', 'C:\\tools\\opencode.CMD')
+    ).toBe(true)
     expect(hasInteractivePromptReady('booting only')).toBe(false)
+  })
+
+  test('waits for a stable OpenCode completion footer before writing startup input', () => {
+    vi.useFakeTimers()
+    const manager = {
+      getRun: vi.fn(() => ({
+        output: 'OpenCode\n▣ assistant · model · 123ms\n',
+        status: 'running',
+      })),
+      writeInput: vi.fn(),
+    }
+
+    const write = createPostStartInputWriter(manager as never, 'C:\\tools\\opencode.CMD')
+    write('run-opencode', 'Hive startup instructions')
+
+    vi.advanceTimersByTime(999)
+    expect(manager.writeInput).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    expect(manager.writeInput).toHaveBeenNthCalledWith(
+      1,
+      'run-opencode',
+      '\u001b[200~Hive startup instructions\u001b[201~'
+    )
   })
 
   test('recognizes Claude bracketed-paste acknowledgements after the baseline output', () => {
@@ -101,22 +129,53 @@ describe('post-start input writer', () => {
     expect(manager.writeInput).toHaveBeenNthCalledWith(2, 'run-1', '\r')
   })
 
-  test('submits Claude pasted input after timeout when no paste acknowledgement is emitted', () => {
+  test('does not inject Claude input while the CLI has not acknowledged its prompt', () => {
     vi.useFakeTimers()
     const manager = {
-      getRun: vi.fn(() => ({ output: 'Welcome back\n❯ ' })),
+      getRun: vi.fn(() => ({ output: 'Welcome back\n' })),
       writeInput: vi.fn(),
     }
 
     const write = createPostStartInputWriter(manager as never, 'claude')
     write('run-1', 'payload')
 
-    vi.advanceTimersByTime(2999)
-    expect(manager.writeInput).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(10_000)
+    expect(manager.writeInput).not.toHaveBeenCalled()
+  })
 
-    vi.advanceTimersByTime(1)
-    expect(manager.writeInput).toHaveBeenCalledTimes(2)
-    expect(manager.writeInput).toHaveBeenNthCalledWith(2, 'run-1', '\r')
+  test('handles Codex trust screens before writing Hive startup input', () => {
+    vi.useFakeTimers()
+    let output = 'OpenAI Codex\n› Ask Codex to do anything\n'
+    const manager = {
+      getRun: vi.fn(() => ({ output, status: 'running' })),
+      writeInput: vi.fn(),
+    }
+
+    const write = createPostStartInputWriter(manager as never, 'codex')
+    write('run-codex', 'Hive startup instructions')
+
+    // Codex can show its normal prompt briefly before the asynchronous trust
+    // screen arrives. The startup writer must wait instead of injecting into it.
+    vi.advanceTimersByTime(300)
+    expect(manager.writeInput).not.toHaveBeenCalled()
+
+    output +=
+      '\n> You are in D:\\桌面\\AI test\nDo you trust the contents of this directory?\nPress enter to continue\n› 1. Yes, continue\n'
+    vi.advanceTimersByTime(50)
+    expect(manager.writeInput).toHaveBeenNthCalledWith(1, 'run-codex', '\r')
+
+    output +=
+      "\nHooks need review\n› 1. Review hooks\n  2. Trust all and continue\n  3. Continue without trusting (hooks won't run)\n"
+    vi.advanceTimersByTime(50)
+    expect(manager.writeInput).toHaveBeenNthCalledWith(2, 'run-codex', '\u001b[B\u001b[B\r')
+
+    output += '\n› Ask Codex to do anything\n'
+    vi.advanceTimersByTime(1100)
+    expect(manager.writeInput).toHaveBeenNthCalledWith(
+      3,
+      'run-codex',
+      '\u001b[200~Hive startup instructions\u001b[201~'
+    )
   })
 
   test('waits for Gemini prompt readiness and writes plain input without bracketed paste', () => {

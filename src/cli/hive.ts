@@ -11,6 +11,7 @@ import { createRemoteTunnel } from '../server/remote-tunnel.js'
 import { createRuntimeStore, type RuntimeStore } from '../server/runtime-store.js'
 import { resolveDataDir } from './hive-data-dir.js'
 import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
+import { runHiveMcpCommand } from './hive-mcp.js'
 import { runHiveRemoteCommand } from './hive-remote.js'
 import { runHiveUpdateCommand } from './hive-update.js'
 
@@ -29,6 +30,7 @@ type ListenError = Error & {
 export const HIVE_USAGE = [
   'Usage:',
   '  hive [--port <port>]',
+  '  hive mcp [--base-url <url>]',
   '  hive update',
   '',
   'Options:',
@@ -38,6 +40,7 @@ export const HIVE_USAGE = [
   '',
   'Commands:',
   '  remote         Link and manage remote access devices.',
+  '  mcp            Run the local Supervisor MCP bridge over stdio.',
   '  update          Explain how to update this source-controlled build.',
 ].join('\n')
 
@@ -224,7 +227,9 @@ if (isMainModule) {
       })
   } else if (argv[0] === 'update') {
     runHiveUpdateCommand(argv.slice(1))
-      .then((code) => process.exit(code))
+  } else if (argv[0] === 'mcp') {
+    runHiveMcpCommand(argv.slice(1))
+      .then(() => process.exit(0))
       .catch((error) => {
         console.error(error)
         process.exit(1)

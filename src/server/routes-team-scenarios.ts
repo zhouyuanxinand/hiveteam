@@ -5,6 +5,7 @@ import { ConflictError } from './http-errors.js'
 import { autostartAgent } from './orchestrator-autostart.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
+import { buildScenarioWorkerName } from './scenario-worker-name.js'
 import { enrichTeamList } from './team-list-enrichment.js'
 import { serializeTeamListItem } from './team-list-serializer.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
@@ -117,6 +118,12 @@ export const teamScenarioRoutes: RouteDefinition[] = [
       const createdIds: string[] = []
       const created: string[] = []
       const reused: string[] = []
+      const usedNames = new Set(
+        store
+          .getWorkspaceSnapshot(workspaceId)
+          .agents.filter((agent) => agent.role !== 'orchestrator')
+          .map((agent) => agent.name)
+      )
       const started: Array<{
         error: string | null
         id: string
@@ -127,14 +134,21 @@ export const teamScenarioRoutes: RouteDefinition[] = [
         for (const member of scenario.members) {
           const existing = store
             .getWorkspaceSnapshot(workspaceId)
-            .agents.find((agent) => agent.role !== 'orchestrator' && agent.name === member.name)
+            .agents.find(
+              (agent) =>
+                agent.role !== 'orchestrator' &&
+                agent.role === member.role &&
+                (agent.name === member.name || agent.description === member.description)
+            )
           if (existing) {
             reused.push(existing.id)
             continue
           }
+          const name = buildScenarioWorkerName(member, usedNames)
+          usedNames.add(name)
           const worker = store.addWorker(workspaceId, {
             description: member.description,
-            name: member.name,
+            name,
             role: member.role,
           })
           createdIds.push(worker.id)

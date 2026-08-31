@@ -102,7 +102,6 @@ export const AppOverlays = ({
           onClose={onCloseKnowledge}
           open
           workspaceId={workspaceId}
-          {...(workers ? { workers } : {})}
         />
       </Suspense>
     ) : null}

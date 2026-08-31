@@ -11,7 +11,7 @@ import { WorkspaceAvatar } from './WorkspaceAvatar.js'
 
 type SidebarProps = {
   activeWorkspaceId: string | null
-  createDisabledReason?: string
+  createDisabledReason?: string | undefined
   onCreateClick: () => void
   onDeleteWorkspace: (workspace: WorkspaceSummary) => void | Promise<void>
   onSelectWorkspace: (workspaceId: string) => void

@@ -1,0 +1,5559 @@
+{
+  "names": [
+    {
+      "name": "鸣人",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "路飞",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "悟空",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "佐助",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "樱木花道",
+      "category": "anime",
+      "note": "灌篮高手"
+    },
+    {
+      "name": "流川枫",
+      "category": "anime",
+      "note": "灌篮高手"
+    },
+    {
+      "name": "碇真嗣",
+      "category": "anime",
+      "note": "EVA"
+    },
+    {
+      "name": "绫波丽",
+      "category": "anime",
+      "note": "EVA"
+    },
+    {
+      "name": "炭治郎",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "祢豆子",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "五条悟",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "虎杖悠仁",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "绿谷出久",
+      "category": "anime",
+      "note": "我的英雄学院"
+    },
+    {
+      "name": "爆豪胜己",
+      "category": "anime",
+      "note": "我的英雄学院"
+    },
+    {
+      "name": "艾伦·耶格尔",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "利威尔",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "桐人",
+      "category": "anime",
+      "note": "刀剑神域"
+    },
+    {
+      "name": "亚丝娜",
+      "category": "anime",
+      "note": "刀剑神域"
+    },
+    {
+      "name": "夜神月",
+      "category": "anime",
+      "note": "死亡笔记"
+    },
+    {
+      "name": "L",
+      "category": "anime",
+      "note": "死亡笔记"
+    },
+    {
+      "name": "金木研",
+      "category": "anime",
+      "note": "东京喰种"
+    },
+    {
+      "name": "柯南",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "工藤新一",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "皮卡丘",
+      "category": "anime",
+      "note": "宝可梦"
+    },
+    {
+      "name": "Pikachu",
+      "category": "anime",
+      "note": "宝可梦"
+    },
+    {
+      "name": "小智",
+      "category": "anime",
+      "note": "宝可梦"
+    },
+    {
+      "name": "哆啦A梦",
+      "category": "anime",
+      "note": "机器猫"
+    },
+    {
+      "name": "大雄",
+      "category": "anime",
+      "note": "哆啦A梦"
+    },
+    {
+      "name": "蜡笔小新",
+      "category": "anime",
+      "note": "野原新之助"
+    },
+    {
+      "name": "樱桃小丸子",
+      "category": "anime",
+      "note": "小丸子"
+    },
+    {
+      "name": "鲁路修",
+      "category": "anime",
+      "note": "反叛的鲁路修"
+    },
+    {
+      "name": "C.C.",
+      "category": "anime",
+      "note": "反叛的鲁路修"
+    },
+    {
+      "name": "奇犽",
+      "category": "anime",
+      "note": "全职猎人"
+    },
+    {
+      "name": "小杰",
+      "category": "anime",
+      "note": "全职猎人"
+    },
+    {
+      "name": "爱德华·艾尔利克",
+      "category": "anime",
+      "note": "钢之炼金术师"
+    },
+    {
+      "name": "阿尔冯斯",
+      "category": "anime",
+      "note": "钢之炼金术师"
+    },
+    {
+      "name": "薇尔莉特",
+      "category": "anime",
+      "note": "紫罗兰永恒花园"
+    },
+    {
+      "name": "宇智波鼬",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "卡卡西",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "索隆",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "娜美",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "香克斯",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "贝吉塔",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "弗利萨",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "一护",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "漩涡鸣人",
+      "category": "anime",
+      "note": "火影忍者全名"
+    },
+    {
+      "name": "我妻善逸",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "嘴平伊之助",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "富冈义勇",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "炼狱杏寿郎",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "夏油杰",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "伏黑惠",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "钉崎野蔷薇",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "两面宿傩",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "三笠",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "阿尔敏",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "冈部伦太郎",
+      "category": "anime",
+      "note": "命运石之门"
+    },
+    {
+      "name": "牧濑红莉栖",
+      "category": "anime",
+      "note": "命运石之门"
+    },
+    {
+      "name": "凉宫春日",
+      "category": "anime",
+      "note": "凉宫春日的忧郁"
+    },
+    {
+      "name": "长门有希",
+      "category": "anime",
+      "note": "凉宫春日的忧郁"
+    },
+    {
+      "name": "夏目贵志",
+      "category": "anime",
+      "note": "夏目友人帐"
+    },
+    {
+      "name": "无脸男",
+      "category": "anime",
+      "note": "千与千寻"
+    },
+    {
+      "name": "千寻",
+      "category": "anime",
+      "note": "千与千寻"
+    },
+    {
+      "name": "哈尔",
+      "category": "anime",
+      "note": "哈尔的移动城堡"
+    },
+    {
+      "name": "托托罗",
+      "category": "anime",
+      "note": "龙猫"
+    },
+    {
+      "name": "灰原哀",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "毛利兰",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "怪盗基德",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "犬夜叉",
+      "category": "anime",
+      "note": "犬夜叉"
+    },
+    {
+      "name": "杀生丸",
+      "category": "anime",
+      "note": "犬夜叉"
+    },
+    {
+      "name": "戈薇",
+      "category": "anime",
+      "note": "犬夜叉"
+    },
+    {
+      "name": "坂田银时",
+      "category": "anime",
+      "note": "银魂"
+    },
+    {
+      "name": "神乐",
+      "category": "anime",
+      "note": "银魂"
+    },
+    {
+      "name": "新八",
+      "category": "anime",
+      "note": "银魂"
+    },
+    {
+      "name": "黑崎一护",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "朽木露琪亚",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "井上织姬",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "乔巴",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "罗宾",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "山治",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "乌索普",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "弗兰奇",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "布鲁克",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "月野兔",
+      "category": "anime",
+      "note": "美少女战士"
+    },
+    {
+      "name": "风间彻",
+      "category": "anime",
+      "note": "蜡笔小新"
+    },
+    {
+      "name": "阿呆",
+      "category": "anime",
+      "note": "蜡笔小新"
+    },
+    {
+      "name": "美伢",
+      "category": "anime",
+      "note": "蜡笔小新"
+    },
+    {
+      "name": "灶门炭治郎",
+      "category": "anime",
+      "note": "鬼灭之刃全名"
+    },
+    {
+      "name": "灶门祢豆子",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "朽木白哉",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "李白",
+      "category": "history",
+      "note": "诗仙"
+    },
+    {
+      "name": "杜甫",
+      "category": "history",
+      "note": "诗圣"
+    },
+    {
+      "name": "苏轼",
+      "category": "history",
+      "note": "东坡居士"
+    },
+    {
+      "name": "曹操",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "刘备",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "关羽",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "张飞",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "诸葛亮",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "赵云",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "吕布",
+      "category": "history",
+      "note": "三国"
+    },
+    {
+      "name": "项羽",
+      "category": "history",
+      "note": "西楚霸王"
+    },
+    {
+      "name": "刘邦",
+      "category": "history",
+      "note": "汉高祖"
+    },
+    {
+      "name": "秦始皇",
+      "category": "history",
+      "note": "始皇帝"
+    },
+    {
+      "name": "武则天",
+      "category": "history",
+      "note": "女皇"
+    },
+    {
+      "name": "花木兰",
+      "category": "history",
+      "note": "代父从军"
+    },
+    {
+      "name": "成吉思汗",
+      "category": "history",
+      "note": "蒙古帝国"
+    },
+    {
+      "name": "拿破仑",
+      "category": "history",
+      "note": "法兰西"
+    },
+    {
+      "name": "凯撒",
+      "category": "history",
+      "note": "罗马"
+    },
+    {
+      "name": "克利奥帕特拉",
+      "category": "history",
+      "note": "埃及艳后"
+    },
+    {
+      "name": "亚历山大",
+      "category": "history",
+      "note": "亚历山大大帝"
+    },
+    {
+      "name": "华盛顿",
+      "category": "history",
+      "note": "美国国父"
+    },
+    {
+      "name": "林肯",
+      "category": "history",
+      "note": "美国总统"
+    },
+    {
+      "name": "丘吉尔",
+      "category": "history",
+      "note": "二战"
+    },
+    {
+      "name": "贞德",
+      "category": "history",
+      "note": "圣女贞德"
+    },
+    {
+      "name": "岳飞",
+      "category": "history",
+      "note": "精忠报国"
+    },
+    {
+      "name": "韩信",
+      "category": "history",
+      "note": "兵仙"
+    },
+    {
+      "name": "司马迁",
+      "category": "history",
+      "note": "史记"
+    },
+    {
+      "name": "孔子",
+      "category": "history",
+      "note": "儒家"
+    },
+    {
+      "name": "老子",
+      "category": "history",
+      "note": "道家"
+    },
+    {
+      "name": "庄子",
+      "category": "history",
+      "note": "道家"
+    },
+    {
+      "name": "韩非子",
+      "category": "history",
+      "note": "法家"
+    },
+    {
+      "name": "墨子",
+      "category": "history",
+      "note": "墨家"
+    },
+    {
+      "name": "唐太宗",
+      "category": "history",
+      "note": "李世民"
+    },
+    {
+      "name": "李世民",
+      "category": "history",
+      "note": "贞观之治"
+    },
+    {
+      "name": "朱元璋",
+      "category": "history",
+      "note": "明太祖"
+    },
+    {
+      "name": "康熙",
+      "category": "history",
+      "note": "清帝"
+    },
+    {
+      "name": "乾隆",
+      "category": "history",
+      "note": "清帝"
+    },
+    {
+      "name": "哥伦布",
+      "category": "history",
+      "note": "大航海"
+    },
+    {
+      "name": "达·芬奇",
+      "category": "history",
+      "note": "文艺复兴"
+    },
+    {
+      "name": "米开朗基罗",
+      "category": "history",
+      "note": "文艺复兴"
+    },
+    {
+      "name": "Link",
+      "category": "game",
+      "note": "塞尔达传说"
+    },
+    {
+      "name": "Zelda",
+      "category": "game",
+      "note": "塞尔达传说"
+    },
+    {
+      "name": "Mario",
+      "category": "game",
+      "note": "超级马里奥"
+    },
+    {
+      "name": "Luigi",
+      "category": "game",
+      "note": "超级马里奥"
+    },
+    {
+      "name": "Peach",
+      "category": "game",
+      "note": "桃花公主"
+    },
+    {
+      "name": "Bowser",
+      "category": "game",
+      "note": "酷霸王"
+    },
+    {
+      "name": "Sonic",
+      "category": "game",
+      "note": "索尼克"
+    },
+    {
+      "name": "Tails",
+      "category": "game",
+      "note": "索尼克"
+    },
+    {
+      "name": "Kratos",
+      "category": "game",
+      "note": "战神"
+    },
+    {
+      "name": "Geralt",
+      "category": "game",
+      "note": "巫师"
+    },
+    {
+      "name": "Cloud",
+      "category": "game",
+      "note": "最终幻想7"
+    },
+    {
+      "name": "Tifa",
+      "category": "game",
+      "note": "最终幻想7"
+    },
+    {
+      "name": "Aerith",
+      "category": "game",
+      "note": "最终幻想7"
+    },
+    {
+      "name": "2B",
+      "category": "game",
+      "note": "尼尔机械纪元"
+    },
+    {
+      "name": "9S",
+      "category": "game",
+      "note": "尼尔机械纪元"
+    },
+    {
+      "name": "A2",
+      "category": "game",
+      "note": "尼尔机械纪元"
+    },
+    {
+      "name": "Steve",
+      "category": "game",
+      "note": "Minecraft"
+    },
+    {
+      "name": "Alex",
+      "category": "game",
+      "note": "Minecraft"
+    },
+    {
+      "name": "Creeper",
+      "category": "game",
+      "note": "Minecraft"
+    },
+    {
+      "name": "Enderman",
+      "category": "game",
+      "note": "Minecraft"
+    },
+    {
+      "name": "Kirby",
+      "category": "game",
+      "note": "星之卡比"
+    },
+    {
+      "name": "Samus",
+      "category": "game",
+      "note": "银河战士"
+    },
+    {
+      "name": "Pac-Man",
+      "category": "game",
+      "note": "吃豆人"
+    },
+    {
+      "name": "Ganon",
+      "category": "game",
+      "note": "塞尔达"
+    },
+    {
+      "name": "Tracer",
+      "category": "game",
+      "note": "守望先锋"
+    },
+    {
+      "name": "Genji",
+      "category": "game",
+      "note": "守望先锋"
+    },
+    {
+      "name": "Jett",
+      "category": "game",
+      "note": "Valorant"
+    },
+    {
+      "name": "Sage",
+      "category": "game",
+      "note": "Valorant"
+    },
+    {
+      "name": "Phoenix",
+      "category": "game",
+      "note": "Valorant"
+    },
+    {
+      "name": "Wraith",
+      "category": "game",
+      "note": "Apex"
+    },
+    {
+      "name": "Ezio",
+      "category": "game",
+      "note": "刺客信条"
+    },
+    {
+      "name": "Altair",
+      "category": "game",
+      "note": "刺客信条"
+    },
+    {
+      "name": "Aloy",
+      "category": "game",
+      "note": "地平线"
+    },
+    {
+      "name": "Ellie",
+      "category": "game",
+      "note": "最后生还者"
+    },
+    {
+      "name": "Joel",
+      "category": "game",
+      "note": "最后生还者"
+    },
+    {
+      "name": "GLaDOS",
+      "category": "game",
+      "note": "传送门"
+    },
+    {
+      "name": "Chell",
+      "category": "game",
+      "note": "传送门"
+    },
+    {
+      "name": "Doomguy",
+      "category": "game",
+      "note": "毁灭战士"
+    },
+    {
+      "name": "Spyro",
+      "category": "game",
+      "note": "喷火龙"
+    },
+    {
+      "name": "Crash",
+      "category": "game",
+      "note": "古惑狼"
+    },
+    {
+      "name": "Ratchet",
+      "category": "game",
+      "note": "瑞奇与叮当"
+    },
+    {
+      "name": "Clank",
+      "category": "game",
+      "note": "瑞奇与叮当"
+    },
+    {
+      "name": "Dante",
+      "category": "game",
+      "note": "鬼泣"
+    },
+    {
+      "name": "Vergil",
+      "category": "game",
+      "note": "鬼泣"
+    },
+    {
+      "name": "Nero",
+      "category": "game",
+      "note": "鬼泣"
+    },
+    {
+      "name": "Sora",
+      "category": "game",
+      "note": "王国之心"
+    },
+    {
+      "name": "Riku",
+      "category": "game",
+      "note": "王国之心"
+    },
+    {
+      "name": "Kairi",
+      "category": "game",
+      "note": "王国之心"
+    },
+    {
+      "name": "Morgana",
+      "category": "game",
+      "note": "女神异闻录5"
+    },
+    {
+      "name": "Isabelle",
+      "category": "game",
+      "note": "动物森友会"
+    },
+    {
+      "name": "Tom Nook",
+      "category": "game",
+      "note": "动物森友会"
+    },
+    {
+      "name": "钟离",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "雷电将军",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "胡桃",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "甘雨",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "魈",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "刻晴",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "派蒙",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "旅行者",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "三月七",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "丹恒",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "布洛妮娅",
+      "category": "game",
+      "note": "崩坏系列"
+    },
+    {
+      "name": "琪亚娜",
+      "category": "game",
+      "note": "崩坏3"
+    },
+    {
+      "name": "V",
+      "category": "game",
+      "note": "赛博朋克2077"
+    },
+    {
+      "name": "宙斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "雅典娜",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "阿波罗",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "阿尔忒弥斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "波塞冬",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "哈迪斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "赫拉",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "阿芙洛狄忒",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "赫尔墨斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "阿瑞斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "赫菲斯托斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "狄俄尼索斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "普罗米修斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "美杜莎",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "赫拉克勒斯",
+      "category": "myth",
+      "note": "希腊神话"
+    },
+    {
+      "name": "奥丁",
+      "category": "myth",
+      "note": "北欧神话"
+    },
+    {
+      "name": "托尔",
+      "category": "myth",
+      "note": "北欧神话"
+    },
+    {
+      "name": "洛基",
+      "category": "myth",
+      "note": "北欧神话"
+    },
+    {
+      "name": "芙蕾雅",
+      "category": "myth",
+      "note": "北欧神话"
+    },
+    {
+      "name": "芬里尔",
+      "category": "myth",
+      "note": "北欧神话"
+    },
+    {
+      "name": "女娲",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "盘古",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "哪吒",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "杨戬",
+      "category": "myth",
+      "note": "二郎神"
+    },
+    {
+      "name": "观音",
+      "category": "myth",
+      "note": "佛教"
+    },
+    {
+      "name": "玉皇大帝",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "嫦娥",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "后羿",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "夸父",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "刑天",
+      "category": "myth",
+      "note": "中国神话"
+    },
+    {
+      "name": "安努比斯",
+      "category": "myth",
+      "note": "埃及神话"
+    },
+    {
+      "name": "拉",
+      "category": "myth",
+      "note": "埃及太阳神"
+    },
+    {
+      "name": "伊西斯",
+      "category": "myth",
+      "note": "埃及神话"
+    },
+    {
+      "name": "奥西里斯",
+      "category": "myth",
+      "note": "埃及神话"
+    },
+    {
+      "name": "塞特",
+      "category": "myth",
+      "note": "埃及神话"
+    },
+    {
+      "name": "湿婆",
+      "category": "myth",
+      "note": "印度神话"
+    },
+    {
+      "name": "毗湿奴",
+      "category": "myth",
+      "note": "印度神话"
+    },
+    {
+      "name": "迦梨",
+      "category": "myth",
+      "note": "印度神话"
+    },
+    {
+      "name": "牛顿",
+      "category": "science",
+      "note": "万有引力"
+    },
+    {
+      "name": "爱因斯坦",
+      "category": "science",
+      "note": "相对论"
+    },
+    {
+      "name": "特斯拉",
+      "category": "science",
+      "note": "交流电"
+    },
+    {
+      "name": "爱迪生",
+      "category": "science",
+      "note": "发明家"
+    },
+    {
+      "name": "达尔文",
+      "category": "science",
+      "note": "进化论"
+    },
+    {
+      "name": "居里夫人",
+      "category": "science",
+      "note": "放射性"
+    },
+    {
+      "name": "伽利略",
+      "category": "science",
+      "note": "天文"
+    },
+    {
+      "name": "哥白尼",
+      "category": "science",
+      "note": "日心说"
+    },
+    {
+      "name": "霍金",
+      "category": "science",
+      "note": "黑洞"
+    },
+    {
+      "name": "图灵",
+      "category": "science",
+      "note": "计算机"
+    },
+    {
+      "name": "冯·诺依曼",
+      "category": "science",
+      "note": "计算机架构"
+    },
+    {
+      "name": "香农",
+      "category": "science",
+      "note": "信息论"
+    },
+    {
+      "name": "费曼",
+      "category": "science",
+      "note": "量子物理"
+    },
+    {
+      "name": "波尔",
+      "category": "science",
+      "note": "原子模型"
+    },
+    {
+      "name": "海森堡",
+      "category": "science",
+      "note": "不确定性"
+    },
+    {
+      "name": "薛定谔",
+      "category": "science",
+      "note": "猫"
+    },
+    {
+      "name": "门捷列夫",
+      "category": "science",
+      "note": "元素周期表"
+    },
+    {
+      "name": "法拉第",
+      "category": "science",
+      "note": "电磁"
+    },
+    {
+      "name": "麦克斯韦",
+      "category": "science",
+      "note": "电磁方程"
+    },
+    {
+      "name": "阿基米德",
+      "category": "science",
+      "note": "浮力"
+    },
+    {
+      "name": "欧几里得",
+      "category": "science",
+      "note": "几何"
+    },
+    {
+      "name": "毕达哥拉斯",
+      "category": "science",
+      "note": "勾股"
+    },
+    {
+      "name": "笛卡尔",
+      "category": "science",
+      "note": "坐标"
+    },
+    {
+      "name": "莱布尼茨",
+      "category": "science",
+      "note": "微积分"
+    },
+    {
+      "name": "帕斯卡",
+      "category": "science",
+      "note": "压强"
+    },
+    {
+      "name": "孟德尔",
+      "category": "science",
+      "note": "遗传学"
+    },
+    {
+      "name": "巴斯德",
+      "category": "science",
+      "note": "微生物学"
+    },
+    {
+      "name": "弗莱明",
+      "category": "science",
+      "note": "青霉素"
+    },
+    {
+      "name": "莱特兄弟",
+      "category": "science",
+      "note": "飞机"
+    },
+    {
+      "name": "贝尔",
+      "category": "science",
+      "note": "电话"
+    },
+    {
+      "name": "钱学森",
+      "category": "science",
+      "note": "航天"
+    },
+    {
+      "name": "邓稼先",
+      "category": "science",
+      "note": "两弹一星"
+    },
+    {
+      "name": "袁隆平",
+      "category": "science",
+      "note": "杂交水稻"
+    },
+    {
+      "name": "华罗庚",
+      "category": "science",
+      "note": "数学"
+    },
+    {
+      "name": "陈景润",
+      "category": "science",
+      "note": "哥德巴赫猜想"
+    },
+    {
+      "name": "开普勒",
+      "category": "science",
+      "note": "行星运动"
+    },
+    {
+      "name": "Sherlock",
+      "category": "literature",
+      "note": "福尔摩斯"
+    },
+    {
+      "name": "Watson",
+      "category": "literature",
+      "note": "华生"
+    },
+    {
+      "name": "Hermione",
+      "category": "literature",
+      "note": "赫敏"
+    },
+    {
+      "name": "Frodo",
+      "category": "literature",
+      "note": "魔戒"
+    },
+    {
+      "name": "Gandalf",
+      "category": "literature",
+      "note": "魔戒"
+    },
+    {
+      "name": "Aragorn",
+      "category": "literature",
+      "note": "魔戒"
+    },
+    {
+      "name": "Legolas",
+      "category": "literature",
+      "note": "魔戒"
+    },
+    {
+      "name": "Gollum",
+      "category": "literature",
+      "note": "魔戒"
+    },
+    {
+      "name": "Alice",
+      "category": "literature",
+      "note": "爱丽丝梦游仙境"
+    },
+    {
+      "name": "Hamlet",
+      "category": "literature",
+      "note": "莎士比亚"
+    },
+    {
+      "name": "Romeo",
+      "category": "literature",
+      "note": "罗密欧"
+    },
+    {
+      "name": "Juliet",
+      "category": "literature",
+      "note": "朱丽叶"
+    },
+    {
+      "name": "Dracula",
+      "category": "literature",
+      "note": "德古拉"
+    },
+    {
+      "name": "Scrooge",
+      "category": "literature",
+      "note": "圣诞颂歌"
+    },
+    {
+      "name": "贾宝玉",
+      "category": "literature",
+      "note": "红楼梦"
+    },
+    {
+      "name": "林黛玉",
+      "category": "literature",
+      "note": "红楼梦"
+    },
+    {
+      "name": "薛宝钗",
+      "category": "literature",
+      "note": "红楼梦"
+    },
+    {
+      "name": "王熙凤",
+      "category": "literature",
+      "note": "红楼梦"
+    },
+    {
+      "name": "孙悟空",
+      "category": "literature",
+      "note": "西游记"
+    },
+    {
+      "name": "唐僧",
+      "category": "literature",
+      "note": "西游记"
+    },
+    {
+      "name": "猪八戒",
+      "category": "literature",
+      "note": "西游记"
+    },
+    {
+      "name": "沙僧",
+      "category": "literature",
+      "note": "西游记"
+    },
+    {
+      "name": "白骨精",
+      "category": "literature",
+      "note": "西游记"
+    },
+    {
+      "name": "武松",
+      "category": "literature",
+      "note": "水浒传"
+    },
+    {
+      "name": "林冲",
+      "category": "literature",
+      "note": "水浒传"
+    },
+    {
+      "name": "宋江",
+      "category": "literature",
+      "note": "水浒传"
+    },
+    {
+      "name": "鲁智深",
+      "category": "literature",
+      "note": "水浒传"
+    },
+    {
+      "name": "阿喀琉斯",
+      "category": "literature",
+      "note": "荷马史诗"
+    },
+    {
+      "name": "奥德修斯",
+      "category": "literature",
+      "note": "荷马史诗"
+    },
+    {
+      "name": "Yoda",
+      "category": "film",
+      "note": "星球大战"
+    },
+    {
+      "name": "Han Solo",
+      "category": "film",
+      "note": "星球大战"
+    },
+    {
+      "name": "Iron Man",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Thor",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Loki",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Hulk",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Thanos",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Wanda",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Vision",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Deadpool",
+      "category": "film",
+      "note": "漫威"
+    },
+    {
+      "name": "Batman",
+      "category": "film",
+      "note": "DC"
+    },
+    {
+      "name": "Superman",
+      "category": "film",
+      "note": "DC"
+    },
+    {
+      "name": "Aquaman",
+      "category": "film",
+      "note": "DC"
+    },
+    {
+      "name": "Joker",
+      "category": "film",
+      "note": "DC小丑"
+    },
+    {
+      "name": "Catwoman",
+      "category": "film",
+      "note": "DC"
+    },
+    {
+      "name": "Neo",
+      "category": "film",
+      "note": "黑客帝国"
+    },
+    {
+      "name": "Trinity",
+      "category": "film",
+      "note": "黑客帝国"
+    },
+    {
+      "name": "Morpheus",
+      "category": "film",
+      "note": "黑客帝国"
+    },
+    {
+      "name": "Elsa",
+      "category": "film",
+      "note": "冰雪奇缘"
+    },
+    {
+      "name": "Anna",
+      "category": "film",
+      "note": "冰雪奇缘"
+    },
+    {
+      "name": "Olaf",
+      "category": "film",
+      "note": "冰雪奇缘"
+    },
+    {
+      "name": "Simba",
+      "category": "film",
+      "note": "狮子王"
+    },
+    {
+      "name": "Woody",
+      "category": "film",
+      "note": "玩具总动员"
+    },
+    {
+      "name": "Shrek",
+      "category": "film",
+      "note": "怪物史莱克"
+    },
+    {
+      "name": "Donkey",
+      "category": "film",
+      "note": "史莱克"
+    },
+    {
+      "name": "Patrick",
+      "category": "film",
+      "note": "派大星"
+    },
+    {
+      "name": "Goofy",
+      "category": "film",
+      "note": "高飞"
+    },
+    {
+      "name": "Minion",
+      "category": "film",
+      "note": "小黄人"
+    },
+    {
+      "name": "Gru",
+      "category": "film",
+      "note": "神偷奶爸"
+    },
+    {
+      "name": "Godzilla",
+      "category": "film",
+      "note": "哥斯拉"
+    },
+    {
+      "name": "E.T.",
+      "category": "film",
+      "note": "外星人"
+    },
+    {
+      "name": "Wall-E",
+      "category": "film",
+      "note": "机器人总动员"
+    },
+    {
+      "name": "Dory",
+      "category": "film",
+      "note": "海底总动员"
+    },
+    {
+      "name": "Nemo",
+      "category": "film",
+      "note": "海底总动员"
+    },
+    {
+      "name": "Doge",
+      "category": "meme",
+      "note": "柴犬梗"
+    },
+    {
+      "name": "Pepe",
+      "category": "meme",
+      "note": "青蛙Pepe"
+    },
+    {
+      "name": "Wojak",
+      "category": "meme",
+      "note": "沃杰克"
+    },
+    {
+      "name": "Chad",
+      "category": "meme",
+      "note": "Chad梗"
+    },
+    {
+      "name": "Gigachad",
+      "category": "meme",
+      "note": "肌肉Chad"
+    },
+    {
+      "name": "NPC",
+      "category": "meme",
+      "note": "NPC梗"
+    },
+    {
+      "name": "Sigma",
+      "category": "meme",
+      "note": "Sigma Male"
+    },
+    {
+      "name": "Based",
+      "category": "meme",
+      "note": "Based梗"
+    },
+    {
+      "name": "Skibidi",
+      "category": "meme",
+      "note": "Skibidi Toilet"
+    },
+    {
+      "name": "Ohio",
+      "category": "meme",
+      "note": "Only in Ohio"
+    },
+    {
+      "name": "Rizz",
+      "category": "meme",
+      "note": "魅力梗"
+    },
+    {
+      "name": "Sus",
+      "category": "meme",
+      "note": "Among Us"
+    },
+    {
+      "name": "Impostor",
+      "category": "meme",
+      "note": "Among Us"
+    },
+    {
+      "name": "Crewmate",
+      "category": "meme",
+      "note": "Among Us"
+    },
+    {
+      "name": "Amogus",
+      "category": "meme",
+      "note": "Among Us变体"
+    },
+    {
+      "name": "Stonks",
+      "category": "meme",
+      "note": "涨了梗"
+    },
+    {
+      "name": "Rickroll",
+      "category": "meme",
+      "note": "Never Gonna"
+    },
+    {
+      "name": "Nyan Cat",
+      "category": "meme",
+      "note": "彩虹猫"
+    },
+    {
+      "name": "Yeet",
+      "category": "meme",
+      "note": "丢出去"
+    },
+    {
+      "name": "Bonk",
+      "category": "meme",
+      "note": "敲头狗"
+    },
+    {
+      "name": "UwU",
+      "category": "meme",
+      "note": "表情梗"
+    },
+    {
+      "name": "OwO",
+      "category": "meme",
+      "note": "表情梗"
+    },
+    {
+      "name": "Kappa",
+      "category": "meme",
+      "note": "Twitch"
+    },
+    {
+      "name": "PogChamp",
+      "category": "meme",
+      "note": "Twitch"
+    },
+    {
+      "name": "MonkaS",
+      "category": "meme",
+      "note": "Twitch"
+    },
+    {
+      "name": "KEKW",
+      "category": "meme",
+      "note": "Twitch"
+    },
+    {
+      "name": "Baba",
+      "category": "meme",
+      "note": "Baba Is You"
+    },
+    {
+      "name": "Cope",
+      "category": "meme",
+      "note": "Cope梗"
+    },
+    {
+      "name": "Seethe",
+      "category": "meme",
+      "note": "Seethe梗"
+    },
+    {
+      "name": "No Cap",
+      "category": "meme",
+      "note": "不扯谎"
+    },
+    {
+      "name": "Ratio",
+      "category": "meme",
+      "note": "Twitter Ratio"
+    },
+    {
+      "name": "初音未来",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "镜音铃",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "镜音连",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "巡音流歌",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "KAITO",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "MEIKO",
+      "category": "music",
+      "note": "Vocaloid"
+    },
+    {
+      "name": "洛天依",
+      "category": "music",
+      "note": "Vsinger"
+    },
+    {
+      "name": "乐正绫",
+      "category": "music",
+      "note": "Vsinger"
+    },
+    {
+      "name": "Mozart",
+      "category": "music",
+      "note": "莫扎特"
+    },
+    {
+      "name": "Bach",
+      "category": "music",
+      "note": "巴赫"
+    },
+    {
+      "name": "Chopin",
+      "category": "music",
+      "note": "肖邦"
+    },
+    {
+      "name": "Elvis",
+      "category": "music",
+      "note": "猫王"
+    },
+    {
+      "name": "Beyoncé",
+      "category": "music",
+      "note": "碧昂丝"
+    },
+    {
+      "name": "Adele",
+      "category": "music",
+      "note": "阿黛尔"
+    },
+    {
+      "name": "Drake",
+      "category": "music",
+      "note": "说唱"
+    },
+    {
+      "name": "Eminem",
+      "category": "music",
+      "note": "阿姆"
+    },
+    {
+      "name": "周杰伦",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "林俊杰",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "邓紫棋",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "薛之谦",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "五月天",
+      "category": "music",
+      "note": "摇滚乐队"
+    },
+    {
+      "name": "Beyond",
+      "category": "music",
+      "note": "黄家驹"
+    },
+    {
+      "name": "崔健",
+      "category": "music",
+      "note": "摇滚"
+    },
+    {
+      "name": "王菲",
+      "category": "music",
+      "note": "天后"
+    },
+    {
+      "name": "张学友",
+      "category": "music",
+      "note": "歌神"
+    },
+    {
+      "name": "刘德华",
+      "category": "music",
+      "note": "四大天王"
+    },
+    {
+      "name": "BTS",
+      "category": "music",
+      "note": "防弹少年团"
+    },
+    {
+      "name": "IU",
+      "category": "music",
+      "note": "李知恩"
+    },
+    {
+      "name": "Madonna",
+      "category": "music",
+      "note": "麦当娜"
+    },
+    {
+      "name": "梅西",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "C罗",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "贝克汉姆",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "内马尔",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "姆巴佩",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "乔丹",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "科比",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "詹姆斯",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "库里",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "杜兰特",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "姚明",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "易建联",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "费德勒",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "纳达尔",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "德约科维奇",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "李娜",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "孙杨",
+      "category": "sports",
+      "note": "游泳"
+    },
+    {
+      "name": "博尔特",
+      "category": "sports",
+      "note": "短跑"
+    },
+    {
+      "name": "刘翔",
+      "category": "sports",
+      "note": "跨栏"
+    },
+    {
+      "name": "苏炳添",
+      "category": "sports",
+      "note": "短跑"
+    },
+    {
+      "name": "张继科",
+      "category": "sports",
+      "note": "乒乓球"
+    },
+    {
+      "name": "马龙",
+      "category": "sports",
+      "note": "乒乓球"
+    },
+    {
+      "name": "樊振东",
+      "category": "sports",
+      "note": "乒乓球"
+    },
+    {
+      "name": "丁俊晖",
+      "category": "sports",
+      "note": "台球"
+    },
+    {
+      "name": "李小龙",
+      "category": "sports",
+      "note": "功夫"
+    },
+    {
+      "name": "成龙",
+      "category": "sports",
+      "note": "功夫"
+    },
+    {
+      "name": "拳王阿里",
+      "category": "sports",
+      "note": "拳击"
+    },
+    {
+      "name": "泰森",
+      "category": "sports",
+      "note": "拳击"
+    },
+    {
+      "name": "哈登",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "字母哥",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "东契奇",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "哈兰德",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "贝林厄姆",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "007",
+      "category": "other",
+      "note": "邦德代号"
+    },
+    {
+      "name": "R2-D2",
+      "category": "other",
+      "note": "星球大战机器人"
+    },
+    {
+      "name": "C-3PO",
+      "category": "other",
+      "note": "星球大战机器人"
+    },
+    {
+      "name": "BB-8",
+      "category": "other",
+      "note": "星球大战"
+    },
+    {
+      "name": "HAL 9000",
+      "category": "other",
+      "note": "2001太空漫游"
+    },
+    {
+      "name": "JARVIS",
+      "category": "other",
+      "note": "钢铁侠AI"
+    },
+    {
+      "name": "Friday",
+      "category": "other",
+      "note": "钢铁侠AI"
+    },
+    {
+      "name": "Siri",
+      "category": "other",
+      "note": "苹果助手"
+    },
+    {
+      "name": "Alexa",
+      "category": "other",
+      "note": "亚马逊助手"
+    },
+    {
+      "name": "Cortana",
+      "category": "other",
+      "note": "微软助手"
+    },
+    {
+      "name": "Clippy",
+      "category": "other",
+      "note": "Office回形针"
+    },
+    {
+      "name": "Tux",
+      "category": "other",
+      "note": "Linux企鹅"
+    },
+    {
+      "name": "Octocat",
+      "category": "other",
+      "note": "GitHub猫"
+    },
+    {
+      "name": "Bug",
+      "category": "other",
+      "note": "程序员梗"
+    },
+    {
+      "name": "Null",
+      "category": "other",
+      "note": "程序员梗"
+    },
+    {
+      "name": "404",
+      "category": "other",
+      "note": "找不到"
+    },
+    {
+      "name": "Root",
+      "category": "other",
+      "note": "超级用户"
+    },
+    {
+      "name": "Admin",
+      "category": "other",
+      "note": "管理员"
+    },
+    {
+      "name": "Debug",
+      "category": "other",
+      "note": "调试"
+    },
+    {
+      "name": "Kernel",
+      "category": "other",
+      "note": "内核"
+    },
+    {
+      "name": "Pixel",
+      "category": "other",
+      "note": "像素"
+    },
+    {
+      "name": "Byte",
+      "category": "other",
+      "note": "字节"
+    },
+    {
+      "name": "Lambda",
+      "category": "other",
+      "note": "函数式"
+    },
+    {
+      "name": "我爱罗",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "春野樱",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "日向雏田",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "自来也",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "纲手",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "大蛇丸",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "宇智波斑",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "宇智波带土",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "佩恩",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "奈良鹿丸",
+      "category": "anime",
+      "note": "火影忍者"
+    },
+    {
+      "name": "艾斯",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "萨博",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "白胡子",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "凯多",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "女帝",
+      "category": "anime",
+      "note": "海贼王汉库克"
+    },
+    {
+      "name": "特拉法尔加·罗",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "甚平",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "多弗朗明哥",
+      "category": "anime",
+      "note": "海贼王"
+    },
+    {
+      "name": "孙悟饭",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "特兰克斯",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "比克",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "布尔玛",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "魔人布欧",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "神龙",
+      "category": "anime",
+      "note": "龙珠"
+    },
+    {
+      "name": "时透无一郎",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "甘露寺蜜璃",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "宇髄天元",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "童磨",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "猗窝座",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "鬼舞辻无惨",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "栗花落香奈乎",
+      "category": "anime",
+      "note": "鬼灭之刃"
+    },
+    {
+      "name": "七海建人",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "乙骨忧太",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "真人",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "禅院真希",
+      "category": "anime",
+      "note": "咒术回战"
+    },
+    {
+      "name": "电次",
+      "category": "anime",
+      "note": "电锯人"
+    },
+    {
+      "name": "帕瓦",
+      "category": "anime",
+      "note": "电锯人"
+    },
+    {
+      "name": "玛奇玛",
+      "category": "anime",
+      "note": "电锯人"
+    },
+    {
+      "name": "波奇塔",
+      "category": "anime",
+      "note": "电锯人"
+    },
+    {
+      "name": "阿尼亚",
+      "category": "anime",
+      "note": "间谍过家家"
+    },
+    {
+      "name": "约尔",
+      "category": "anime",
+      "note": "间谍过家家"
+    },
+    {
+      "name": "劳埃德",
+      "category": "anime",
+      "note": "间谍过家家"
+    },
+    {
+      "name": "蕾姆",
+      "category": "anime",
+      "note": "Re:从零开始"
+    },
+    {
+      "name": "拉姆",
+      "category": "anime",
+      "note": "Re:从零开始"
+    },
+    {
+      "name": "爱蜜莉雅",
+      "category": "anime",
+      "note": "Re:从零开始"
+    },
+    {
+      "name": "菜月昴",
+      "category": "anime",
+      "note": "Re:从零开始"
+    },
+    {
+      "name": "埼玉",
+      "category": "anime",
+      "note": "一拳超人"
+    },
+    {
+      "name": "杰诺斯",
+      "category": "anime",
+      "note": "一拳超人"
+    },
+    {
+      "name": "阿库娅",
+      "category": "anime",
+      "note": "为美好的世界献上祝福"
+    },
+    {
+      "name": "惠惠",
+      "category": "anime",
+      "note": "为美好的世界献上祝福"
+    },
+    {
+      "name": "空条承太郎",
+      "category": "anime",
+      "note": "JOJO的奇妙冒险"
+    },
+    {
+      "name": "DIO",
+      "category": "anime",
+      "note": "JOJO的奇妙冒险"
+    },
+    {
+      "name": "乔瑟夫",
+      "category": "anime",
+      "note": "JOJO的奇妙冒险"
+    },
+    {
+      "name": "白金之星",
+      "category": "anime",
+      "note": "JOJO替身"
+    },
+    {
+      "name": "明日香",
+      "category": "anime",
+      "note": "EVA"
+    },
+    {
+      "name": "渚薰",
+      "category": "anime",
+      "note": "EVA"
+    },
+    {
+      "name": "服部平次",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "安室透",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "赤井秀一",
+      "category": "anime",
+      "note": "名侦探柯南"
+    },
+    {
+      "name": "一休",
+      "category": "anime",
+      "note": "聪明的一休"
+    },
+    {
+      "name": "阿童木",
+      "category": "anime",
+      "note": "铁臂阿童木"
+    },
+    {
+      "name": "阿拉蕾",
+      "category": "anime",
+      "note": "IQ博士"
+    },
+    {
+      "name": "喜羊羊",
+      "category": "anime",
+      "note": "喜羊羊与灰太狼"
+    },
+    {
+      "name": "灰太狼",
+      "category": "anime",
+      "note": "喜羊羊与灰太狼"
+    },
+    {
+      "name": "光头强",
+      "category": "anime",
+      "note": "熊出没"
+    },
+    {
+      "name": "熊大",
+      "category": "anime",
+      "note": "熊出没"
+    },
+    {
+      "name": "浦饭幽助",
+      "category": "anime",
+      "note": "幽游白书"
+    },
+    {
+      "name": "藏马",
+      "category": "anime",
+      "note": "幽游白书"
+    },
+    {
+      "name": "亚古兽",
+      "category": "anime",
+      "note": "数码宝贝"
+    },
+    {
+      "name": "太一",
+      "category": "anime",
+      "note": "数码宝贝"
+    },
+    {
+      "name": "木之本樱",
+      "category": "anime",
+      "note": "魔卡少女樱"
+    },
+    {
+      "name": "李小狼",
+      "category": "anime",
+      "note": "魔卡少女樱"
+    },
+    {
+      "name": "三井寿",
+      "category": "anime",
+      "note": "灌篮高手"
+    },
+    {
+      "name": "赤木刚宪",
+      "category": "anime",
+      "note": "灌篮高手"
+    },
+    {
+      "name": "宫城良田",
+      "category": "anime",
+      "note": "灌篮高手"
+    },
+    {
+      "name": "日向翔阳",
+      "category": "anime",
+      "note": "排球少年"
+    },
+    {
+      "name": "影山飞雄",
+      "category": "anime",
+      "note": "排球少年"
+    },
+    {
+      "name": "黑子哲也",
+      "category": "anime",
+      "note": "黑子的篮球"
+    },
+    {
+      "name": "越前龙马",
+      "category": "anime",
+      "note": "网球王子"
+    },
+    {
+      "name": "藤原拓海",
+      "category": "anime",
+      "note": "头文字D"
+    },
+    {
+      "name": "大空翼",
+      "category": "anime",
+      "note": "足球小将"
+    },
+    {
+      "name": "御坂美琴",
+      "category": "anime",
+      "note": "某科学的超电磁炮"
+    },
+    {
+      "name": "更木剑八",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "浦原喜助",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "蓝染惣右介",
+      "category": "anime",
+      "note": "死神BLEACH"
+    },
+    {
+      "name": "韩吉",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "莎夏",
+      "category": "anime",
+      "note": "进击的巨人"
+    },
+    {
+      "name": "亚索",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "阿狸",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "提莫",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "盖伦",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "劫",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "金克丝",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "拉克丝",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "锐雯",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "寒冰",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "卡特琳娜",
+      "category": "game",
+      "note": "英雄联盟"
+    },
+    {
+      "name": "温迪",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "迪卢克",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "八重神子",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "神里绫华",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "达达利亚",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "纳西妲",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "枫原万叶",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "芙宁娜",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "那维莱特",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "可莉",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "宵宫",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "夜兰",
+      "category": "game",
+      "note": "原神"
+    },
+    {
+      "name": "卡芙卡",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "银狼",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "希儿",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "镜流",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "黄泉",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "符玄",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "花火",
+      "category": "game",
+      "note": "崩坏星穹铁道"
+    },
+    {
+      "name": "雷电芽衣",
+      "category": "game",
+      "note": "崩坏3"
+    },
+    {
+      "name": "爱莉希雅",
+      "category": "game",
+      "note": "崩坏3"
+    },
+    {
+      "name": "阿米娅",
+      "category": "game",
+      "note": "明日方舟"
+    },
+    {
+      "name": "银灰",
+      "category": "game",
+      "note": "明日方舟"
+    },
+    {
+      "name": "能天使",
+      "category": "game",
+      "note": "明日方舟"
+    },
+    {
+      "name": "德克萨斯",
+      "category": "game",
+      "note": "明日方舟"
+    },
+    {
+      "name": "凯尔希",
+      "category": "game",
+      "note": "明日方舟"
+    },
+    {
+      "name": "阿尔托莉雅",
+      "category": "game",
+      "note": "Fate/命运"
+    },
+    {
+      "name": "玛修",
+      "category": "game",
+      "note": "FGO"
+    },
+    {
+      "name": "吉尔伽美什",
+      "category": "game",
+      "note": "Fate/命运"
+    },
+    {
+      "name": "貂蝉",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "妲己",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "鲁班七号",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "安琪拉",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "露娜",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "孙尚香",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "娜可露露",
+      "category": "game",
+      "note": "王者荣耀"
+    },
+    {
+      "name": "D.Va",
+      "category": "game",
+      "note": "守望先锋"
+    },
+    {
+      "name": "天使",
+      "category": "game",
+      "note": "守望先锋Mercy"
+    },
+    {
+      "name": "死神",
+      "category": "game",
+      "note": "守望先锋Reaper"
+    },
+    {
+      "name": "莱因哈特",
+      "category": "game",
+      "note": "守望先锋"
+    },
+    {
+      "name": "半藏",
+      "category": "game",
+      "note": "守望先锋"
+    },
+    {
+      "name": "Yoshi",
+      "category": "game",
+      "note": "超级马里奥耀西"
+    },
+    {
+      "name": "Toad",
+      "category": "game",
+      "note": "超级马里奥奇诺比奥"
+    },
+    {
+      "name": "Wario",
+      "category": "game",
+      "note": "超级马里奥瓦力欧"
+    },
+    {
+      "name": "Waluigi",
+      "category": "game",
+      "note": "超级马里奥瓦路易吉"
+    },
+    {
+      "name": "Daisy",
+      "category": "game",
+      "note": "超级马里奥黛西"
+    },
+    {
+      "name": "Rosalina",
+      "category": "game",
+      "note": "超级马里奥罗莎塔"
+    },
+    {
+      "name": "超梦",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "喷火龙",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "伊布",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "卡比兽",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "耿鬼",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "甲贺忍蛙",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "路卡利欧",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "谜拟Q",
+      "category": "game",
+      "note": "宝可梦"
+    },
+    {
+      "name": "里昂",
+      "category": "game",
+      "note": "生化危机"
+    },
+    {
+      "name": "艾达·王",
+      "category": "game",
+      "note": "生化危机"
+    },
+    {
+      "name": "威斯克",
+      "category": "game",
+      "note": "生化危机"
+    },
+    {
+      "name": "隆",
+      "category": "game",
+      "note": "街头霸王Ryu"
+    },
+    {
+      "name": "春丽",
+      "category": "game",
+      "note": "街头霸王"
+    },
+    {
+      "name": "豪鬼",
+      "category": "game",
+      "note": "街头霸王"
+    },
+    {
+      "name": "草薙京",
+      "category": "game",
+      "note": "拳皇KOF"
+    },
+    {
+      "name": "八神庵",
+      "category": "game",
+      "note": "拳皇KOF"
+    },
+    {
+      "name": "不知火舞",
+      "category": "game",
+      "note": "拳皇KOF"
+    },
+    {
+      "name": "阿尔萨斯",
+      "category": "game",
+      "note": "魔兽世界"
+    },
+    {
+      "name": "伊利丹",
+      "category": "game",
+      "note": "魔兽世界"
+    },
+    {
+      "name": "希尔瓦娜斯",
+      "category": "game",
+      "note": "魔兽世界"
+    },
+    {
+      "name": "萨尔",
+      "category": "game",
+      "note": "魔兽世界"
+    },
+    {
+      "name": "凯瑞甘",
+      "category": "game",
+      "note": "星际争霸"
+    },
+    {
+      "name": "雷诺",
+      "category": "game",
+      "note": "星际争霸"
+    },
+    {
+      "name": "菈妮",
+      "category": "game",
+      "note": "艾尔登法环"
+    },
+    {
+      "name": "玛莲妮亚",
+      "category": "game",
+      "note": "艾尔登法环"
+    },
+    {
+      "name": "Sans",
+      "category": "game",
+      "note": "传说之下"
+    },
+    {
+      "name": "Papyrus",
+      "category": "game",
+      "note": "传说之下"
+    },
+    {
+      "name": "Frisk",
+      "category": "game",
+      "note": "传说之下"
+    },
+    {
+      "name": "Hornet",
+      "category": "game",
+      "note": "空洞骑士大黄蜂"
+    },
+    {
+      "name": "Noctis",
+      "category": "game",
+      "note": "最终幻想15"
+    },
+    {
+      "name": "Tidus",
+      "category": "game",
+      "note": "最终幻想10"
+    },
+    {
+      "name": "Yuna",
+      "category": "game",
+      "note": "最终幻想10"
+    },
+    {
+      "name": "Chocobo",
+      "category": "game",
+      "note": "最终幻想陆行鸟"
+    },
+    {
+      "name": "Ghost",
+      "category": "game",
+      "note": "使命召唤"
+    },
+    {
+      "name": "Price",
+      "category": "game",
+      "note": "使命召唤普莱斯"
+    },
+    {
+      "name": "Soap",
+      "category": "game",
+      "note": "使命召唤肥皂"
+    },
+    {
+      "name": "帕鲁",
+      "category": "game",
+      "note": "幻兽帕鲁"
+    },
+    {
+      "name": "豌豆射手",
+      "category": "game",
+      "note": "植物大战僵尸"
+    },
+    {
+      "name": "向日葵",
+      "category": "game",
+      "note": "植物大战僵尸"
+    },
+    {
+      "name": "僵尸博士",
+      "category": "game",
+      "note": "植物大战僵尸"
+    },
+    {
+      "name": "Marth",
+      "category": "game",
+      "note": "火焰纹章马尔斯"
+    },
+    {
+      "name": "Lucina",
+      "category": "game",
+      "note": "火焰纹章露琪娜"
+    },
+    {
+      "name": "Scorpion",
+      "category": "game",
+      "note": "真人快打蝎子"
+    },
+    {
+      "name": "Sub-Zero",
+      "category": "game",
+      "note": "真人快打绝对零度"
+    },
+    {
+      "name": "荆轲",
+      "category": "history",
+      "note": "图穷匕见"
+    },
+    {
+      "name": "孙武",
+      "category": "history",
+      "note": "孙子兵法"
+    },
+    {
+      "name": "勾践",
+      "category": "history",
+      "note": "卧薪尝胆"
+    },
+    {
+      "name": "西施",
+      "category": "history",
+      "note": "四大美女"
+    },
+    {
+      "name": "王昭君",
+      "category": "history",
+      "note": "昭君出塞"
+    },
+    {
+      "name": "霍去病",
+      "category": "history",
+      "note": "封狼居胥"
+    },
+    {
+      "name": "卫青",
+      "category": "history",
+      "note": "大汉名将"
+    },
+    {
+      "name": "张骞",
+      "category": "history",
+      "note": "凿空西域"
+    },
+    {
+      "name": "蔡伦",
+      "category": "history",
+      "note": "改进造纸术"
+    },
+    {
+      "name": "杨贵妃",
+      "category": "history",
+      "note": "霓裳羽衣"
+    },
+    {
+      "name": "包拯",
+      "category": "history",
+      "note": "包青天"
+    },
+    {
+      "name": "狄仁杰",
+      "category": "history",
+      "note": "大唐神探"
+    },
+    {
+      "name": "王安石",
+      "category": "history",
+      "note": "熙宁变法"
+    },
+    {
+      "name": "辛弃疾",
+      "category": "history",
+      "note": "词中之龙"
+    },
+    {
+      "name": "陆游",
+      "category": "history",
+      "note": "铁马冰河"
+    },
+    {
+      "name": "郑和",
+      "category": "history",
+      "note": "七下西洋"
+    },
+    {
+      "name": "戚继光",
+      "category": "history",
+      "note": "抗倭名将"
+    },
+    {
+      "name": "李自成",
+      "category": "history",
+      "note": "闯王"
+    },
+    {
+      "name": "郑成功",
+      "category": "history",
+      "note": "收复台湾"
+    },
+    {
+      "name": "林则徐",
+      "category": "history",
+      "note": "虎门销烟"
+    },
+    {
+      "name": "曾国藩",
+      "category": "history",
+      "note": "晚清名臣"
+    },
+    {
+      "name": "慈禧",
+      "category": "history",
+      "note": "晚清太后"
+    },
+    {
+      "name": "孙中山",
+      "category": "history",
+      "note": "革命先行者"
+    },
+    {
+      "name": "王阳明",
+      "category": "history",
+      "note": "知行合一"
+    },
+    {
+      "name": "张居正",
+      "category": "history",
+      "note": "万历首辅"
+    },
+    {
+      "name": "玄奘",
+      "category": "history",
+      "note": "西行取经"
+    },
+    {
+      "name": "马可·波罗",
+      "category": "history",
+      "note": "东方游记"
+    },
+    {
+      "name": "麦哲伦",
+      "category": "history",
+      "note": "环球航行"
+    },
+    {
+      "name": "伊丽莎白一世",
+      "category": "history",
+      "note": "童贞女王"
+    },
+    {
+      "name": "路易十四",
+      "category": "history",
+      "note": "太阳王"
+    },
+    {
+      "name": "玛丽·安托瓦内特",
+      "category": "history",
+      "note": "法国王后"
+    },
+    {
+      "name": "彼得大帝",
+      "category": "history",
+      "note": "俄国改革者"
+    },
+    {
+      "name": "维多利亚女王",
+      "category": "history",
+      "note": "维多利亚时代"
+    },
+    {
+      "name": "甘地",
+      "category": "history",
+      "note": "非暴力不合作"
+    },
+    {
+      "name": "曼德拉",
+      "category": "history",
+      "note": "南非传奇"
+    },
+    {
+      "name": "马丁·路德·金",
+      "category": "history",
+      "note": "我有一个梦想"
+    },
+    {
+      "name": "苏格拉底",
+      "category": "history",
+      "note": "雅典哲人"
+    },
+    {
+      "name": "柏拉图",
+      "category": "history",
+      "note": "理想国"
+    },
+    {
+      "name": "黑胡子",
+      "category": "history",
+      "note": "传奇海盗"
+    },
+    {
+      "name": "斯巴达克斯",
+      "category": "history",
+      "note": "角斗士起义"
+    },
+    {
+      "name": "拉瓦锡",
+      "category": "science",
+      "note": "现代化学之父"
+    },
+    {
+      "name": "诺贝尔",
+      "category": "science",
+      "note": "炸药与大奖"
+    },
+    {
+      "name": "本杰明·富兰克林",
+      "category": "science",
+      "note": "风筝引雷电"
+    },
+    {
+      "name": "焦耳",
+      "category": "science",
+      "note": "能量单位"
+    },
+    {
+      "name": "瓦特",
+      "category": "science",
+      "note": "蒸汽机改良者"
+    },
+    {
+      "name": "胡克",
+      "category": "science",
+      "note": "弹性定律"
+    },
+    {
+      "name": "伦琴",
+      "category": "science",
+      "note": "发现X射线"
+    },
+    {
+      "name": "哈勃",
+      "category": "science",
+      "note": "宇宙在膨胀"
+    },
+    {
+      "name": "卡尔·萨根",
+      "category": "science",
+      "note": "暗淡蓝点"
+    },
+    {
+      "name": "尼尔·泰森",
+      "category": "science",
+      "note": "明星天体物理学家"
+    },
+    {
+      "name": "珍·古道尔",
+      "category": "science",
+      "note": "黑猩猩守护者"
+    },
+    {
+      "name": "屠呦呦",
+      "category": "science",
+      "note": "青蒿素"
+    },
+    {
+      "name": "杨振宁",
+      "category": "science",
+      "note": "诺奖物理学家"
+    },
+    {
+      "name": "李政道",
+      "category": "science",
+      "note": "宇称不守恒"
+    },
+    {
+      "name": "吴健雄",
+      "category": "science",
+      "note": "东方居里夫人"
+    },
+    {
+      "name": "张衡",
+      "category": "science",
+      "note": "地动仪"
+    },
+    {
+      "name": "沈括",
+      "category": "science",
+      "note": "梦溪笔谈"
+    },
+    {
+      "name": "竺可桢",
+      "category": "science",
+      "note": "气象学先驱"
+    },
+    {
+      "name": "李四光",
+      "category": "science",
+      "note": "地质力学"
+    },
+    {
+      "name": "祖冲之",
+      "category": "science",
+      "note": "圆周率高手"
+    },
+    {
+      "name": "刘徽",
+      "category": "science",
+      "note": "割圆术"
+    },
+    {
+      "name": "阿达·洛芙莱斯",
+      "category": "science",
+      "note": "首位程序员"
+    },
+    {
+      "name": "格蕾丝·霍珀",
+      "category": "science",
+      "note": "编译器先驱"
+    },
+    {
+      "name": "凯瑟琳·约翰逊",
+      "category": "science",
+      "note": "NASA人肉计算机"
+    },
+    {
+      "name": "蒂姆·伯纳斯-李",
+      "category": "science",
+      "note": "万维网发明者"
+    },
+    {
+      "name": "林纳斯·托瓦兹",
+      "category": "science",
+      "note": "Linux之父"
+    },
+    {
+      "name": "丹尼斯·里奇",
+      "category": "science",
+      "note": "C语言之父"
+    },
+    {
+      "name": "查尔斯·巴贝奇",
+      "category": "science",
+      "note": "计算机先驱"
+    },
+    {
+      "name": "奥本海默",
+      "category": "science",
+      "note": "原子弹之父"
+    },
+    {
+      "name": "克里克",
+      "category": "science",
+      "note": "DNA双螺旋"
+    },
+    {
+      "name": "哈维",
+      "category": "science",
+      "note": "血液循环"
+    },
+    {
+      "name": "琴纳",
+      "category": "science",
+      "note": "疫苗先驱"
+    },
+    {
+      "name": "巴甫洛夫",
+      "category": "science",
+      "note": "条件反射"
+    },
+    {
+      "name": "林奈",
+      "category": "science",
+      "note": "生物分类学"
+    },
+    {
+      "name": "库仑",
+      "category": "science",
+      "note": "电荷力定律"
+    },
+    {
+      "name": "安培",
+      "category": "science",
+      "note": "电流单位"
+    },
+    {
+      "name": "欧姆",
+      "category": "science",
+      "note": "电阻定律"
+    },
+    {
+      "name": "赫兹",
+      "category": "science",
+      "note": "频率单位"
+    },
+    {
+      "name": "鲁迅",
+      "category": "literature",
+      "note": "横眉冷对"
+    },
+    {
+      "name": "老舍",
+      "category": "literature",
+      "note": "茶馆与骆驼祥子"
+    },
+    {
+      "name": "冰心",
+      "category": "literature",
+      "note": "小桔灯"
+    },
+    {
+      "name": "金庸",
+      "category": "literature",
+      "note": "武侠宗师"
+    },
+    {
+      "name": "古龙",
+      "category": "literature",
+      "note": "浪子与快剑"
+    },
+    {
+      "name": "莫言",
+      "category": "literature",
+      "note": "诺奖作家"
+    },
+    {
+      "name": "张爱玲",
+      "category": "literature",
+      "note": "传奇才女"
+    },
+    {
+      "name": "余华",
+      "category": "literature",
+      "note": "活着"
+    },
+    {
+      "name": "刘慈欣",
+      "category": "literature",
+      "note": "三体作者"
+    },
+    {
+      "name": "三毛",
+      "category": "literature",
+      "note": "撒哈拉的故事"
+    },
+    {
+      "name": "沈从文",
+      "category": "literature",
+      "note": "边城"
+    },
+    {
+      "name": "钱钟书",
+      "category": "literature",
+      "note": "围城"
+    },
+    {
+      "name": "曹雪芹",
+      "category": "literature",
+      "note": "红楼梦作者"
+    },
+    {
+      "name": "罗贯中",
+      "category": "literature",
+      "note": "三国演义作者"
+    },
+    {
+      "name": "施耐庵",
+      "category": "literature",
+      "note": "水浒传作者"
+    },
+    {
+      "name": "吴承恩",
+      "category": "literature",
+      "note": "西游记作者"
+    },
+    {
+      "name": "莎士比亚",
+      "category": "literature",
+      "note": "戏剧之王"
+    },
+    {
+      "name": "简·奥斯汀",
+      "category": "literature",
+      "note": "傲慢与偏见"
+    },
+    {
+      "name": "马克·吐温",
+      "category": "literature",
+      "note": "幽默文学大师"
+    },
+    {
+      "name": "海明威",
+      "category": "literature",
+      "note": "老人与海"
+    },
+    {
+      "name": "托尔斯泰",
+      "category": "literature",
+      "note": "战争与和平"
+    },
+    {
+      "name": "卡夫卡",
+      "category": "literature",
+      "note": "变形记"
+    },
+    {
+      "name": "村上春树",
+      "category": "literature",
+      "note": "挪威的森林"
+    },
+    {
+      "name": "泰戈尔",
+      "category": "literature",
+      "note": "飞鸟集"
+    },
+    {
+      "name": "博尔赫斯",
+      "category": "literature",
+      "note": "迷宫与图书馆"
+    },
+    {
+      "name": "阿Q",
+      "category": "literature",
+      "note": "精神胜利法"
+    },
+    {
+      "name": "孔乙己",
+      "category": "literature",
+      "note": "茴字四种写法"
+    },
+    {
+      "name": "祥子",
+      "category": "literature",
+      "note": "骆驼祥子"
+    },
+    {
+      "name": "小王子",
+      "category": "literature",
+      "note": "来自B612"
+    },
+    {
+      "name": "安妮·雪莉",
+      "category": "literature",
+      "note": "绿山墙的安妮"
+    },
+    {
+      "name": "汤姆·索亚",
+      "category": "literature",
+      "note": "粉刷栅栏高手"
+    },
+    {
+      "name": "哈克贝利·费恩",
+      "category": "literature",
+      "note": "密西西比河少年"
+    },
+    {
+      "name": "简·爱",
+      "category": "literature",
+      "note": "独立女主角"
+    },
+    {
+      "name": "罗切斯特",
+      "category": "literature",
+      "note": "桑菲尔德庄园主"
+    },
+    {
+      "name": "伊丽莎白·班纳特",
+      "category": "literature",
+      "note": "傲慢与偏见女主"
+    },
+    {
+      "name": "达西先生",
+      "category": "literature",
+      "note": "傲慢与偏见男主"
+    },
+    {
+      "name": "基督山伯爵",
+      "category": "literature",
+      "note": "复仇爽文鼻祖"
+    },
+    {
+      "name": "冉阿让",
+      "category": "literature",
+      "note": "悲惨世界"
+    },
+    {
+      "name": "卡西莫多",
+      "category": "literature",
+      "note": "巴黎圣母院"
+    },
+    {
+      "name": "凯特尼斯",
+      "category": "literature",
+      "note": "饥饿游戏神射手"
+    },
+    {
+      "name": "抽象",
+      "category": "meme",
+      "note": "抽象文化/抽象人"
+    },
+    {
+      "name": "典中典",
+      "category": "meme",
+      "note": "经典中的经典"
+    },
+    {
+      "name": "蚌埠住了",
+      "category": "meme",
+      "note": "绷不住谐音梗"
+    },
+    {
+      "name": "绝绝子",
+      "category": "meme",
+      "note": "网络夸张赞美"
+    },
+    {
+      "name": "栓Q",
+      "category": "meme",
+      "note": "Thank you 谐音"
+    },
+    {
+      "name": "遥遥领先",
+      "category": "meme",
+      "note": "华为发布会梗"
+    },
+    {
+      "name": "鸡你太美",
+      "category": "meme",
+      "note": "蔡徐坤篮球梗"
+    },
+    {
+      "name": "只因",
+      "category": "meme",
+      "note": "只因你太美缩写文化"
+    },
+    {
+      "name": "坤坤",
+      "category": "meme",
+      "note": "蔡徐坤粉丝称呼梗化"
+    },
+    {
+      "name": "退退退",
+      "category": "meme",
+      "note": "网暴/劝退名场面"
+    },
+    {
+      "name": "寄",
+      "category": "meme",
+      "note": "寄了=完了"
+    },
+    {
+      "name": "赢",
+      "category": "meme",
+      "note": "赢学/精神胜利"
+    },
+    {
+      "name": "破防",
+      "category": "meme",
+      "note": "心态崩了"
+    },
+    {
+      "name": "拿捏",
+      "category": "meme",
+      "note": "完全掌控"
+    },
+    {
+      "name": "emo",
+      "category": "meme",
+      "note": "情绪低落口头禅"
+    },
+    {
+      "name": "社死",
+      "category": "meme",
+      "note": "社会性死亡"
+    },
+    {
+      "name": "内卷",
+      "category": "meme",
+      "note": "恶性竞争梗"
+    },
+    {
+      "name": "躺平",
+      "category": "meme",
+      "note": "摆烂生活方式"
+    },
+    {
+      "name": "摆烂",
+      "category": "meme",
+      "note": "彻底放弃努力"
+    },
+    {
+      "name": "干饭人",
+      "category": "meme",
+      "note": "热爱吃饭群体"
+    },
+    {
+      "name": "打工人",
+      "category": "meme",
+      "note": "社畜自嘲称呼"
+    },
+    {
+      "name": "集美",
+      "category": "meme",
+      "note": "姐妹称呼网红化"
+    },
+    {
+      "name": "爷青回",
+      "category": "meme",
+      "note": "爷的青春回来了"
+    },
+    {
+      "name": "爷青结",
+      "category": "meme",
+      "note": "爷的青春结束了"
+    },
+    {
+      "name": "真香",
+      "category": "meme",
+      "note": "王境泽名场面"
+    },
+    {
+      "name": "盘他",
+      "category": "meme",
+      "note": "搞定/拿下"
+    },
+    {
+      "name": "奥利给",
+      "category": "meme",
+      "note": "加油谐音梗"
+    },
+    {
+      "name": "yyds",
+      "category": "meme",
+      "note": "永远的神"
+    },
+    {
+      "name": "xswl",
+      "category": "meme",
+      "note": "笑死我了"
+    },
+    {
+      "name": "awsl",
+      "category": "meme",
+      "note": "啊我死了"
+    },
+    {
+      "name": "nsdd",
+      "category": "meme",
+      "note": "你说得对"
+    },
+    {
+      "name": "u1s1",
+      "category": "meme",
+      "note": "有一说一"
+    },
+    {
+      "name": "dbq",
+      "category": "meme",
+      "note": "对不起缩写"
+    },
+    {
+      "name": "dd",
+      "category": "meme",
+      "note": "打打/顶顶"
+    },
+    {
+      "name": "芜湖起飞",
+      "category": "meme",
+      "note": "嘉然/抽象直播梗"
+    },
+    {
+      "name": "嘉然",
+      "category": "meme",
+      "note": "A-SOUL/嘉心糖"
+    },
+    {
+      "name": "向晚",
+      "category": "meme",
+      "note": "A-SOUL成员"
+    },
+    {
+      "name": "贝拉",
+      "category": "meme",
+      "note": "A-SOUL成员"
+    },
+    {
+      "name": "乃琳",
+      "category": "meme",
+      "note": "A-SOUL成员"
+    },
+    {
+      "name": "嘉心糖",
+      "category": "meme",
+      "note": "嘉然粉丝名"
+    },
+    {
+      "name": "丁真",
+      "category": "meme",
+      "note": "电子烟梗/理塘"
+    },
+    {
+      "name": "理塘",
+      "category": "meme",
+      "note": "丁真出圈地标"
+    },
+    {
+      "name": "雪豹闭嘴",
+      "category": "meme",
+      "note": "抽象动物梗"
+    },
+    {
+      "name": "锐评",
+      "category": "meme",
+      "note": "尖锐点评文化"
+    },
+    {
+      "name": "整活",
+      "category": "meme",
+      "note": "搞怪表演"
+    },
+    {
+      "name": "整蛊",
+      "category": "meme",
+      "note": "恶搞整人"
+    },
+    {
+      "name": "嘴替",
+      "category": "meme",
+      "note": "替大家说出心声"
+    },
+    {
+      "name": "嘴硬",
+      "category": "meme",
+      "note": "死不承认"
+    },
+    {
+      "name": "嘴遁",
+      "category": "meme",
+      "note": "靠嘴逃跑"
+    },
+    {
+      "name": "哈基米",
+      "category": "meme",
+      "note": "猫猫/抽象谐音"
+    },
+    {
+      "name": "曼波",
+      "category": "meme",
+      "note": "抽象口癖梗"
+    },
+    {
+      "name": "叮咚鸡",
+      "category": "meme",
+      "note": "抽象口播梗"
+    },
+    {
+      "name": "大哥大",
+      "category": "meme",
+      "note": "复古潮人梗"
+    },
+    {
+      "name": "老六",
+      "category": "meme",
+      "note": "阴人/偷袭玩家"
+    },
+    {
+      "name": "阴人",
+      "category": "meme",
+      "note": "背地里整人"
+    },
+    {
+      "name": "退堂鼓",
+      "category": "meme",
+      "note": "临阵退缩"
+    },
+    {
+      "name": "典",
+      "category": "meme",
+      "note": "太典型了"
+    },
+    {
+      "name": "孝",
+      "category": "meme",
+      "note": "抽象弹幕评价"
+    },
+    {
+      "name": "急了",
+      "category": "meme",
+      "note": "嘲讽对方破防"
+    },
+    {
+      "name": "红温",
+      "category": "meme",
+      "note": "气到脸红"
+    },
+    {
+      "name": "已读乱回",
+      "category": "meme",
+      "note": "聊天摸鱼梗"
+    },
+    {
+      "name": "已读不回",
+      "category": "meme",
+      "note": "已读不回创伤"
+    },
+    {
+      "name": "摸鱼",
+      "category": "meme",
+      "note": "上班划水"
+    },
+    {
+      "name": "划水",
+      "category": "meme",
+      "note": "偷懒不出力"
+    },
+    {
+      "name": "吃瓜",
+      "category": "meme",
+      "note": "围观八卦"
+    },
+    {
+      "name": "瓜田",
+      "category": "meme",
+      "note": "八卦现场"
+    },
+    {
+      "name": "开香槟",
+      "category": "meme",
+      "note": "提前庆祝翻车"
+    },
+    {
+      "name": "太抽象了",
+      "category": "meme",
+      "note": "抽象评价口头禅"
+    },
+    {
+      "name": "家人们",
+      "category": "meme",
+      "note": "短视频口头禅"
+    },
+    {
+      "name": "谁懂啊",
+      "category": "meme",
+      "note": "短视频共鸣句"
+    },
+    {
+      "name": "救命",
+      "category": "meme",
+      "note": "夸张感叹口头禅"
+    },
+    {
+      "name": "无语子",
+      "category": "meme",
+      "note": "无语变体"
+    },
+    {
+      "name": "好家伙",
+      "category": "meme",
+      "note": "惊讶感叹"
+    },
+    {
+      "name": "就这",
+      "category": "meme",
+      "note": "嘲讽不过尔尔"
+    },
+    {
+      "name": "不愧是你",
+      "category": "meme",
+      "note": "阴阳怪气夸赞"
+    },
+    {
+      "name": "有被爽到",
+      "category": "meme",
+      "note": "观感畅快"
+    },
+    {
+      "name": "CPU烧了",
+      "category": "meme",
+      "note": "信息过载梗"
+    },
+    {
+      "name": "脑容量不足",
+      "category": "meme",
+      "note": "处理不过来"
+    },
+    {
+      "name": "人机",
+      "category": "meme",
+      "note": "像机器人一样"
+    },
+    {
+      "name": "纯爱战神",
+      "category": "meme",
+      "note": "恋爱脑褒义梗"
+    },
+    {
+      "name": "恋爱脑",
+      "category": "meme",
+      "note": "只想谈恋爱"
+    },
+    {
+      "name": "饭圈",
+      "category": "meme",
+      "note": "粉丝圈文化"
+    },
+    {
+      "name": "嗑糖",
+      "category": "meme",
+      "note": "磕CP甜蜜"
+    },
+    {
+      "name": "刀片",
+      "category": "meme",
+      "note": "虐心剧情"
+    },
+    {
+      "name": "BE美学",
+      "category": "meme",
+      "note": "悲剧结局审美"
+    },
+    {
+      "name": "HE战士",
+      "category": "meme",
+      "note": "只爱圆满结局"
+    },
+    {
+      "name": "中之人",
+      "category": "meme",
+      "note": "虚拟主播背后的人"
+    },
+    {
+      "name": "电子宠物",
+      "category": "meme",
+      "note": "粉丝自嘲称呼"
+    },
+    {
+      "name": "电子榨菜",
+      "category": "meme",
+      "note": "下饭内容"
+    },
+    {
+      "name": "精神食粮",
+      "category": "meme",
+      "note": "灵魂补给内容"
+    },
+    {
+      "name": "赛博朋克",
+      "category": "other",
+      "note": "赛博流行美学"
+    },
+    {
+      "name": "赛博功德",
+      "category": "meme",
+      "note": "网上做好事"
+    },
+    {
+      "name": "赛博算命",
+      "category": "meme",
+      "note": "AI/网络占卜"
+    },
+    {
+      "name": "数字游民",
+      "category": "other",
+      "note": "远程打工生活方式"
+    },
+    {
+      "name": "显眼包",
+      "category": "meme",
+      "note": "爱出风头的人"
+    },
+    {
+      "name": "显眼包本包",
+      "category": "meme",
+      "note": "显眼包加强版"
+    },
+    {
+      "name": "嘴替本替",
+      "category": "meme",
+      "note": "嘴替加强版"
+    },
+    {
+      "name": "颜值担当",
+      "category": "other",
+      "note": "团队门面"
+    },
+    {
+      "name": "气氛组",
+      "category": "meme",
+      "note": "负责整活的人"
+    },
+    {
+      "name": "工具人",
+      "category": "meme",
+      "note": "被当工具使"
+    },
+    {
+      "name": "备胎",
+      "category": "meme",
+      "note": "恋爱备选"
+    },
+    {
+      "name": "海王",
+      "category": "meme",
+      "note": "多线撩人"
+    },
+    {
+      "name": "海女王",
+      "category": "meme",
+      "note": "女性海王"
+    },
+    {
+      "name": "PUA",
+      "category": "meme",
+      "note": "情感操控梗"
+    },
+    {
+      "name": "爹味",
+      "category": "meme",
+      "note": "说教感很强"
+    },
+    {
+      "name": "爹味发言",
+      "category": "meme",
+      "note": "爹味加强版"
+    },
+    {
+      "name": "姐就是女王",
+      "category": "meme",
+      "note": "自信宣言"
+    },
+    {
+      "name": "姐的姐感",
+      "category": "meme",
+      "note": "成熟姐姐气质"
+    },
+    {
+      "name": "姐系",
+      "category": "other",
+      "note": "姐姐系人设"
+    },
+    {
+      "name": "弟系",
+      "category": "other",
+      "note": "弟弟系人设"
+    },
+    {
+      "name": "Delulu",
+      "category": "meme",
+      "note": "妄想自信 Gen Z"
+    },
+    {
+      "name": "Slay",
+      "category": "meme",
+      "note": "太绝了"
+    },
+    {
+      "name": "Ate",
+      "category": "meme",
+      "note": "表现炸裂"
+    },
+    {
+      "name": "Corecore",
+      "category": "meme",
+      "note": "TikTok情绪拼接美学"
+    },
+    {
+      "name": "Brainrot",
+      "category": "meme",
+      "note": "大脑腐烂梗"
+    },
+    {
+      "name": "Gyatt",
+      "category": "meme",
+      "note": "Gen Z惊叹梗"
+    },
+    {
+      "name": "Mewing",
+      "category": "meme",
+      "note": "下颌线训练梗"
+    },
+    {
+      "name": "Aura",
+      "category": "meme",
+      "note": "气场值梗"
+    },
+    {
+      "name": "Cooked",
+      "category": "meme",
+      "note": "彻底完蛋"
+    },
+    {
+      "name": "Boy Math",
+      "category": "meme",
+      "note": "男生消费账算法"
+    },
+    {
+      "name": "Red Flag",
+      "category": "meme",
+      "note": "危险信号"
+    },
+    {
+      "name": "E-Girl",
+      "category": "other",
+      "note": "电子女孩妆造"
+    },
+    {
+      "name": "E-Boy",
+      "category": "other",
+      "note": "电子男孩妆造"
+    },
+    {
+      "name": "TikToker",
+      "category": "other",
+      "note": "短视频创作者"
+    },
+    {
+      "name": "Ratio'd",
+      "category": "meme",
+      "note": "被盖楼嘲讽"
+    },
+    {
+      "name": "Subtweet",
+      "category": "meme",
+      "note": "影射式吐槽"
+    },
+    {
+      "name": "W Take",
+      "category": "meme",
+      "note": "高质量观点"
+    },
+    {
+      "name": "L Take",
+      "category": "meme",
+      "note": "离谱观点"
+    },
+    {
+      "name": "Mid",
+      "category": "meme",
+      "note": "平庸评价"
+    },
+    {
+      "name": "Goated",
+      "category": "meme",
+      "note": "GOAT 级别"
+    },
+    {
+      "name": "Bussin",
+      "category": "meme",
+      "note": "好吃到爆"
+    },
+    {
+      "name": "On God",
+      "category": "meme",
+      "note": "我对天发誓"
+    },
+    {
+      "name": "Lowkey",
+      "category": "meme",
+      "note": "暗暗地"
+    },
+    {
+      "name": "Highkey",
+      "category": "meme",
+      "note": "明晃晃地"
+    },
+    {
+      "name": "Ick",
+      "category": "meme",
+      "note": "瞬间祛魅点"
+    },
+    {
+      "name": "The Ick",
+      "category": "meme",
+      "note": "恋爱祛魅瞬间"
+    },
+    {
+      "name": "Pick Me",
+      "category": "meme",
+      "note": "求关注人设"
+    },
+    {
+      "name": "Nice Guy",
+      "category": "meme",
+      "note": "表面好人"
+    },
+    {
+      "name": "Malewife",
+      "category": "meme",
+      "note": "居家好男人"
+    },
+    {
+      "name": "Girlboss",
+      "category": "meme",
+      "note": "独立女强人"
+    },
+    {
+      "name": "Gaslight",
+      "category": "meme",
+      "note": "煤气灯效应"
+    },
+    {
+      "name": "Gatekeep",
+      "category": "meme",
+      "note": "捂盘不分享"
+    },
+    {
+      "name": "Dua Lipa",
+      "category": "music",
+      "note": "Dance pop"
+    },
+    {
+      "name": "Doja Cat",
+      "category": "music",
+      "note": "说唱流行"
+    },
+    {
+      "name": "Lizzo",
+      "category": "music",
+      "note": "自信流行"
+    },
+    {
+      "name": "SZA",
+      "category": "music",
+      "note": "R&B 人气"
+    },
+    {
+      "name": "Cardi B",
+      "category": "music",
+      "note": "说唱流行"
+    },
+    {
+      "name": "Rosalía",
+      "category": "music",
+      "note": "西班牙流行"
+    },
+    {
+      "name": "Rihanna",
+      "category": "music",
+      "note": "流行天后"
+    },
+    {
+      "name": "The 1975",
+      "category": "music",
+      "note": "独立流行乐队"
+    },
+    {
+      "name": "Coldplay",
+      "category": "music",
+      "note": "另类摇滚"
+    },
+    {
+      "name": "NewJeans",
+      "category": "music",
+      "note": "K-pop 女团"
+    },
+    {
+      "name": "IVE",
+      "category": "music",
+      "note": "K-pop 女团"
+    },
+    {
+      "name": "aespa",
+      "category": "music",
+      "note": "K-pop 元宇宙女团"
+    },
+    {
+      "name": "(G)I-DLE",
+      "category": "music",
+      "note": "K-pop 女团"
+    },
+    {
+      "name": "TXT",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "ENHYPEN",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "TWICE",
+      "category": "music",
+      "note": "K-pop 女团"
+    },
+    {
+      "name": "ITZY",
+      "category": "music",
+      "note": "K-pop 女团"
+    },
+    {
+      "name": "ATEEZ",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "NCT",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "EXO",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "GOT7",
+      "category": "music",
+      "note": "K-pop 男团"
+    },
+    {
+      "name": "Jennie",
+      "category": "music",
+      "note": "BLACKPINK 成员"
+    },
+    {
+      "name": "Lisa",
+      "category": "music",
+      "note": "BLACKPINK 成员"
+    },
+    {
+      "name": "Jisoo",
+      "category": "music",
+      "note": "BLACKPINK 成员"
+    },
+    {
+      "name": "Rosé",
+      "category": "music",
+      "note": "BLACKPINK 成员"
+    },
+    {
+      "name": "Jimin",
+      "category": "music",
+      "note": "BTS 成员"
+    },
+    {
+      "name": "V BTS",
+      "category": "music",
+      "note": "BTS 金泰亨"
+    },
+    {
+      "name": "RM",
+      "category": "music",
+      "note": "BTS 队长"
+    },
+    {
+      "name": "SUGA",
+      "category": "music",
+      "note": "BTS 成员"
+    },
+    {
+      "name": "j-hope",
+      "category": "music",
+      "note": "BTS 成员"
+    },
+    {
+      "name": "Jin",
+      "category": "music",
+      "note": "BTS 成员"
+    },
+    {
+      "name": "G-Dragon",
+      "category": "music",
+      "note": "BIGBANG"
+    },
+    {
+      "name": "PSY",
+      "category": "music",
+      "note": "江南Style"
+    },
+    {
+      "name": "华晨宇",
+      "category": "music",
+      "note": "火星人"
+    },
+    {
+      "name": "毛不易",
+      "category": "music",
+      "note": "民谣流行"
+    },
+    {
+      "name": "李荣浩",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "许嵩",
+      "category": "music",
+      "note": "词曲创作人"
+    },
+    {
+      "name": "汪苏泷",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "张杰",
+      "category": "music",
+      "note": "华语男声"
+    },
+    {
+      "name": "张韶涵",
+      "category": "music",
+      "note": "华语女声"
+    },
+    {
+      "name": "蔡依林",
+      "category": "music",
+      "note": "舞曲天后"
+    },
+    {
+      "name": "萧敬腾",
+      "category": "music",
+      "note": "情歌王子"
+    },
+    {
+      "name": "潘玮柏",
+      "category": "music",
+      "note": "嘻哈流行"
+    },
+    {
+      "name": "罗志祥",
+      "category": "music",
+      "note": "舞蹈天王"
+    },
+    {
+      "name": "陈奕迅",
+      "category": "music",
+      "note": "粤语流行"
+    },
+    {
+      "name": "李克勤",
+      "category": "music",
+      "note": "粤语流行"
+    },
+    {
+      "name": "容祖儿",
+      "category": "music",
+      "note": "粤语女声"
+    },
+    {
+      "name": "杨千嬅",
+      "category": "music",
+      "note": "粤语女声"
+    },
+    {
+      "name": "陶喆",
+      "category": "music",
+      "note": "R&B 教父"
+    },
+    {
+      "name": "王力宏",
+      "category": "music",
+      "note": "华语流行"
+    },
+    {
+      "name": "周兴哲",
+      "category": "music",
+      "note": "情歌创作"
+    },
+    {
+      "name": "告五人",
+      "category": "music",
+      "note": "独立流行乐队"
+    },
+    {
+      "name": "茄子蛋",
+      "category": "music",
+      "note": "台语流行"
+    },
+    {
+      "name": "草东没有派对",
+      "category": "music",
+      "note": "独立摇滚"
+    },
+    {
+      "name": "八三夭",
+      "category": "music",
+      "note": "摇滚乐队"
+    },
+    {
+      "name": "苏打绿",
+      "category": "music",
+      "note": "独立流行"
+    },
+    {
+      "name": "鱼丁糸",
+      "category": "music",
+      "note": "苏打绿变体"
+    },
+    {
+      "name": "万能青年旅店",
+      "category": "music",
+      "note": "独立摇滚"
+    },
+    {
+      "name": "痛仰",
+      "category": "music",
+      "note": "摇滚乐队"
+    },
+    {
+      "name": "新裤子",
+      "category": "music",
+      "note": "朋克流行"
+    },
+    {
+      "name": "刺猬",
+      "category": "music",
+      "note": "独立摇滚"
+    },
+    {
+      "name": "逃跑计划",
+      "category": "music",
+      "note": "夜空中最亮的星"
+    },
+    {
+      "name": "朴树",
+      "category": "music",
+      "note": "民谣流行"
+    },
+    {
+      "name": "李志",
+      "category": "music",
+      "note": "民谣"
+    },
+    {
+      "name": "赵雷",
+      "category": "music",
+      "note": "成都民谣"
+    },
+    {
+      "name": "陈粒",
+      "category": "music",
+      "note": "独立女声"
+    },
+    {
+      "name": "房东的猫",
+      "category": "music",
+      "note": "民谣组合"
+    },
+    {
+      "name": "好妹妹",
+      "category": "music",
+      "note": "民谣组合"
+    },
+    {
+      "name": "G.E.M.",
+      "category": "music",
+      "note": "邓紫棋英文名"
+    },
+    {
+      "name": "Jay Chou",
+      "category": "music",
+      "note": "周杰伦英文名"
+    },
+    {
+      "name": "Espresso",
+      "category": "music",
+      "note": "Sabrina 爆曲"
+    },
+    {
+      "name": "APT.",
+      "category": "music",
+      "note": "Rosé x Bruno 爆曲"
+    },
+    {
+      "name": "Flowers",
+      "category": "music",
+      "note": "Miley 爆曲"
+    },
+    {
+      "name": "good 4 u",
+      "category": "music",
+      "note": "Olivia Rodrigo 单曲"
+    },
+    {
+      "name": "Stay",
+      "category": "music",
+      "note": "The Kid LAROI 合唱"
+    },
+    {
+      "name": "Peaches",
+      "category": "music",
+      "note": "Justin Bieber 单曲"
+    },
+    {
+      "name": "MONTERO",
+      "category": "music",
+      "note": "Lil Nas X 专辑曲"
+    },
+    {
+      "name": "Vampire",
+      "category": "music",
+      "note": "Olivia Rodrigo 单曲"
+    },
+    {
+      "name": "Nonsense",
+      "category": "music",
+      "note": "Sabrina Carpenter 单曲"
+    },
+    {
+      "name": "Taste",
+      "category": "music",
+      "note": "Sabrina Carpenter 单曲"
+    },
+    {
+      "name": "Houdini",
+      "category": "music",
+      "note": "Dua Lipa / Eminem 曲名"
+    },
+    {
+      "name": "360",
+      "category": "music",
+      "note": "Charli XCX 单曲"
+    },
+    {
+      "name": "Apple",
+      "category": "music",
+      "note": "Charli XCX 舞蹈曲"
+    },
+    {
+      "name": "Rush",
+      "category": "music",
+      "note": "Troye / 流行曲名"
+    },
+    {
+      "name": "Water",
+      "category": "music",
+      "note": "Tyla 爆曲"
+    },
+    {
+      "name": "Unholy",
+      "category": "music",
+      "note": "Sam Smith 合唱"
+    },
+    {
+      "name": "Ashes",
+      "category": "music",
+      "note": "流行曲名梗"
+    },
+    {
+      "name": "夜空中最亮的星",
+      "category": "music",
+      "note": "逃跑计划名曲"
+    },
+    {
+      "name": "消愁",
+      "category": "music",
+      "note": "毛不易成名曲"
+    },
+    {
+      "name": "像我这样的人",
+      "category": "music",
+      "note": "毛不易"
+    },
+    {
+      "name": "成都",
+      "category": "music",
+      "note": "赵雷名曲"
+    },
+    {
+      "name": "南山南",
+      "category": "music",
+      "note": "马頔名曲"
+    },
+    {
+      "name": "理想三旬",
+      "category": "music",
+      "note": "陈鸿宇"
+    },
+    {
+      "name": "起风了",
+      "category": "music",
+      "note": "买辣椒也用券"
+    },
+    {
+      "name": "阳光开朗大男孩",
+      "category": "meme",
+      "note": "人设反差梗"
+    },
+    {
+      "name": "阴湿男鬼",
+      "category": "meme",
+      "note": "阴湿人设梗"
+    },
+    {
+      "name": "班味",
+      "category": "meme",
+      "note": "上班味儿很重"
+    },
+    {
+      "name": "班味儿清除",
+      "category": "meme",
+      "note": "下班去班味"
+    },
+    {
+      "name": "电子榨菜本菜",
+      "category": "meme",
+      "note": "下饭本饭"
+    },
+    {
+      "name": "精神状态良好",
+      "category": "meme",
+      "note": "反讽精神状态"
+    },
+    {
+      "name": "精神状态极差",
+      "category": "meme",
+      "note": "抽象自嘲"
+    },
+    {
+      "name": "已老实求放过",
+      "category": "meme",
+      "note": "认怂口头禅"
+    },
+    {
+      "name": "已老实求饶",
+      "category": "meme",
+      "note": "认怂变体"
+    },
+    {
+      "name": "栓Q我真的会谢",
+      "category": "meme",
+      "note": "栓Q加强版"
+    },
+    {
+      "name": "尊嘟假嘟",
+      "category": "meme",
+      "note": "真的假的软萌说法"
+    },
+    {
+      "name": "退退退退退",
+      "category": "meme",
+      "note": "退退退加强版"
+    },
+    {
+      "name": "哈基米叮咚鸡",
+      "category": "meme",
+      "note": "抽象口癖合体"
+    },
+    {
+      "name": "曼波哈基米",
+      "category": "meme",
+      "note": "抽象双连"
+    },
+    {
+      "name": "电子木鱼",
+      "category": "meme",
+      "note": "网上积功德"
+    },
+    {
+      "name": "赛博木鱼",
+      "category": "meme",
+      "note": "电子积德"
+    },
+    {
+      "name": "功德+1",
+      "category": "meme",
+      "note": "积德计数"
+    },
+    {
+      "name": "功德无量",
+      "category": "meme",
+      "note": "功德拉满"
+    },
+    {
+      "name": "草船借箭",
+      "category": "meme",
+      "note": "借势整活梗"
+    },
+    {
+      "name": "遥遥领先本领",
+      "category": "meme",
+      "note": "遥遥领先加强"
+    },
+    {
+      "name": "人类高质量男性",
+      "category": "meme",
+      "note": "罗永浩梗反差"
+    },
+    {
+      "name": "人类高质量女性",
+      "category": "meme",
+      "note": "高质量系列"
+    },
+    {
+      "name": "社畜本畜",
+      "category": "meme",
+      "note": "打工人极致版"
+    },
+    {
+      "name": "打工人打工魂",
+      "category": "meme",
+      "note": "打工口号"
+    },
+    {
+      "name": "干饭不积极",
+      "category": "meme",
+      "note": "干饭人变体"
+    },
+    {
+      "name": "思想有多远",
+      "category": "meme",
+      "note": "你就给我滚多远"
+    },
+    {
+      "name": "我直接好家伙",
+      "category": "meme",
+      "note": "好家伙加强"
+    },
+    {
+      "name": "属实给整无语了",
+      "category": "meme",
+      "note": "无语加强版"
+    },
+    {
+      "name": "属实有被逗到",
+      "category": "meme",
+      "note": "被逗乐说法"
+    },
+    {
+      "name": "属实有被感动到",
+      "category": "meme",
+      "note": "感动说法"
+    },
+    {
+      "name": "Ant-Man",
+      "category": "film",
+      "note": "漫威蚁人"
+    },
+    {
+      "name": "Groot",
+      "category": "film",
+      "note": "银河护卫队"
+    },
+    {
+      "name": "Rocket",
+      "category": "film",
+      "note": "银河护卫队浣熊"
+    },
+    {
+      "name": "Gamora",
+      "category": "film",
+      "note": "银河护卫队"
+    },
+    {
+      "name": "Drax",
+      "category": "film",
+      "note": "银河护卫队"
+    },
+    {
+      "name": "Nebula",
+      "category": "film",
+      "note": "银河护卫队"
+    },
+    {
+      "name": "Hawkeye",
+      "category": "film",
+      "note": "漫威鹰眼"
+    },
+    {
+      "name": "Ultron",
+      "category": "film",
+      "note": "漫威奥创"
+    },
+    {
+      "name": "Magneto",
+      "category": "film",
+      "note": "X战警万磁王"
+    },
+    {
+      "name": "Venom",
+      "category": "film",
+      "note": "毒液"
+    },
+    {
+      "name": "Punisher",
+      "category": "film",
+      "note": "惩罚者"
+    },
+    {
+      "name": "Cyborg",
+      "category": "film",
+      "note": "DC钢骨"
+    },
+    {
+      "name": "Shazam",
+      "category": "film",
+      "note": "DC沙赞"
+    },
+    {
+      "name": "Two-Face",
+      "category": "film",
+      "note": "DC双面人"
+    },
+    {
+      "name": "Bane",
+      "category": "film",
+      "note": "DC贝恩"
+    },
+    {
+      "name": "Penguin",
+      "category": "film",
+      "note": "DC企鹅人"
+    },
+    {
+      "name": "Darkseid",
+      "category": "film",
+      "note": "DC达克赛德"
+    },
+    {
+      "name": "Megatron",
+      "category": "film",
+      "note": "变形金刚威震天"
+    },
+    {
+      "name": "Po",
+      "category": "film",
+      "note": "功夫熊猫"
+    },
+    {
+      "name": "Aladdin",
+      "category": "film",
+      "note": "阿拉丁"
+    },
+    {
+      "name": "Moana",
+      "category": "film",
+      "note": "海洋奇缘"
+    },
+    {
+      "name": "Rey",
+      "category": "film",
+      "note": "星球大战"
+    },
+    {
+      "name": "潘",
+      "category": "myth",
+      "note": "希腊神话牧神"
+    },
+    {
+      "name": "厄洛斯",
+      "category": "myth",
+      "note": "希腊爱神丘比特"
+    },
+    {
+      "name": "珀耳塞福涅",
+      "category": "myth",
+      "note": "希腊冥后"
+    },
+    {
+      "name": "忒修斯",
+      "category": "myth",
+      "note": "希腊英雄"
+    },
+    {
+      "name": "伊卡洛斯",
+      "category": "myth",
+      "note": "希腊蜡翼少年"
+    },
+    {
+      "name": "潘多拉",
+      "category": "myth",
+      "note": "希腊潘多拉魔盒"
+    },
+    {
+      "name": "那西索斯",
+      "category": "myth",
+      "note": "希腊水仙少年"
+    },
+    {
+      "name": "米诺陶",
+      "category": "myth",
+      "note": "希腊牛头怪"
+    },
+    {
+      "name": "巴德尔",
+      "category": "myth",
+      "note": "北欧光明神"
+    },
+    {
+      "name": "海姆达尔",
+      "category": "myth",
+      "note": "北欧守护神"
+    },
+    {
+      "name": "提尔",
+      "category": "myth",
+      "note": "北欧战神"
+    },
+    {
+      "name": "芙丽嘉",
+      "category": "myth",
+      "note": "北欧众神之母"
+    },
+    {
+      "name": "尤弥尔",
+      "category": "myth",
+      "note": "北欧巨人始祖"
+    },
+    {
+      "name": "斯莱普尼尔",
+      "category": "myth",
+      "note": "北欧奥丁的八足神马"
+    },
+    {
+      "name": "太上老君",
+      "category": "myth",
+      "note": "中国道教神话"
+    },
+    {
+      "name": "白娘子",
+      "category": "myth",
+      "note": "白蛇传"
+    },
+    {
+      "name": "许仙",
+      "category": "myth",
+      "note": "白蛇传"
+    },
+    {
+      "name": "牛魔王",
+      "category": "myth",
+      "note": "西游记神话"
+    },
+    {
+      "name": "铁扇公主",
+      "category": "myth",
+      "note": "西游记"
+    },
+    {
+      "name": "哮天犬",
+      "category": "myth",
+      "note": "二郎神神犬"
+    },
+    {
+      "name": "共工",
+      "category": "myth",
+      "note": "中国神话撞天柱"
+    },
+    {
+      "name": "精卫",
+      "category": "myth",
+      "note": "精卫填海"
+    },
+    {
+      "name": "蚩尤",
+      "category": "myth",
+      "note": "中国神话战神"
+    },
+    {
+      "name": "荷鲁斯",
+      "category": "myth",
+      "note": "埃及天空之神"
+    },
+    {
+      "name": "图特",
+      "category": "myth",
+      "note": "埃及智慧之神"
+    },
+    {
+      "name": "阿蒙",
+      "category": "myth",
+      "note": "埃及众神之王"
+    },
+    {
+      "name": "因陀罗",
+      "category": "myth",
+      "note": "印度雷神"
+    },
+    {
+      "name": "哈努曼",
+      "category": "myth",
+      "note": "印度神猴"
+    },
+    {
+      "name": "象头神",
+      "category": "myth",
+      "note": "印度伽内什"
+    },
+    {
+      "name": "梵天",
+      "category": "myth",
+      "note": "印度创造神"
+    },
+    {
+      "name": "天照",
+      "category": "myth",
+      "note": "日本太阳神"
+    },
+    {
+      "name": "素戔呜",
+      "category": "myth",
+      "note": "日本风暴神"
+    },
+    {
+      "name": "九尾狐",
+      "category": "myth",
+      "note": "东方神话妖狐"
+    },
+    {
+      "name": "梅林",
+      "category": "myth",
+      "note": "亚瑟王传说法师"
+    },
+    {
+      "name": "亚瑟王",
+      "category": "myth",
+      "note": "圆桌骑士传说"
+    },
+    {
+      "name": "罗纳尔多",
+      "category": "sports",
+      "note": "足球外星人"
+    },
+    {
+      "name": "罗纳尔迪尼奥",
+      "category": "sports",
+      "note": "足球小罗"
+    },
+    {
+      "name": "齐达内",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "马拉多纳",
+      "category": "sports",
+      "note": "足球球王"
+    },
+    {
+      "name": "贝利",
+      "category": "sports",
+      "note": "足球球王"
+    },
+    {
+      "name": "克鲁伊夫",
+      "category": "sports",
+      "note": "足球全攻全守"
+    },
+    {
+      "name": "维尼修斯",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "莫德里奇",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "萨拉赫",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "孙兴慜",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "凯恩",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "苏亚雷斯",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "格列兹曼",
+      "category": "sports",
+      "note": "足球"
+    },
+    {
+      "name": "奥尼尔",
+      "category": "sports",
+      "note": "篮球大鲨鱼"
+    },
+    {
+      "name": "邓肯",
+      "category": "sports",
+      "note": "篮球石佛"
+    },
+    {
+      "name": "艾弗森",
+      "category": "sports",
+      "note": "篮球答案"
+    },
+    {
+      "name": "韦德",
+      "category": "sports",
+      "note": "篮球闪电侠"
+    },
+    {
+      "name": "威少",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "卡哇伊",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "约基奇",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "欧文",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "魔术师约翰逊",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "大鸟伯德",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "大梦奥拉朱旺",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "张伯伦",
+      "category": "sports",
+      "note": "篮球"
+    },
+    {
+      "name": "小威廉姆斯",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "大威廉姆斯",
+      "category": "sports",
+      "note": "网球"
+    },
+    {
+      "name": "阿尔卡拉斯",
+      "category": "sports",
+      "note": "网球新星"
+    },
+    {
+      "name": "辛纳",
+      "category": "sports",
+      "note": "网球新星"
+    },
+    {
+      "name": "谷爱凌",
+      "category": "sports",
+      "note": "自由式滑雪"
+    },
+    {
+      "name": "全红婵",
+      "category": "sports",
+      "note": "跳水"
+    },
+    {
+      "name": "菲尔普斯",
+      "category": "sports",
+      "note": "游泳飞鱼"
+    },
+    {
+      "name": "郎平",
+      "category": "sports",
+      "note": "排球铁榔头"
+    },
+    {
+      "name": "汉密尔顿",
+      "category": "sports",
+      "note": "F1赛车"
+    },
+    {
+      "name": "舒马赫",
+      "category": "sports",
+      "note": "F1赛车"
+    }
+  ]
+}

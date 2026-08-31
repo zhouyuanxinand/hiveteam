@@ -62,9 +62,10 @@ describe('WorkerModal — pure PTY view (control actions live on WorkerCard)', (
     expect(onStart).toHaveBeenCalledWith(stoppedWorker)
   })
 
-  test('Close button dispatches onClose via Dialog close', () => {
+  test('touch-only close affordance dispatches onClose via Dialog close', () => {
     const { onClose } = renderModal()
-    fireEvent.click(screen.getByLabelText('Close worker detail'))
+    expect(screen.getByTestId('worker-modal-close')).toHaveClass('worker-modal__close')
+    fireEvent.click(screen.getByTestId('worker-modal-close'))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
@@ -87,7 +88,7 @@ describe('WorkerModal — pure PTY view (control actions live on WorkerCard)', (
     vi.useFakeTimers()
     renderModal({ runId: 'run-1' })
 
-    fireEvent.focus(screen.getByLabelText('Close worker detail'))
+    fireEvent.focus(screen.getByTestId('worker-modal-close'))
     act(() => vi.advanceTimersByTime(300))
 
     expect(screen.getAllByText('Close').length).toBeGreaterThan(0)

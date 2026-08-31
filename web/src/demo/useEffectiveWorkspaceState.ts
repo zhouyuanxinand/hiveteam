@@ -9,6 +9,7 @@ import { DEMO_WORKERS, DEMO_WORKSPACE } from './demo-fixture.js'
  */
 export const useEffectiveWorkspaceState = (params: {
   demoMode: boolean
+  demoWorkers?: TeamListItem[]
   workspaces: WorkspaceSummary[] | null
   activeWorkspaceId: string | null
   workersByWorkspaceId: Record<string, TeamListItem[]>
@@ -19,10 +20,16 @@ export const useEffectiveWorkspaceState = (params: {
   effectiveActiveWorkspace: WorkspaceSummary | undefined
   pollWorkspaceId: string | null
 } => {
-  const { demoMode, workspaces, activeWorkspaceId, workersByWorkspaceId } = params
+  const {
+    demoMode,
+    demoWorkers = DEMO_WORKERS,
+    workspaces,
+    activeWorkspaceId,
+    workersByWorkspaceId,
+  } = params
   const effectiveWorkspaces = demoMode ? [DEMO_WORKSPACE] : workspaces
   const effectiveWorkersByWorkspaceId = demoMode
-    ? { [DEMO_WORKSPACE.id]: DEMO_WORKERS }
+    ? { [DEMO_WORKSPACE.id]: demoWorkers }
     : workersByWorkspaceId
   const effectiveActiveWorkspaceId = demoMode ? DEMO_WORKSPACE.id : activeWorkspaceId
   const effectiveActiveWorkspace = demoMode

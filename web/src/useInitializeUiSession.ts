@@ -55,7 +55,7 @@ export const useInitializeUiSession = (
             setActiveWorkspaceId(nextActiveWorkspaceId)
             if (persistedId !== nextActiveWorkspaceId) {
               saveActiveWorkspaceId(nextActiveWorkspaceId).catch((error: unknown) => {
-                console.error('[hive] swallowed:initSession.save', error)
+                if (!cancelled) console.error('[hive] swallowed:initSession.save', error)
               })
             }
             return merged
@@ -71,8 +71,8 @@ export const useInitializeUiSession = (
           if (onError) {
             onError('Could not reach HiveTeam runtime. Refresh once the runtime is back up.')
           }
+          console.error('[hive] swallowed:initSession.bootstrap', error)
         }
-        console.error('[hive] swallowed:initSession.bootstrap', error)
       })
     return () => {
       cancelled = true

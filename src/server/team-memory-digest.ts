@@ -1,19 +1,14 @@
 import type { AgentSummary } from '../shared/types.js'
 import { wrapUntrustedPromptData } from './prompt-safety.js'
 import type { SettingsStore } from './settings-store.js'
+import {
+  isWorkspaceMemoryEnabled,
+  setWorkspaceMemoryEnabled,
+  workspaceMemoryEnabledKey,
+} from './team-memory-feature.js'
 import type { TeamMemoryStore } from './team-memory-store.js'
 
-export const workspaceMemoryEnabledKey = (workspaceId: string) =>
-  `workspace.${workspaceId}.memory.enabled`
-
-export const isWorkspaceMemoryEnabled = (settings: SettingsStore, workspaceId: string) =>
-  settings.getAppState(workspaceMemoryEnabledKey(workspaceId))?.value !== 'false'
-
-export const setWorkspaceMemoryEnabled = (
-  settings: SettingsStore,
-  workspaceId: string,
-  enabled: boolean
-) => settings.setAppState(workspaceMemoryEnabledKey(workspaceId), enabled ? 'true' : 'false')
+export { isWorkspaceMemoryEnabled, setWorkspaceMemoryEnabled, workspaceMemoryEnabledKey }
 
 const formatDigest = (
   context: 'dispatch' | 'startup',
@@ -27,7 +22,14 @@ const formatDigest = (
   ]
   const included: typeof entries = []
   for (const entry of entries) {
-    const labels = [entry.kind, entry.scope, ...entry.tags].join(', ')
+    const procedureRef = entry.procedureRef
+      ? `ref:${entry.procedureRef.type}:${entry.procedureRef.id}${
+          entry.procedureRef.title ? ` (${entry.procedureRef.title})` : ''
+        }`
+      : null
+    const labels = [entry.kind, entry.scope, procedureRef, ...entry.tags]
+      .filter((label): label is string => Boolean(label))
+      .join(', ')
     const prefix = `- [${labels}] `
     const currentLength = `${lines.join('\n')}\n</hive-memory>`.length
     const remaining = budget - currentLength - prefix.length - 1

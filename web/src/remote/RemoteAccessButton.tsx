@@ -391,7 +391,9 @@ export const RemoteAccessButton = () => {
                         aria-pressed={status.enabled}
                         disabled={busy}
                         onClick={() =>
-                          void runAction(async () => setRemoteEnabled(!status.enabled))
+                          void runAction(async () => {
+                            await setRemoteEnabled(!status.enabled)
+                          })
                         }
                         data-testid="remote-toggle"
                       >

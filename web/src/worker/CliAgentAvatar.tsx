@@ -6,6 +6,8 @@ import { Avatar } from '../ui/Avatar.js'
 type StatusRing = 'working' | 'idle' | 'stopped' | 'none'
 
 type CliAgentAvatarProps = {
+  /** Locally persisted custom image. It takes precedence over a CLI logo. */
+  avatar?: string | undefined
   /**
    * Built-in preset id from the team list payload. Known ids resolve to a
    * brand logo; anything else (custom commands, missing launch config, future
@@ -108,11 +110,40 @@ const colorByRole: Record<WorkerRole, string> = {
  * stay visually aligned.
  */
 export const CliAgentAvatar = ({
+  avatar,
   commandPresetId,
   workerRole,
   size = 32,
   statusRing = 'none',
 }: CliAgentAvatarProps) => {
+  const ring = statusRing === 'none' ? null : ringColorByStatus[statusRing]
+  if (avatar) {
+    return (
+      <span
+        data-testid="custom-worker-avatar"
+        data-status-ring={statusRing}
+        className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded"
+        aria-hidden
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+          background: 'var(--bg-3)',
+          border: '1px solid color-mix(in oklab, var(--text-primary) 12%, transparent)',
+          boxShadow: ring ? `0 0 0 2px var(--bg-1), 0 0 0 4px ${ring}` : undefined,
+        }}
+      >
+        <img
+          src={avatar}
+          alt=""
+          decoding="sync"
+          width={size}
+          height={size}
+          style={{ width: `${size}px`, height: `${size}px`, objectFit: 'cover' }}
+        />
+      </span>
+    )
+  }
+
   const logo = getKnownLogo(commandPresetId)
   if (!logo) {
     return (
@@ -131,7 +162,6 @@ export const CliAgentAvatar = ({
     )
   }
 
-  const ring = statusRing === 'none' ? null : ringColorByStatus[statusRing]
   const innerSize = Math.round(size * 0.78)
   return (
     <span

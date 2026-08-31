@@ -28,7 +28,7 @@ const FETCH_BLOCKED_PORTS = new Set([
   6669, 6697, 10080,
 ])
 
-const listenOnFetchSafePort = async (server: ReturnType<typeof createApp>['server']) => {
+export const listenOnFetchSafePort = async (server: ReturnType<typeof createApp>['server']) => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => reject(error)

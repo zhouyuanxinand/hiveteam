@@ -1,9 +1,11 @@
 import {
   isTeamMemoryKind,
   isTeamMemoryScope,
+  normalizeTeamMemoryProcedureRef,
   type TeamMemoryDreamReview,
   type TeamMemoryDreamRun,
   type TeamMemoryDreamSuggestion,
+  type TeamMemoryProcedureRef,
 } from '../shared/team-memory.js'
 import { BadRequestError, ForbiddenError } from './http-errors.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
@@ -13,6 +15,7 @@ import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 const serializeSuggestion = (suggestion: TeamMemoryDreamSuggestion) => ({
   body: suggestion.body,
   kind: suggestion.kind,
+  procedure_ref: suggestion.procedureRef,
   scope: suggestion.scope,
   source_memory_ids: suggestion.sourceMemoryIds,
   tags: suggestion.tags,
@@ -64,6 +67,15 @@ const normalizeSuggestions = (value: unknown): TeamMemoryDreamSuggestion[] => {
     if (!isTeamMemoryKind(record.kind)) throw new BadRequestError('Invalid Dream suggestion kind')
     if (!isTeamMemoryScope(record.scope))
       throw new BadRequestError('Invalid Dream suggestion scope')
+    let procedureRef: TeamMemoryProcedureRef | null = null
+    try {
+      procedureRef = normalizeTeamMemoryProcedureRef(record.procedure_ref)
+    } catch (error) {
+      throw new BadRequestError(error instanceof Error ? error.message : String(error))
+    }
+    if (record.kind === 'procedure_ref' && !procedureRef) {
+      throw new BadRequestError('procedure_ref is required when kind is procedure_ref')
+    }
     const sourceMemoryIds = Array.isArray(record.source_memory_ids)
       ? record.source_memory_ids.filter((id): id is string => typeof id === 'string')
       : []
@@ -73,6 +85,7 @@ const normalizeSuggestions = (value: unknown): TeamMemoryDreamSuggestion[] => {
     return {
       body: record.body,
       kind: record.kind,
+      procedureRef,
       scope: record.scope,
       sourceMemoryIds,
       tags,

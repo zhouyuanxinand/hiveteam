@@ -21,6 +21,7 @@ interface UseWorkerComposerInput {
 }
 
 export interface WorkerComposerState {
+  avatar: string | null
   commandPresets: CommandPreset[]
   commandPresetId: string
   model: string
@@ -36,6 +37,7 @@ export interface WorkerComposerState {
   workerName: string
   workerRole: WorkerRole
   setCommandPresetId: (value: string) => void
+  setAvatar: (value: string | null) => void
   setModel: (value: string) => void
   setRoleDescription: (value: string) => void
   setStartupCommand: (value: string) => void
@@ -139,6 +141,7 @@ export const useWorkerComposer = ({
 }: UseWorkerComposerInput): WorkerComposerState => {
   const { language } = useI18n()
   const [workerName, setWorkerName] = useState('')
+  const [avatar, setAvatar] = useState<string | null>(null)
   const [workerRole, setWorkerRole] = useState<WorkerRole>('coder')
   const [roleTemplates, setRoleTemplates] = useState<RoleTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
@@ -227,14 +230,14 @@ export const useWorkerComposer = ({
 
   const randomizeWorkerName = () => {
     workerNameGeneratedRef.current = true
-    setWorkerName(generateWorkerName({ language, role: workerRole, usedNames }))
+    setWorkerName(generateWorkerName({ usedNames }))
   }
 
   useEffect(() => {
     if (workerNameGeneratedRef.current) {
-      setWorkerName(generateWorkerName({ language, role: workerRole, usedNames }))
+      setWorkerName(generateWorkerName({ usedNames }))
     }
-  }, [language, workerRole, usedNames])
+  }, [usedNames])
 
   const selectWorkerRole = (value: WorkerRole) => {
     setWorkerRole(value)
@@ -334,6 +337,7 @@ export const useWorkerComposer = ({
     setCreating(true)
     setCreateWorkerError(null)
     void createWorker({
+      avatar,
       commandPresetId,
       model,
       name: workerName,
@@ -343,6 +347,7 @@ export const useWorkerComposer = ({
     })
       .then(({ error }) => {
         setWorkerName('')
+        setAvatar(null)
         workerNameGeneratedRef.current = false
         selectWorkerRole('coder')
         setSelectedTemplateId(null)
@@ -359,6 +364,7 @@ export const useWorkerComposer = ({
   }
 
   return {
+    avatar,
     commandPresets,
     commandPresetId,
     model,
@@ -374,6 +380,7 @@ export const useWorkerComposer = ({
     workerName,
     workerRole,
     setCommandPresetId: selectCommandPresetId,
+    setAvatar,
     setModel,
     setRoleDescription,
     setStartupCommand,

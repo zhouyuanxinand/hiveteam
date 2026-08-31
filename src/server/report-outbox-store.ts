@@ -7,9 +7,12 @@ import type { Database } from 'better-sqlite3'
  */
 export interface ReportOutboxEntry {
   createdAt: number
+  deliveryAttemptCount: number
   deliveredAt: number | null
   dispatchId: string
   id: number
+  lastDeliveryAttemptAt: number | null
+  lastDeliveryError: string | null
   payload: string
   targetAgentId: string
   workspaceId: string
@@ -24,9 +27,12 @@ interface EnqueueInput {
 
 interface ReportOutboxRow {
   created_at: number
+  delivery_attempts: number
   delivered_at: number | null
   dispatch_id: string
   id: number
+  last_delivery_attempt_at: number | null
+  last_delivery_error: string | null
   payload: string
   target_agent_id: string
   workspace_id: string
@@ -34,9 +40,12 @@ interface ReportOutboxRow {
 
 const toEntry = (row: ReportOutboxRow): ReportOutboxEntry => ({
   createdAt: row.created_at,
+  deliveryAttemptCount: row.delivery_attempts,
   deliveredAt: row.delivered_at,
   dispatchId: row.dispatch_id,
   id: row.id,
+  lastDeliveryAttemptAt: row.last_delivery_attempt_at,
+  lastDeliveryError: row.last_delivery_error,
   payload: row.payload,
   targetAgentId: row.target_agent_id,
   workspaceId: row.workspace_id,
@@ -57,7 +66,8 @@ export const createReportOutboxStore = (db: Database) => {
     (
       db
         .prepare(
-          `SELECT id, workspace_id, target_agent_id, dispatch_id, payload, created_at, delivered_at
+          `SELECT id, workspace_id, target_agent_id, dispatch_id, payload, created_at, delivered_at,
+                  delivery_attempts, last_delivery_attempt_at, last_delivery_error
              FROM report_outbox
              WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL
              ORDER BY created_at ASC, id ASC`
@@ -67,8 +77,29 @@ export const createReportOutboxStore = (db: Database) => {
 
   const markDelivered = (id: number) => {
     db.prepare(
-      'UPDATE report_outbox SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL'
+      `UPDATE report_outbox
+       SET delivered_at = ?, last_delivery_error = NULL
+       WHERE id = ? AND delivered_at IS NULL`
     ).run(Date.now(), id)
+  }
+
+  const markDeliveryAttempt = (id: number) => {
+    db.prepare(
+      `UPDATE report_outbox
+       SET delivery_attempts = delivery_attempts + 1,
+           last_delivery_attempt_at = ?,
+           last_delivery_error = NULL
+       WHERE id = ? AND delivered_at IS NULL`
+    ).run(Date.now(), id)
+  }
+
+  const markDeliveryFailed = (id: number, error: string) => {
+    const message = error.trim().slice(0, 1_000) || 'The Orchestrator terminal rejected the report.'
+    db.prepare(
+      `UPDATE report_outbox
+       SET last_delivery_error = ?, last_delivery_attempt_at = ?
+       WHERE id = ? AND delivered_at IS NULL`
+    ).run(message, Date.now(), id)
   }
 
   const deletePendingForDispatch = (dispatchId: string) => {
@@ -111,6 +142,8 @@ export const createReportOutboxStore = (db: Database) => {
     deleteWorkspaceEntries,
     enqueue,
     listPending,
+    markDeliveryAttempt,
+    markDeliveryFailed,
     markDelivered,
     pendingCount,
   }

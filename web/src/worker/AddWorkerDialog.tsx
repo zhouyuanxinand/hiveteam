@@ -1,10 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Dices, Store } from 'lucide-react'
-import { type FormEvent, lazy, Suspense, useMemo, useState } from 'react'
+import { type FormEvent, useMemo, useState } from 'react'
 
 import type { WorkerRole } from '../../../src/shared/types.js'
 import type { CommandPreset, RoleTemplate } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { MarketplaceDrawer } from '../marketplace/MarketplaceDrawer.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { useToast } from '../ui/useToast.js'
 import {
@@ -16,19 +17,16 @@ import {
   SectionLabel,
   StartupCommandField,
 } from './AddWorkerDialogFields.js'
-
-const MarketplaceDrawer = lazy(() =>
-  import('../marketplace/MarketplaceDrawer.js').then((module) => ({
-    default: module.MarketplaceDrawer,
-  }))
-)
+import { WorkerAvatarField } from './WorkerAvatarField.js'
 
 type AddWorkerDialogProps = {
+  avatar?: string | null
   commandPresets: CommandPreset[]
   commandPresetId: string
   creating?: boolean
   customTemplates: RoleTemplate[]
   onApplyMarketplaceImport: (input: { name: string; description: string }) => void
+  onAvatarChange?: (avatar: string | null) => void
   onClose: () => void
   onDeleteTemplate: (templateId: string) => Promise<void> | void
   onNameChange: (value: string) => void
@@ -54,11 +52,13 @@ type AddWorkerDialogProps = {
 }
 
 export const AddWorkerDialog = ({
+  avatar,
   commandPresets,
   commandPresetId,
   creating = false,
   customTemplates,
   onApplyMarketplaceImport,
+  onAvatarChange,
   onClose,
   onDeleteTemplate,
   onModelChange,
@@ -161,6 +161,12 @@ export const AddWorkerDialog = ({
                 className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4"
                 data-testid="add-worker-scroll-region"
               >
+                <WorkerAvatarField
+                  avatar={avatar ?? null}
+                  disabled={creating || Boolean(writeDisabledReason)}
+                  onChange={onAvatarChange ?? (() => {})}
+                  workerRole={workerRole}
+                />
                 <label className="flex flex-col gap-2">
                   <div className="flex items-baseline justify-between gap-2">
                     <SectionLabel>{t('addWorker.name')}</SectionLabel>
@@ -274,14 +280,12 @@ export const AddWorkerDialog = ({
         </div>
       </Dialog.Portal>
       {marketplaceOpen ? (
-        <Suspense fallback={null}>
-          <MarketplaceDrawer
-            open
-            onClose={() => setMarketplaceOpen(false)}
-            onImport={handleMarketplaceImport}
-            importedNames={importedNames}
-          />
-        </Suspense>
+        <MarketplaceDrawer
+          open
+          onClose={() => setMarketplaceOpen(false)}
+          onImport={handleMarketplaceImport}
+          importedNames={importedNames}
+        />
       ) : null}
     </Dialog.Root>
   )

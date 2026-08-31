@@ -49,6 +49,8 @@ export const markAgentStarted = (
   // pending tasks". A freshly started PTY hasn't done anything yet, even if
   // dispatch ledger replayed pendingTaskCount > 0 during hydration. The next
   // team send will flip status to 'working' via markTaskDispatched.
+  const workspace = getWorkspaceRecord(workspaces, workspaceId)
+  workspace.manualStoppedAgentIds?.delete(agentId)
   getAgentRecord(workspaces, workspaceId, agentId).status = 'idle'
 }
 
@@ -59,6 +61,23 @@ export const markAgentStopped = (
 ) => {
   getAgentRecord(workspaces, workspaceId, agentId).status = 'stopped'
 }
+
+export const markAgentManuallyStopped = (
+  workspaces: WorkspaceMap,
+  workspaceId: string,
+  agentId: string
+) => {
+  const workspace = getWorkspaceRecord(workspaces, workspaceId)
+  getAgentRecord(workspaces, workspaceId, agentId).status = 'stopped'
+  workspace.manualStoppedAgentIds ??= new Set<string>()
+  workspace.manualStoppedAgentIds.add(agentId)
+}
+
+export const isAgentManuallyStopped = (
+  workspaces: WorkspaceMap,
+  workspaceId: string,
+  agentId: string
+) => getWorkspaceRecord(workspaces, workspaceId).manualStoppedAgentIds?.has(agentId) ?? false
 
 export const markTaskDispatched = (
   workspaces: WorkspaceMap,

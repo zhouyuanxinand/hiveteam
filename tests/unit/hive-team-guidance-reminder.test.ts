@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest'
 
 import {
   buildProtocolDoc,
+  buildProtocolGuide,
   buildWorkerReminderTail,
   ORCHESTRATOR_REMINDER_TAIL,
+  PROTOCOL_GUIDE_TOPICS,
 } from '../../src/server/hive-team-guidance.js'
 
 describe('ORCHESTRATOR_REMINDER_TAIL', () => {
@@ -22,6 +24,14 @@ describe('ORCHESTRATOR_REMINDER_TAIL', () => {
     expect(ORCHESTRATOR_REMINDER_TAIL).toContain('Never call')
     expect(ORCHESTRATOR_REMINDER_TAIL).toContain('Task')
     expect(ORCHESTRATOR_REMINDER_TAIL).toContain('Explore')
+  })
+
+  test('includes every focused guide section that the team CLI can print', () => {
+    const doc = buildProtocolDoc()
+    for (const topic of PROTOCOL_GUIDE_TOPICS) {
+      expect(doc).toContain(`## Guide: ${topic}`)
+      expect(buildProtocolGuide(topic)).toContain(`## Guide: ${topic}`)
+    }
   })
 })
 

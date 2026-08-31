@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../src/shared/types.js'
 import { AppOverlays } from './AppOverlays.js'
 import { AppWorkspaceContent } from './AppWorkspaceContent.js'
-import { DEMO_TASKS_MD } from './demo/demo-fixture.js'
 import { useDemoMode } from './demo/useDemoMode.js'
+import { useDemoReplay } from './demo/useDemoReplay.js'
 import { useEffectiveWorkspaceState } from './demo/useEffectiveWorkspaceState.js'
 import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import { MainLayout } from './layout/MainLayout.js'
@@ -33,6 +33,7 @@ export const AppInner = () => {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[] | null>(null)
   const { activeWorkspaceId, selectWorkspace, setActiveWorkspaceId } = useWorkspaceSelection()
   const { demoMode, enableDemo, exitDemo } = useDemoMode()
+  const demoReplay = useDemoReplay(demoMode)
   const localPollIds = demoMode || !workspaces ? [] : workspaces.map(({ id }) => id)
   const [workersByWorkspaceId, setWorkersByWorkspaceId] = useWorkspaceWorkers(localPollIds)
   const [addDialogTrigger, setAddDialogTrigger] = useState(0)
@@ -67,7 +68,13 @@ export const AppInner = () => {
     },
     onError: (message) => toast.show({ kind: 'error', message }),
   })
-  const wsState = { demoMode, workspaces, activeWorkspaceId, workersByWorkspaceId }
+  const wsState = {
+    demoMode,
+    workspaces,
+    activeWorkspaceId,
+    demoWorkers: demoReplay.workers,
+    workersByWorkspaceId,
+  }
   const eff = useEffectiveWorkspaceState(wsState)
   const activeId = eff.effectiveActiveWorkspace?.id
   const activeWorkers = activeId ? (eff.effectiveWorkersByWorkspaceId[activeId] ?? []) : []
@@ -78,7 +85,7 @@ export const AppInner = () => {
   useBeforeUnloadGuard(true)
   const tasksFile = useTasksFile(
     demoMode ? null : (activeWorkspaceId ?? null),
-    demoMode ? DEMO_TASKS_MD : undefined
+    demoMode ? demoReplay.tasksMd : undefined
   )
   const openTaskCount = useMemo(
     () =>
@@ -91,6 +98,9 @@ export const AppInner = () => {
     activeWorkspaceId,
     onWorkerDeleted: terms.forgetOptimisticAgent,
     onWorkerRunStarted: terms.recordOptimisticRun,
+    onWorkerRunStopped: ({ runId, workspaceId }) => {
+      terms.forgetOptimisticRun(workspaceId, runId)
+    },
     setWorkersByWorkspaceId,
   })
   const deleteWorkspace = useWorkspaceDelete({
@@ -183,6 +193,7 @@ export const AppInner = () => {
             activeWorkspace={eff.effectiveActiveWorkspace}
             bootstrapError={bootstrapError}
             demoMode={demoMode}
+            demoReplay={demoReplay}
             onDeleteWorkspace={deleteWorkspace}
             onExitDemo={exitDemo}
             onRequestAddWorkspace={triggerAddDialog}

@@ -146,4 +146,87 @@ describe('team memory Dream routes', () => {
       }),
     ])
   })
+
+  test('preserves structured procedure references through Dream review and submission', async () => {
+    const server = await startTestServer()
+    servers.push(server)
+    const cookie = await getUiCookie(server.baseUrl)
+    const workspace = server.store.createWorkspace(server.dataDir, 'Dream procedures')
+    const memoryUrl = `${server.baseUrl}/api/ui/workspaces/${workspace.id}/memory`
+    const dreamUrl = `${memoryUrl}/dream`
+
+    const sourceResponse = await fetch(memoryUrl, {
+      body: JSON.stringify({
+        body: 'Use the release checklist for every production deployment.',
+        kind: 'procedure_ref',
+        procedure_ref: {
+          id: '.hive/workflows/release-check.ts',
+          title: 'Release checklist',
+          type: 'workflow',
+        },
+        scope: 'workspace',
+      }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(sourceResponse.status).toBe(201)
+
+    const dreamResponse = await fetch(dreamUrl, {
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(dreamResponse.status).toBe(201)
+    const dream = (await dreamResponse.json()) as {
+      id: string
+      suggestions: Array<{
+        body: string
+        kind: string
+        procedure_ref: { id: string; title: string | null; type: string } | null
+        scope: string
+        source_memory_ids: string[]
+        tags: string[]
+      }>
+    }
+    const suggestion = dream.suggestions[0]
+    expect(suggestion).toMatchObject({
+      kind: 'procedure_ref',
+      procedure_ref: {
+        id: '.hive/workflows/release-check.ts',
+        title: 'Release checklist',
+        type: 'workflow',
+      },
+    })
+
+    const invalidUpdate = await fetch(`${dreamUrl}/${dream.id}`, {
+      body: JSON.stringify({
+        suggestions: [
+          {
+            ...suggestion,
+            procedure_ref: null,
+          },
+        ],
+      }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'PATCH',
+    })
+    expect(invalidUpdate.status).toBe(400)
+
+    const submitted = await fetch(`${dreamUrl}/${dream.id}/submit`, {
+      body: JSON.stringify({ orchestrator_id: `${workspace.id}:orchestrator` }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(submitted.status).toBe(200)
+    const submittedBody = (await submitted.json()) as { created_memory_ids: string[] }
+    const createdId = submittedBody.created_memory_ids[0]
+    expect(createdId).toBeTruthy()
+    expect(server.store.memory.get(workspace.id, createdId ?? '')).toMatchObject({
+      kind: 'procedure_ref',
+      procedureRef: {
+        id: '.hive/workflows/release-check.ts',
+        title: 'Release checklist',
+        type: 'workflow',
+      },
+    })
+  })
 })

@@ -26,6 +26,19 @@ describe('CliAgentAvatar — known preset renders the brand logo', () => {
   })
 })
 
+describe('CliAgentAvatar — local custom image', () => {
+  test('custom avatar takes precedence over the command preset logo', () => {
+    const avatar =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Jr0YAAAAASUVORK5CYII='
+    render(<CliAgentAvatar avatar={avatar} commandPresetId="codex" workerRole="coder" />)
+
+    const rendered = screen.getByTestId('custom-worker-avatar')
+    expect(rendered.getAttribute('data-status-ring')).toBe('none')
+    expect(rendered.querySelector('img')?.getAttribute('src')).toBe(avatar)
+    expect(screen.queryByTestId('cli-agent-avatar')).toBeNull()
+  })
+})
+
 describe('CliAgentAvatar — fallback path', () => {
   test('unknown commandPresetId falls back to the role-letter avatar (no logo node)', () => {
     // Future presets the UI hasn't been taught about yet must not render

@@ -32,11 +32,13 @@ describe('workspace persistence', () => {
     expect(secondStore.listWorkspaces()).toEqual([
       {
         id: expect.any(String),
+        language: 'zh',
         name: 'Alpha',
         path: '/tmp/hive-alpha',
       },
       {
         id: expect.any(String),
+        language: 'zh',
         name: 'Beta',
         path: '/tmp/hive-beta',
       },

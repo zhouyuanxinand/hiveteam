@@ -63,7 +63,7 @@ describe('team memory', () => {
     )
 
     const settingsResponse = await fetch(`${baseUrl}/settings`, { headers: { cookie } })
-    await expect(settingsResponse.json()).resolves.toEqual({ enabled: true })
+    await expect(settingsResponse.json()).resolves.toEqual({ dream_enabled: false, enabled: true })
 
     const disableResponse = await fetch(`${baseUrl}/settings`, {
       body: JSON.stringify({ enabled: false }),
@@ -71,7 +71,18 @@ describe('team memory', () => {
       method: 'PUT',
     })
     expect(disableResponse.status).toBe(200)
-    await expect(disableResponse.json()).resolves.toEqual({ enabled: false })
+    await expect(disableResponse.json()).resolves.toEqual({ dream_enabled: false, enabled: false })
+
+    const enableDreamResponse = await fetch(`${baseUrl}/settings`, {
+      body: JSON.stringify({ dream_enabled: true }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'PUT',
+    })
+    expect(enableDreamResponse.status).toBe(200)
+    await expect(enableDreamResponse.json()).resolves.toEqual({
+      dream_enabled: true,
+      enabled: false,
+    })
   })
 
   test('memory endpoints reject invalid kinds and require a UI session', async () => {
@@ -99,6 +110,78 @@ describe('team memory', () => {
       })
       expect(invalidBody.status).toBe(400)
     }
+
+    const missingProcedureReference = await fetch(endpoint, {
+      body: JSON.stringify({
+        body: 'Run the release checklist before deployment.',
+        kind: 'procedure_ref',
+      }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(missingProcedureReference.status).toBe(400)
+
+    const invalidProcedureReference = await fetch(endpoint, {
+      body: JSON.stringify({
+        body: 'Run the release checklist before deployment.',
+        kind: 'procedure_ref',
+        procedure_ref: { id: '.hive/workflows/release-check.ts', type: 'unknown' },
+      }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(invalidProcedureReference.status).toBe(400)
+  })
+
+  test('stores and searches a structured procedure reference', async () => {
+    const server = await startTestServer()
+    servers.push(server)
+    const cookie = await getUiCookie(server.baseUrl)
+    const workspace = server.store.createWorkspace('/tmp/hiveteam-memory-procedure', 'Procedures')
+    const endpoint = `${server.baseUrl}/api/ui/workspaces/${workspace.id}/memory`
+
+    const createResponse = await fetch(endpoint, {
+      body: JSON.stringify({
+        body: 'Run the release checklist before deploying.',
+        kind: 'procedure_ref',
+        procedure_ref: {
+          id: '.hive/workflows/release-check.ts',
+          title: 'Release checklist',
+          type: 'workflow',
+        },
+        scope: 'workspace',
+      }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'POST',
+    })
+    expect(createResponse.status).toBe(201)
+    const created = (await createResponse.json()) as { id: string; procedure_ref: unknown }
+    expect(created.procedure_ref).toEqual({
+      id: '.hive/workflows/release-check.ts',
+      title: 'Release checklist',
+      type: 'workflow',
+    })
+
+    const listResponse = await fetch(`${endpoint}?status=active&query=release-check`, {
+      headers: { cookie },
+    })
+    await expect(listResponse.json()).resolves.toEqual([
+      expect.objectContaining({
+        id: created.id,
+        procedure_ref: {
+          id: '.hive/workflows/release-check.ts',
+          title: 'Release checklist',
+          type: 'workflow',
+        },
+      }),
+    ])
+
+    const invalidUpdate = await fetch(`${endpoint}/${created.id}`, {
+      body: JSON.stringify({ procedure_ref: null }),
+      headers: { 'content-type': 'application/json', cookie },
+      method: 'PATCH',
+    })
+    expect(invalidUpdate.status).toBe(400)
   })
 
   test('user-scoped memory is shared across workspaces and can return to workspace scope', async () => {
