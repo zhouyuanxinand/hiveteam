@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveTeam — Command a team of CLI agents from your browser</title>
+<meta name="description" content="HiveTeam is a self-hosted, source-controlled multi-agent workbench: an Orchestrator dispatches work while real CLI agents like Claude Code, Codex and Gemini run in browser terminals. Bound to 127.0.0.1, no update channel — every line you run is in the repo you cloned.">
+<link rel="icon" type="image/png" href="../assets/logo.png">
+<link rel="apple-touch-icon" href="../assets/logo.png">
+<meta property="og:title" content="HiveTeam — Command a team of CLI agents from your browser">
+<meta property="og:description" content="A self-hosted, source-controlled multi-agent workbench. One agent is not enough; a pile of terminal windows is not a workflow.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="../assets/og.jpg">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fafaf7">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><img src="../assets/logo.png" alt="HiveTeam logo">HiveTeam</a>
+    <div class="nav-links">
+      <a href="#division">Teamwork</a>
+      <a href="#capability">Features</a>
+      <a href="#source">Source</a>
+      <a href="#roster">Roster</a>
+      <a href="#remote">Remote</a>
+      <a href="#install">Install</a>
+    </div>
+    <div class="nav-right">
+      <a class="lang-switch" href="../">中文</a>
+      <a class="gh-btn" href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="eyebrow">Self-hosted · Source-controlled · Local-first</span>
+    <h1>One agent is not enough.<br>A pile of terminals is <em>not a workflow</em>.</h1>
+    <p class="lede">HiveTeam puts an Orchestrator in charge: it dispatches work while real CLI agents — Claude Code, Codex, Gemini — each do their part in browser terminals. Everything runs on your machine, and every line of code lives in the repo you cloned.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#install">Clone &amp; run</a>
+      <a class="btn btn-ghost" href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">Read the source</a>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><span class="step-num">01</span><p>You give the Orchestrator a goal</p></div>
+      <div class="step reveal"><span class="step-num">02</span><p>It dispatches workers with <code>team send</code></p></div>
+      <div class="step reveal"><span class="step-num">03</span><p>Workers finish and <code>team report</code> back</p></div>
+    </div>
+  </div>
+</header>
+
+<section id="shot">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Real screenshot</span>
+      <h2>No staging. Just the workbench.</h2>
+      <p class="sub">The Orchestrator's terminal is dispatching on the left; four teammates work on the right — a frame from a real delivery run, not a mockup.</p>
+    </div>
+    <div class="shot-frame reveal">
+      <div class="shot-bar"><i></i><i></i><i></i><span class="addr">127.0.0.1:3000</span></div>
+      <img src="../assets/team-view.jpg" alt="HiveTeam workbench: the orchestrator terminal dispatches tasks while four worker cards show live status" loading="lazy">
+    </div>
+    <p class="shot-note reveal">Every teammate is a card: running, idle, stopped — the whole team at a glance.</p>
+  </div>
+</section>
+
+<section id="division" style="background:var(--card); border-block:1px solid var(--line);">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Three ways to split the work</span>
+      <h2>No heroes in the hive.</h2>
+      <p class="sub">No single agent ships the whole project. Each one owns the part it is best at.</p>
+    </div>
+    <div class="division-grid">
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send claude</span><br>
+<span class="dim">"write: dark mode for settings"</span><br><br>
+<span class="p">$</span> <span class="c">team send codex</span><br>
+<span class="dim">"review: find flaws in this diff"</span><br><br>
+<span class="r">←</span> <span class="w">codex</span> report:<br>
+<span class="ok">2 edge cases, needs another pass</span>
+        </div>
+        <h3>Write + Review</h3>
+        <p>Two models tearing each other's work apart beats one model grading its own homework. You only read the final diff.</p>
+      </div>
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send gemini</span><br>
+<span class="dim">"write tests, run the full suite"</span><br><br>
+<span class="r">←</span> <span class="w">gemini</span> report: <span class="ok">3 reds</span><br><br>
+<span class="p">$</span> <span class="c">team send claude</span><br>
+<span class="dim">"fix these 3 reds"</span>
+        </div>
+        <h3>Test + Fix</h3>
+        <p>The red-green loop spins inside the hive. What counts as green, and when to stop — that's your call.</p>
+      </div>
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send researcher</span><br>
+<span class="dim">"verify the 5 cited sources"</span><br><br>
+<span class="p">$</span> <span class="c">team send translator</span><br>
+<span class="dim">"translate findings to English"</span><br><br>
+<span class="r">←</span> <span class="w">researcher</span> report:<br>
+<span class="ok">2 don't hold up, citations attached</span>
+        </div>
+        <h3>Beyond Code</h3>
+        <p>Researcher, translator, screenwriter, debate partner — name a role, and the Orchestrator does the scheduling.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="capability">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Features</span>
+      <h2>Dispatching is just the start.</h2>
+      <p class="sub">What makes a team of agents actually usable is everything around the dispatch.</p>
+    </div>
+    <div class="cap-grid">
+      <div class="cap reveal">
+        <span class="cap-tag">team spawn · <span class="flag">experimental · on by default</span></span>
+        <h3>Auto-staffing</h3>
+        <p>Don't want to build a team by hand? Don't. The Orchestrator hires temporary coders, testers and reviewers per task, and dismisses them when the work comes back.</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">workflows · <span class="flag">experimental · opt-in</span></span>
+        <h3>Multi-stage workflows</h3>
+        <p>Split a goal into fan-out, review and test stages and run them end to end. Run records, logs, schedules and the stop button all live in the Workflows panel.</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">memory</span>
+        <h3>Team memory</h3>
+        <p>Workspace constraints, conventions and earlier decisions stay in the hive, and every later dispatch brings them to the right agent — no repeating yourself.</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">.hive/tasks.md</span>
+        <h3>The task graph is markdown</h3>
+        <p>Your task graph sits in the repo: read and edit it in any editor, commit it to git. Tasks can declare dependencies (<code>[needs: #3]</code>), so blocked work never gets handed out early.</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">--resume</span>
+        <h3>Resume after restart</h3>
+        <p>After a restart, each agent first tries its CLI's native session resume; if that fails, a fresh process gets an auto-written handoff brief. Queued tasks survive too.</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">marketplace</span>
+        <h3>Role template market</h3>
+        <p>Coder / Reviewer / Tester templates are built in and editable; 400+ bilingual community role templates ship with the repo — search, one-click import, works offline.</p>
+      </div>
+    </div>
+    <p class="more-line reveal"><b>Also:</b> multi-workspace sidebar · desktop notifications &amp; alert sounds · installable as a PWA · open a workspace in VS Code / terminal with one click · bilingual UI</p>
+  </div>
+</section>
+
+<section id="source" class="dark">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">This fork</span>
+      <h2>A hive you own is a hive whose source you hold.</h2>
+      <p class="sub">HiveTeam is a source-controlled, self-hosted fork: every line you run can be found in the commit you checked out.</p>
+    </div>
+    <div class="dark-grid">
+      <div class="dark-card reveal">
+        <span class="k">one repo</span>
+        <h3>Everything in one repo</h3>
+        <p>The runtime, the web workbench, and the remote-access gateway in <code>gateway/</code> — all in this one repository. No closed-source parts, no surprises in the install.</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">no update channel</span>
+        <h3>No update channel</h3>
+        <p>It never asks npm or the upstream release feed what's new. Upgrading is <code>git pull</code> — you always run the version you picked, and the diff tells you what changed.</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">127.0.0.1 only</span>
+        <h3>Localhost by default</h3>
+        <p>The server binds <code>127.0.0.1</code>; nothing listens beyond your machine. Remote access is off by default — until you flip the switch, the path simply doesn't exist.</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">license in the open</span>
+        <h3>The license, in plain sight</h3>
+        <p>BSL 1.1: personal use, internal deployment and forks are all fine; names and marks are governed by <code>TRADEMARK.md</code>. Pointing it at sensitive repos? Read <code>SECURITY.md</code> first.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roster">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Roster</span>
+      <h2>Already in the hive — and who can join.</h2>
+      <p class="sub">Nine presets work out of the box, and that's just the start. Any agent that runs on your machine runs in HiveTeam: reuse the CLIs you've already signed into — HiveTeam itself needs no account and no API key.</p>
+    </div>
+    <div class="roster reveal">
+      <span class="chip"><i style="background:#d97757">C</i>Claude Code</span>
+      <span class="chip"><i style="background:#10a37f">C</i>Codex CLI</span>
+      <span class="chip"><i style="background:#1d7dfa">G</i>Gemini CLI</span>
+      <span class="chip"><i style="background:#6a7287">O</i>OpenCode</span>
+      <span class="chip"><i style="background:#7c3aed">A</i>Antigravity</span>
+      <span class="chip"><i style="background:#0b1e3e">C</i>Cursor CLI</span>
+      <span class="chip"><i style="background:#374151">G</i>Grok Build</span>
+      <span class="chip"><i style="background:#0ea5e9">H</i>Hermes</span>
+      <span class="chip"><i style="background:#9333ea">Q</i>Qwen Code</span>
+      <span class="chip"><i style="background:var(--honey)">$</i><small>custom command</small></span>
+    </div>
+    <p class="roster-note reveal">You install and sign into each CLI yourself — HiveTeam never installs agents or touches your credentials. It just turns them into a team.</p>
+  </div>
+</section>
+
+<section id="remote" style="background:var(--card); border-block:1px solid var(--line);">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Remote Access · optional · off by default</span>
+      <h2>You left the house. The hive stayed awake.</h2>
+      <p class="sub">Sign in from your phone's browser, pair with the desktop once, and open your running hive from anywhere — not just to watch: the terminal takes real input on your phone, and work keeps flowing.</p>
+    </div>
+    <div class="division-grid" style="grid-template-columns:repeat(2,1fr);">
+      <div class="card reveal">
+        <h3 style="margin-top:0">End-to-end encrypted</h3>
+        <p>Ciphertext from phone to machine; the gateway only relays. Data and execution never leave your box.</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">No open ports</h3>
+        <p>Your machine dials out. No public IP needed, no ports exposed.</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">Trust rooted at the desktop</h3>
+        <p>Pairing a new device requires someone physically at the computer to confirm. Any device can be revoked at any time.</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">Gateway source included</h3>
+        <p>The remote gateway's implementation lives in the repo's <code style="font-family:var(--font-mono);font-size:.85em;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 6px;">gateway/</code> directory — audit the encryption path yourself.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Install</span>
+      <h2>Four commands to a hive.</h2>
+      <p class="sub">Requires Node.js ≥ 22 and pnpm. macOS / Linux are first-class; Windows is best-effort.</p>
+    </div>
+    <div class="install-box reveal">
+      <div class="install-head">
+        <span>terminal</span>
+        <button class="copy-btn" id="copyInstall" type="button">Copy</button>
+      </div>
+      <pre id="installCmds"><span class="p">$</span> git clone https://github.com/zhouyuanxinand/hiveteam.git
+<span class="p">$</span> cd hiveteam
+<span class="p">$</span> pnpm install
+<span class="p">$</span> pnpm dev
+<span class="cm"># open the local address it prints, usually http://127.0.0.1:3000</span></pre>
+    </div>
+    <p class="install-req reveal">Updating is just as plain: <code>git pull</code>, then <code>pnpm install --frozen-lockfile &amp;&amp; pnpm build</code>, and restart the process.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-inner">
+      <a class="brand" href="#top"><img src="../assets/logo.png" alt="" width="26" height="26">HiveTeam</a>
+      <div class="foot-links">
+        <a href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/LICENSE.BSL" target="_blank" rel="noopener">License BSL 1.1</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/issues" target="_blank" rel="noopener">Feedback</a>
+      </div>
+    </div>
+    <p class="foot-note">HiveTeam is a source-controlled, self-hosted fork — thanks to upstream <a href="https://github.com/tt-a1i/hive" target="_blank" rel="noopener" style="color:var(--blue)">@tt-a1i/hive</a>. Names and marks are governed by TRADEMARK.md. © 2026 zhouyuanxinand</p>
+  </div>
+</footer>
+
+<script src="../assets/main.js"></script>
+</body>
+</html>

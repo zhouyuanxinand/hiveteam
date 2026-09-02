@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveTeam — 在浏览器里指挥一支 CLI Agent 团队</title>
+<meta name="description" content="HiveTeam 是自托管、源码可控的多 Agent 协作工作台：Orchestrator 派活，Claude Code、Codex、Gemini 等真实 CLI Agent 在浏览器终端里协同开工。只听 127.0.0.1，不查更新通道，每一行代码都在你手里。">
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<meta property="og:title" content="HiveTeam — 在浏览器里指挥一支 CLI Agent 团队">
+<meta property="og:description" content="自托管、源码可控的多 Agent 协作工作台。一个 Agent 不够，一堆终端也不是办法。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/og.jpg">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#fafaf7">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><img src="assets/logo.png" alt="HiveTeam logo">HiveTeam</a>
+    <div class="nav-links">
+      <a href="#division">分工</a>
+      <a href="#capability">能力</a>
+      <a href="#source">源码</a>
+      <a href="#roster">阵容</a>
+      <a href="#remote">远程</a>
+      <a href="#install">安装</a>
+    </div>
+    <div class="nav-right">
+      <a class="lang-switch" href="en/">EN</a>
+      <a class="gh-btn" href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="wrap">
+    <span class="eyebrow">自托管 · 源码可控 · Local-first</span>
+    <h1>在你的浏览器里，<br>带出一支 <em>Agent 团队</em>。</h1>
+    <p class="lede">一个 Agent 不够，一堆终端也不是办法。HiveTeam 让 Orchestrator 派活，Claude Code、Codex、Gemini 这些真实的 CLI Agent 在浏览器终端里各自开工——全部跑在你本机，每一行代码都在你手里的仓库里。</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#install">克隆开工</a>
+      <a class="btn btn-ghost" href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">先读源码</a>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><span class="step-num">01</span><p>你给 Orchestrator 一个目标</p></div>
+      <div class="step reveal"><span class="step-num">02</span><p>它用 <code>team send</code> 给 Worker 派活</p></div>
+      <div class="step reveal"><span class="step-num">03</span><p>Worker 干完，<code>team report</code> 交回</p></div>
+    </div>
+  </div>
+</header>
+
+<section id="shot">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">真机实拍</span>
+      <h2>不摆拍，直接看工作台。</h2>
+      <p class="sub">左边 Orchestrator 的终端正在派单，右边四位成员各司其职——这张截图来自一次真实的交付过程，没有布景。</p>
+    </div>
+    <div class="shot-frame reveal">
+      <div class="shot-bar"><i></i><i></i><i></i><span class="addr">127.0.0.1:3000</span></div>
+      <img src="assets/team-view.jpg" alt="HiveTeam 工作台实拍：Orchestrator 终端派单，四位 Worker 卡片分列运行状态" loading="lazy">
+    </div>
+    <p class="shot-note reveal">团队成员各是一张卡片：运行中、空闲、已停止，一眼看全。</p>
+  </div>
+</section>
+
+<section id="division" style="background:var(--card); border-block:1px solid var(--line);">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">三种分工</span>
+      <h2>蜂巢里没有英雄。</h2>
+      <p class="sub">没有一个 Agent 干完整个项目，每个只负责最擅长的那段。</p>
+    </div>
+    <div class="division-grid">
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send claude</span><br>
+<span class="dim">"写：给设置页加暗色模式"</span><br><br>
+<span class="p">$</span> <span class="c">team send codex</span><br>
+<span class="dim">"审：挑这版 diff 的毛病"</span><br><br>
+<span class="r">←</span> <span class="w">codex</span> report:<br>
+<span class="ok">2 处边界问题，得再改一轮</span>
+        </div>
+        <h3>写 + 审</h3>
+        <p>两家模型互相挑刺，比一家自查狠得多。改完再审一轮，你只看最终 diff。</p>
+      </div>
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send gemini</span><br>
+<span class="dim">"写测试，全量跑一遍"</span><br><br>
+<span class="r">←</span> <span class="w">gemini</span> report: <span class="ok">3 条红</span><br><br>
+<span class="p">$</span> <span class="c">team send claude</span><br>
+<span class="dim">"修掉这 3 条红"</span>
+        </div>
+        <h3>测 + 修</h3>
+        <p>红绿循环在巢里自己转。什么时候算绿、什么时候收工——你说了算。</p>
+      </div>
+      <div class="card reveal">
+        <div class="term">
+<span class="p">$</span> <span class="c">team send researcher</span><br>
+<span class="dim">"核查引用的 5 个来源"</span><br><br>
+<span class="p">$</span> <span class="c">team send translator</span><br>
+<span class="dim">"把结论翻成英文"</span><br><br>
+<span class="r">←</span> <span class="w">researcher</span> report:<br>
+<span class="ok">两条站不住，已附出处</span>
+        </div>
+        <h3>不止写代码</h3>
+        <p>研究员、译者、编剧、辩论搭子——起个角色名，剩下交给 Orchestrator 排班。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="capability">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">能力</span>
+      <h2>派活只是开始。</h2>
+      <p class="sub">让一群 Agent 真正可用的，是调度之外的这些零件。</p>
+    </div>
+    <div class="cap-grid">
+      <div class="cap reveal">
+        <span class="cap-tag">team spawn · <span class="flag">实验 · 默认开启</span></span>
+        <h3>自动组队</h3>
+        <p>不想手动建团队就别建。Orchestrator 按任务自己招临时的 coder、tester、reviewer，活儿交回来就自动遣散。</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">workflows · <span class="flag">实验 · 手动开启</span></span>
+        <h3>多阶段编排</h3>
+        <p>把一个目标拆成 fan-out、review、test 几个阶段跑完。运行记录、日志、定时任务和停止按钮，都在 Workflows 面板里。</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">memory</span>
+        <h3>团队记忆</h3>
+        <p>Workspace 的约束、口径和早前的决定留在巢里，之后每次派单自动带给对的 Agent——不用你再复述一遍。</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">.hive/tasks.md</span>
+        <h3>任务图是份 markdown</h3>
+        <p>任务图就躺在你仓库里：编辑器里随便看改，能进 git。任务可以声明依赖（<code>[needs: #3]</code>），没被选中的活不会提前递出去。</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">--resume</span>
+        <h3>断了能接上</h3>
+        <p>重启后先用各家 CLI 原生的 session 恢复接回对话；接不回，就给新进程注入一份自动写好的交接简报。排队中的任务也不丢。</p>
+      </div>
+      <div class="cap reveal">
+        <span class="cap-tag">marketplace</span>
+        <h3>角色模板市场</h3>
+        <p>Coder / Reviewer / Tester 模板内置，可改可存；另有 400+ 中英双语社区角色模板，搜一下、一键导入，随仓库离线可用。</p>
+      </div>
+    </div>
+    <p class="more-line reveal"><b>还有：</b>多 Workspace 侧边栏 · 桌面通知与提示音 · 装成 PWA 桌面应用 · 在 VS Code / 终端里一键打开 Workspace · 界面中英双语</p>
+  </div>
+</section>
+
+<section id="source" class="dark">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">这个分支</span>
+      <h2>源码在手的巢，才是自己的巢。</h2>
+      <p class="sub">HiveTeam 是一个源码可控的自托管分支：你运行的每一行代码，都能在你 checkout 的那个 commit 里找到。</p>
+    </div>
+    <div class="dark-grid">
+      <div class="dark-card reveal">
+        <span class="k">one repo</span>
+        <h3>一个仓库装下全部</h3>
+        <p>运行时、Web 工作台、远程访问网关 <code>gateway/</code>，全在这一个仓库里。没有闭源拼装件，没有"安装包里多出来的部分"。</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">no update channel</span>
+        <h3>不查更新通道</h3>
+        <p>不访问 npm，不问上游 release。升级就是 <code>git pull</code>，跑的永远是你亲自选中的那个版本——变没变，diff 说了算。</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">127.0.0.1 only</span>
+        <h3>默认只听本机</h3>
+        <p>服务绑定 <code>127.0.0.1</code>，本机之外没有入口。远程访问默认关闭：不打开这个开关，通路就不存在。</p>
+      </div>
+      <div class="dark-card reveal">
+        <span class="k">license in the open</span>
+        <h3>许可证摊开写</h3>
+        <p>BSL 1.1：个人使用、内部部署、fork 都可以；名称与标识的使用归 <code>TRADEMARK.md</code> 管。敏感仓库上手前，先读 <code>SECURITY.md</code>。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roster">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">阵容</span>
+      <h2>已经在巢里的，和能加入的。</h2>
+      <p class="sub">九个预设开箱即用——而那只是开始。你电脑上能跑的任何 Agent，HiveTeam 里都能跑：用你已经登录好的 CLI 就行，HiveTeam 自己不要账号、不要 key。</p>
+    </div>
+    <div class="roster reveal">
+      <span class="chip"><i style="background:#d97757">C</i>Claude Code</span>
+      <span class="chip"><i style="background:#10a37f">C</i>Codex CLI</span>
+      <span class="chip"><i style="background:#1d7dfa">G</i>Gemini CLI</span>
+      <span class="chip"><i style="background:#6a7287">O</i>OpenCode</span>
+      <span class="chip"><i style="background:#7c3aed">A</i>Antigravity</span>
+      <span class="chip"><i style="background:#0b1e3e">C</i>Cursor CLI</span>
+      <span class="chip"><i style="background:#374151">G</i>Grok Build</span>
+      <span class="chip"><i style="background:#0ea5e9">H</i>Hermes</span>
+      <span class="chip"><i style="background:#9333ea">Q</i>Qwen Code</span>
+      <span class="chip"><i style="background:var(--honey)">$</i><small>自定义命令</small></span>
+    </div>
+    <p class="roster-note reveal">CLI 需要你自己安装并完成登录——HiveTeam 不代装、不代收号，只负责把它们编成一支队伍。</p>
+  </div>
+</section>
+
+<section id="remote" style="background:var(--card); border-block:1px solid var(--line);">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">Remote Access · 可选 · 默认关闭</span>
+      <h2>人出了门，蜂巢还醒着。</h2>
+      <p class="sub">手机浏览器登录，跟桌面配对一次，就能从外面打开家里正跑着的蜂巢——不只是看一眼：终端在手机上能直接打字，活儿照样派。</p>
+    </div>
+    <div class="division-grid" style="grid-template-columns:repeat(2,1fr);">
+      <div class="card reveal">
+        <h3 style="margin-top:0">端到端加密</h3>
+        <p>手机到本机全程密文，网关只做中转——数据与执行永远在本机。</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">不开任何端口</h3>
+        <p>本机主动出站连接。不需要公网 IP，也不暴露端口。</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">信任根在桌面</h3>
+        <p>新设备配对必须人在电脑前确认；任何设备随时可吊销。</p>
+      </div>
+      <div class="card reveal">
+        <h3 style="margin-top:0">网关源码公开</h3>
+        <p>远程网关的实现就躺在仓库的 <code style="font-family:var(--font-mono);font-size:.85em;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 6px;">gateway/</code> 目录里——加密链路长什么样，你自己审。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow-sm">安装</span>
+      <h2>四条命令，造一座蜂巢。</h2>
+      <p class="sub">需要 Node.js ≥ 22 和 pnpm。macOS / Linux 是一等公民，Windows 尽力而为。</p>
+    </div>
+    <div class="install-box reveal">
+      <div class="install-head">
+        <span>terminal</span>
+        <button class="copy-btn" id="copyInstall" type="button">复制</button>
+      </div>
+      <pre id="installCmds"><span class="p">$</span> git clone https://github.com/zhouyuanxinand/hiveteam.git
+<span class="p">$</span> cd hiveteam
+<span class="p">$</span> pnpm install
+<span class="p">$</span> pnpm dev
+<span class="cm"># 打开它打印的本机地址，通常是 http://127.0.0.1:3000</span></pre>
+    </div>
+    <p class="install-req reveal">更新也简单：<code>git pull</code>，然后 <code>pnpm install --frozen-lockfile && pnpm build</code>，重启进程即可。</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-inner">
+      <a class="brand" href="#top"><img src="assets/logo.png" alt="" width="26" height="26">HiveTeam</a>
+      <div class="foot-links">
+        <a href="https://github.com/zhouyuanxinand/hiveteam" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新日志</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/LICENSE.BSL" target="_blank" rel="noopener">许可证 BSL 1.1</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/blob/main/SECURITY.md" target="_blank" rel="noopener">安全</a>
+        <a href="https://github.com/zhouyuanxinand/hiveteam/issues" target="_blank" rel="noopener">反馈</a>
+      </div>
+    </div>
+    <p class="foot-note">HiveTeam 是 Hive 的源码可控自托管分支，致谢上游 <a href="https://github.com/tt-a1i/hive" target="_blank" rel="noopener" style="color:var(--blue)">@tt-a1i/hive</a>。名称与标识使用见 TRADEMARK.md。© 2026 zhouyuanxinand</p>
+  </div>
+</footer>
+
+<script src="assets/main.js"></script>
+</body>
+</html>
