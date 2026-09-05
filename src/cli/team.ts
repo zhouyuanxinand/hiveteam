@@ -7,6 +7,7 @@ import {
   isProtocolGuideTopic,
   PROTOCOL_GUIDE_TOPICS,
 } from '../server/hive-team-guidance.js'
+import { fetchLocalRuntime, type LocalHttpResponse } from './local-http.js'
 
 const REQUIRED_ENV_KEYS = [
   'HIVE_PORT',
@@ -69,15 +70,19 @@ const describeFetchError = (baseUrl: string, error: unknown) => {
   return `Failed to reach HiveTeam runtime at ${baseUrl}: ${message}${cause}. Check HIVE_PORT and make sure the HiveTeam runtime is still running.`
 }
 
-const fetchRuntime = async (baseUrl: string, path: string, init: RequestInit) => {
+const fetchRuntime = async (
+  baseUrl: string,
+  path: string,
+  init: { body?: string; headers?: Record<string, string>; method?: string }
+) => {
   try {
-    return await fetch(`${baseUrl}${path}`, init)
+    return await fetchLocalRuntime(`${baseUrl}${path}`, init)
   } catch (error) {
     throw new Error(describeFetchError(baseUrl, error))
   }
 }
 
-const readHttpErrorDetail = async (response: Response) => {
+const readHttpErrorDetail = async (response: LocalHttpResponse) => {
   const text = await response.text().catch(() => '')
   const trimmed = text.trim()
   if (!trimmed) return ''
@@ -94,7 +99,7 @@ const readHttpErrorDetail = async (response: Response) => {
   return trimmed
 }
 
-const throwHttpError = async (response: Response): Promise<never> => {
+const throwHttpError = async (response: LocalHttpResponse): Promise<never> => {
   const detail = await readHttpErrorDetail(response)
   throw new Error(
     detail

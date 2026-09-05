@@ -12,6 +12,29 @@ const json = (body: unknown): Response =>
     json: async () => body,
   }) as Response
 
+const ALICE = { id: 'wa', name: 'Alice', role: 'coder', status: 'working', pending_task_count: 1 }
+const BOB = { id: 'wb', name: 'Bob', role: 'tester', status: 'idle', pending_task_count: 0 }
+
+const bulkTeamPayload = (entries: Record<string, unknown[]>) => ({
+  workers_by_workspace_id: entries,
+})
+
+// The hook polls one bulk endpoint for all workspaces; dispatch on the
+// workspace_ids query parameter.
+const stubBulkTeamFetch = () => {
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.startsWith('/api/ui/team')) {
+      const ids = new URL(url, 'http://localhost').searchParams.get('workspace_ids')?.split(',')
+      const entries: Record<string, unknown[]> = {}
+      if (ids?.includes('a')) entries.a = [ALICE]
+      if (ids?.includes('b')) entries.b = [BOB]
+      return json(bulkTeamPayload(entries))
+    }
+    throw new Error(`Unexpected fetch ${url}`)
+  })
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
@@ -24,20 +47,7 @@ const flushPromises = async () => {
 
 describe('useWorkspaceWorkers', () => {
   test('loads worker summaries for every local workspace id, not only the active workspace', async () => {
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url === '/api/ui/workspaces/a/team') {
-        return json([
-          { id: 'wa', name: 'Alice', role: 'coder', status: 'working', pending_task_count: 1 },
-        ])
-      }
-      if (url === '/api/ui/workspaces/b/team') {
-        return json([
-          { id: 'wb', name: 'Bob', role: 'tester', status: 'idle', pending_task_count: 0 },
-        ])
-      }
-      throw new Error(`Unexpected fetch ${url}`)
-    })
+    stubBulkTeamFetch()
 
     const { result } = renderHook(() => useWorkspaceWorkers(['a', 'b']))
 
@@ -68,20 +78,7 @@ describe('useWorkspaceWorkers', () => {
   })
 
   test('prunes worker summaries when a workspace is removed from the local list', async () => {
-    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url === '/api/ui/workspaces/a/team') {
-        return json([
-          { id: 'wa', name: 'Alice', role: 'coder', status: 'working', pending_task_count: 1 },
-        ])
-      }
-      if (url === '/api/ui/workspaces/b/team') {
-        return json([
-          { id: 'wb', name: 'Bob', role: 'tester', status: 'idle', pending_task_count: 0 },
-        ])
-      }
-      throw new Error(`Unexpected fetch ${url}`)
-    })
+    stubBulkTeamFetch()
 
     const { rerender, result } = renderHook(
       ({ workspaceIds }: { workspaceIds: string[] }) => useWorkspaceWorkers(workspaceIds),
@@ -115,11 +112,13 @@ describe('useWorkspaceWorkers', () => {
 
   test('keeps the same workspace map reference when refreshed worker payloads are unchanged', async () => {
     vi.useFakeTimers()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        json([{ id: 'wa', name: 'Alice', role: 'coder', status: 'idle', pending_task_count: 0 }])
+    const fetchMock = vi.fn().mockResolvedValue(
+      json(
+        bulkTeamPayload({
+          a: [{ id: 'wa', name: 'Alice', role: 'coder', status: 'idle', pending_task_count: 0 }],
+        })
       )
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const { result } = renderHook(() => useWorkspaceWorkers(['a']))
@@ -152,7 +151,11 @@ describe('useWorkspaceWorkers', () => {
       )
       .mockRejectedValueOnce(new Error('temporary failure'))
       .mockResolvedValue(
-        json([{ id: 'wa', name: 'Alice', role: 'coder', status: 'idle', pending_task_count: 0 }])
+        json(
+          bulkTeamPayload({
+            a: [{ id: 'wa', name: 'Alice', role: 'coder', status: 'idle', pending_task_count: 0 }],
+          })
+        )
       )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -166,7 +169,7 @@ describe('useWorkspaceWorkers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     await act(async () => {
-      resolveFirstFetch?.(json([]))
+      resolveFirstFetch?.(json(bulkTeamPayload({ a: [] })))
       await flushPromises()
     })
 

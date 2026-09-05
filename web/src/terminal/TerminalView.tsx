@@ -32,11 +32,19 @@ const candidateIds = (runId: string): string[] => [
   `shell-pty-${runId}`,
 ]
 
+// Candidate ids are build-time prefixes plus a UUID runId. jsdom (tests) has
+// no CSS.escape, so fall back to escaping anything outside that safe alphabet.
+const escapeIdForSelector = (id: string): string => {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(id)
+  return id.replace(/([^\w-])/g, '\\$1')
+}
+
 const getLastElementById = (id: string): HTMLElement | null => {
-  const matches = Array.from(document.querySelectorAll<HTMLElement>('[id]')).filter(
-    (node) => node.id === id
-  )
-  return matches[matches.length - 1] ?? null
+  // A single `#id` selector goes through the document's id map instead of
+  // walking every element that has an id attribute — the previous `[id]`
+  // scan ran per DOM mutation burst per mounted terminal.
+  const matches = document.querySelectorAll<HTMLElement>(`#${escapeIdForSelector(id)}`)
+  return matches.length > 0 ? (matches.item(matches.length - 1) as HTMLElement) : null
 }
 
 const getTerminalParkingLot = (): HTMLElement => {
@@ -60,9 +68,22 @@ const cleanupTerminalParkingLot = (): void => {
 const portalTargetSubscribers = new Set<() => void>()
 let portalTargetObserver: MutationObserver | undefined
 let portalTargetPollTimer: number | undefined
+let portalTargetNotifyScheduled = false
 
 const notifyPortalTargetSubscribers = (): void => {
-  for (const subscriber of portalTargetSubscribers) subscriber()
+  // Streaming PTY output mutates the DOM constantly; coalesce a burst of
+  // mutations into one subscriber pass per frame.
+  if (portalTargetNotifyScheduled) return
+  portalTargetNotifyScheduled = true
+  const run = () => {
+    portalTargetNotifyScheduled = false
+    for (const subscriber of portalTargetSubscribers) subscriber()
+  }
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(run)
+  } else {
+    window.setTimeout(run, 0)
+  }
 }
 
 const stopPortalTargetWatcher = (): void => {

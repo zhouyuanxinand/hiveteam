@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
+import type { Database, Statement } from 'better-sqlite3'
 
 import {
   type CreateTeamMemoryInput,
@@ -128,13 +128,72 @@ export const createTeamMemoryStore = (db: Database) => {
         WHERE s.memory_id = e.id ORDER BY s.created_at ASC LIMIT 1
       ) AS created_by_agent_name
     FROM memory_entries e`
-  const get = (workspaceId: string, memoryId: string) => {
-    const row = db
-      .prepare(
+
+  // Dispatch-time memory injection runs `list` once per search term, and the
+  // knowledge drawer polls it — keep every fixed statement prepared, and cache
+  // the handful of `list` clause combinations.
+  const getStmt = db.prepare(
+    `${selectEntries}
+     WHERE (e.workspace_id = ? OR (e.workspace_id IS NULL AND e.scope = 'user')) AND e.id = ?`
+  )
+  const listStmts = new Map<string, Statement>()
+  const listStmt = (clausesKey: string, clauses: string[]) => {
+    let stmt = listStmts.get(clausesKey)
+    if (!stmt) {
+      stmt = db.prepare(
         `${selectEntries}
-         WHERE (e.workspace_id = ? OR (e.workspace_id IS NULL AND e.scope = 'user')) AND e.id = ?`
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY e.pinned DESC, e.updated_at DESC
+         LIMIT ?`
       )
-      .get(workspaceId, memoryId) as TeamMemoryRow | undefined
+      listStmts.set(clausesKey, stmt)
+    }
+    return stmt
+  }
+  const nextFtsRowidStmt = db.prepare(
+    'SELECT COALESCE(MAX(fts_rowid), 0) + 1 AS next_rowid FROM memory_entries'
+  )
+  const insertEntryStmt = db.prepare(
+    `INSERT INTO memory_entries (
+       id, workspace_id, scope, fts_rowid, kind, body, tags, status, source, confidence,
+       pinned, disabled, created_at, updated_at, archived_at, last_injected_at,
+       ref_type, ref_id, ref_title
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+  const insertSourceStmt = db.prepare(
+    `INSERT INTO memory_sources (
+       id, memory_id, source_type, actor_agent_id_snapshot,
+       actor_name_snapshot, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?)`
+  )
+  const deleteInjectionsForWorkspaceStmt = db.prepare(
+    'DELETE FROM memory_injections WHERE workspace_id = ?'
+  )
+  const deleteSourcesForWorkspaceStmt = db.prepare(
+    'DELETE FROM memory_sources WHERE memory_id IN (SELECT id FROM memory_entries WHERE workspace_id = ?)'
+  )
+  const deleteEntriesForWorkspaceStmt = db.prepare(
+    'DELETE FROM memory_entries WHERE workspace_id = ?'
+  )
+  const insertInjectionStmt = db.prepare(
+    `INSERT INTO memory_injections (
+       id, memory_id, workspace_id, target_agent_id_snapshot,
+       context_type, dispatch_id, injected_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+  const markInjectedStmt = db.prepare(
+    `UPDATE memory_entries SET last_injected_at = ?
+     WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
+  )
+  const updateEntryStmt = db.prepare(
+    `UPDATE memory_entries
+     SET body = ?, disabled = ?, kind = ?, pinned = ?, scope = ?, workspace_id = ?, status = ?, tags = ?,
+         updated_at = ?, archived_at = ?, ref_type = ?, ref_id = ?, ref_title = ?
+     WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
+  )
+
+  const get = (workspaceId: string, memoryId: string) => {
+    const row = getStmt.get(workspaceId, memoryId) as TeamMemoryRow | undefined
     return row ? fromRow(row) : undefined
   }
 
@@ -157,14 +216,7 @@ export const createTeamMemoryStore = (db: Database) => {
       params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`)
     }
     params.push(clampLimit(options.limit))
-    const rows = db
-      .prepare(
-        `${selectEntries}
-         WHERE ${clauses.join(' AND ')}
-         ORDER BY e.pinned DESC, e.updated_at DESC
-         LIMIT ?`
-      )
-      .all(...params) as TeamMemoryRow[]
+    const rows = listStmt(clauses.join('|'), clauses).all(...params) as TeamMemoryRow[]
     return rows.map(fromRow)
   }
 
@@ -193,16 +245,8 @@ export const createTeamMemoryStore = (db: Database) => {
         workspaceId: input.scope === 'user' ? null : workspaceId,
       }
       db.transaction(() => {
-        const ftsRow = db
-          .prepare('SELECT COALESCE(MAX(fts_rowid), 0) + 1 AS next_rowid FROM memory_entries')
-          .get() as { next_rowid: number }
-        db.prepare(
-          `INSERT INTO memory_entries (
-             id, workspace_id, scope, fts_rowid, kind, body, tags, status, source, confidence,
-             pinned, disabled, created_at, updated_at, archived_at, last_injected_at,
-             ref_type, ref_id, ref_title
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(
+        const ftsRow = nextFtsRowidStmt.get() as { next_rowid: number }
+        insertEntryStmt.run(
           entry.id,
           entry.workspaceId,
           entry.scope,
@@ -223,12 +267,7 @@ export const createTeamMemoryStore = (db: Database) => {
           entry.procedureRef?.id ?? null,
           entry.procedureRef?.title ?? null
         )
-        db.prepare(
-          `INSERT INTO memory_sources (
-             id, memory_id, source_type, actor_agent_id_snapshot,
-             actor_name_snapshot, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?)`
-        ).run(
+        insertSourceStmt.run(
           randomUUID(),
           entry.id,
           entry.source,
@@ -240,11 +279,9 @@ export const createTeamMemoryStore = (db: Database) => {
       return entry
     },
     deleteWorkspaceEntries(workspaceId: string) {
-      db.prepare('DELETE FROM memory_injections WHERE workspace_id = ?').run(workspaceId)
-      db.prepare(
-        'DELETE FROM memory_sources WHERE memory_id IN (SELECT id FROM memory_entries WHERE workspace_id = ?)'
-      ).run(workspaceId)
-      db.prepare('DELETE FROM memory_entries WHERE workspace_id = ?').run(workspaceId)
+      deleteInjectionsForWorkspaceStmt.run(workspaceId)
+      deleteSourcesForWorkspaceStmt.run(workspaceId)
+      deleteEntriesForWorkspaceStmt.run(workspaceId)
     },
     get,
     list,
@@ -285,18 +322,8 @@ export const createTeamMemoryStore = (db: Database) => {
       if (input.memoryIds.length === 0) return
       const now = Date.now()
       db.transaction(() => {
-        const insertInjection = db.prepare(
-          `INSERT INTO memory_injections (
-             id, memory_id, workspace_id, target_agent_id_snapshot,
-             context_type, dispatch_id, injected_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        const markInjected = db.prepare(
-          `UPDATE memory_entries SET last_injected_at = ?
-           WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
-        )
         for (const memoryId of input.memoryIds) {
-          insertInjection.run(
+          insertInjectionStmt.run(
             randomUUID(),
             memoryId,
             input.workspaceId,
@@ -305,7 +332,7 @@ export const createTeamMemoryStore = (db: Database) => {
             null,
             now
           )
-          markInjected.run(now, input.workspaceId, memoryId)
+          markInjectedStmt.run(now, input.workspaceId, memoryId)
         }
       })()
     },
@@ -328,12 +355,7 @@ export const createTeamMemoryStore = (db: Database) => {
       requireProcedureRefForKind(next.kind, next.procedureRef)
       const updatedAt = Date.now()
       const nextWorkspaceId = next.scope === 'user' ? null : (current.workspaceId ?? workspaceId)
-      db.prepare(
-        `UPDATE memory_entries
-         SET body = ?, disabled = ?, kind = ?, pinned = ?, scope = ?, workspace_id = ?, status = ?, tags = ?,
-             updated_at = ?, archived_at = ?, ref_type = ?, ref_id = ?, ref_title = ?
-         WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
-      ).run(
+      updateEntryStmt.run(
         next.body,
         next.disabled ? 1 : 0,
         next.kind,

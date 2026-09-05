@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import type { Database } from 'better-sqlite3'
+import type { Database, Statement } from 'better-sqlite3'
 
 export type DispatchStatus = 'queued' | 'submitted' | 'failed' | 'reported' | 'cancelled'
 
@@ -148,6 +148,126 @@ const dispatchSelect = `
 `
 
 export const createDispatchLedgerStore = (db: Database) => {
+  // Statement handles are prepared once: the team-list poll runs the pending
+  // counts twice per second per workspace, and prepare-per-call dominated the
+  // CPU cost of that endpoint.
+  const insertDispatchStmt = db.prepare(
+    `INSERT INTO dispatches (
+      id,
+      workspace_id,
+      from_agent_id,
+      to_agent_id,
+      text,
+      status,
+      created_at,
+      delivered_at,
+      submitted_at,
+      reported_at,
+      report_text,
+      artifacts
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+  const deleteFailureStmt = db.prepare(
+    'DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?'
+  )
+  const deleteDispatchStmt = db.prepare('DELETE FROM dispatches WHERE id = ?')
+  const markSubmittedStmt = db.prepare(
+    `UPDATE dispatches
+     SET status = ?, submitted_at = ?
+     WHERE id = ?`
+  )
+  const upsertFailureStmt = db.prepare(
+    `INSERT INTO dispatch_delivery_failures (dispatch_id, attempts, last_error, last_attempt_at)
+     VALUES (?, 1, ?, ?)
+     ON CONFLICT(dispatch_id) DO UPDATE SET
+       attempts = dispatch_delivery_failures.attempts + 1,
+       last_error = excluded.last_error,
+       last_attempt_at = excluded.last_attempt_at`
+  )
+  const findOpenByIdForWorkerStmt = db.prepare(
+    `${dispatchSelect}
+      WHERE d.id = ?
+        AND d.workspace_id = ?
+        AND d.to_agent_id = ?
+        AND d.status IN ('queued', 'submitted')
+      LIMIT 1`
+  )
+  const findOpenForWorkerStmt = db.prepare(
+    `${dispatchSelect}
+      WHERE d.workspace_id = ?
+        AND d.to_agent_id = ?
+        AND d.status IN ('queued', 'submitted')
+      ORDER BY d.sequence ASC
+      LIMIT 1`
+  )
+  const findOpenByIdStmt = db.prepare(
+    `${dispatchSelect}
+     WHERE d.id = ?
+       AND d.workspace_id = ?
+       AND d.status IN ('queued', 'submitted')
+     LIMIT 1`
+  )
+  const markReportedStmt = db.prepare(
+    `UPDATE dispatches
+     SET status = ?,
+         reported_at = ?,
+         report_text = ?,
+         artifacts = ?
+     WHERE id = ?`
+  )
+  const markCancelledStmt = db.prepare(
+    `UPDATE dispatches
+     SET status = ?,
+         reported_at = ?,
+         report_text = ?
+     WHERE id = ?`
+  )
+  const listOpenKindsStmt = db.prepare(
+    `SELECT workspace_id, to_agent_id AS worker_id, 'send' AS type
+       FROM dispatches
+       WHERE status IN ('queued', 'submitted')
+       ORDER BY sequence ASC`
+  )
+  const deleteWorkspaceFailuresStmt = db.prepare(
+    `DELETE FROM dispatch_delivery_failures
+     WHERE dispatch_id IN (SELECT id FROM dispatches WHERE workspace_id = ?)`
+  )
+  const deleteWorkspaceDispatchesStmt = db.prepare('DELETE FROM dispatches WHERE workspace_id = ?')
+  const deleteWorkerFailuresStmt = db.prepare(
+    `DELETE FROM dispatch_delivery_failures
+     WHERE dispatch_id IN (
+       SELECT id FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?
+     )`
+  )
+  const deleteWorkerDispatchesStmt = db.prepare(
+    'DELETE FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?'
+  )
+  const countPendingByWorkerStmt = db.prepare(
+    `SELECT d.to_agent_id AS worker_id, COUNT(*) AS pending
+       FROM dispatches d
+       LEFT JOIN dispatch_delivery_failures f ON f.dispatch_id = d.id
+       WHERE d.workspace_id = ?
+         AND (d.status IN ('queued', 'submitted') OR f.dispatch_id IS NOT NULL)
+       GROUP BY d.to_agent_id`
+  )
+  // The status filter has a closed set of shapes, so each variant is prepared
+  // once and reused instead of re-parsing the JOIN on every list call.
+  const listDispatchStmts = new Map<string, Statement>()
+  const listDispatchesStmt = (statusClause: string) => {
+    let stmt = listDispatchStmts.get(statusClause)
+    if (!stmt) {
+      stmt = db.prepare(
+        `${dispatchSelect}
+         WHERE d.workspace_id = ?
+           ${statusClause}
+         ORDER BY d.sequence ASC
+         LIMIT ? OFFSET ?`
+      )
+      listDispatchStmts.set(statusClause, stmt)
+    }
+    return stmt
+  }
+
   const createDispatch = (input: CreateDispatchInput) => {
     const record: DispatchRecord = {
       artifacts: [],
@@ -165,22 +285,7 @@ export const createDispatchLedgerStore = (db: Database) => {
       workspaceId: input.workspaceId,
     }
 
-    db.prepare(
-      `INSERT INTO dispatches (
-        id,
-        workspace_id,
-        from_agent_id,
-        to_agent_id,
-        text,
-        status,
-        created_at,
-        delivered_at,
-        submitted_at,
-        reported_at,
-        report_text,
-        artifacts
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
+    insertDispatchStmt.run(
       record.id,
       record.workspaceId,
       record.fromAgentId,
@@ -200,73 +305,38 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const deleteDispatch = (dispatchId: string) => {
     db.transaction(() => {
-      db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatchId)
-      db.prepare('DELETE FROM dispatches WHERE id = ?').run(dispatchId)
+      deleteFailureStmt.run(dispatchId)
+      deleteDispatchStmt.run(dispatchId)
     })()
   }
 
   const markSubmitted = (dispatchId: string) => {
     const submittedAt = Date.now()
-    db.prepare(
-      `UPDATE dispatches
-       SET status = ?, submitted_at = ?
-       WHERE id = ?`
-    ).run('submitted', submittedAt, dispatchId)
-    db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatchId)
+    markSubmittedStmt.run('submitted', submittedAt, dispatchId)
+    deleteFailureStmt.run(dispatchId)
   }
 
   const markDeliveryFailed = (dispatchId: string, error: string) => {
     const now = Date.now()
-    db.prepare(
-      `INSERT INTO dispatch_delivery_failures (dispatch_id, attempts, last_error, last_attempt_at)
-       VALUES (?, 1, ?, ?)
-       ON CONFLICT(dispatch_id) DO UPDATE SET
-         attempts = dispatch_delivery_failures.attempts + 1,
-         last_error = excluded.last_error,
-         last_attempt_at = excluded.last_attempt_at`
-    ).run(dispatchId, error, now)
+    upsertFailureStmt.run(dispatchId, error, now)
   }
 
   const findOpenDispatch = (workspaceId: string, toAgentId: string, dispatchId?: string) => {
     if (dispatchId) {
-      const row = db
-        .prepare(
-          `${dispatchSelect}
-            WHERE d.id = ?
-              AND d.workspace_id = ?
-              AND d.to_agent_id = ?
-              AND d.status IN ('queued', 'submitted')
-            LIMIT 1`
-        )
-        .get(dispatchId, workspaceId, toAgentId) as DispatchRow | undefined
+      const row = findOpenByIdForWorkerStmt.get(dispatchId, workspaceId, toAgentId) as
+        | DispatchRow
+        | undefined
 
       return row ? toRecord(row) : undefined
     }
 
-    const row = db
-      .prepare(
-        `${dispatchSelect}
-          WHERE d.workspace_id = ?
-            AND d.to_agent_id = ?
-            AND d.status IN ('queued', 'submitted')
-          ORDER BY d.sequence ASC
-          LIMIT 1`
-      )
-      .get(workspaceId, toAgentId) as DispatchRow | undefined
+    const row = findOpenForWorkerStmt.get(workspaceId, toAgentId) as DispatchRow | undefined
 
     return row ? toRecord(row) : undefined
   }
 
   const findOpenDispatchById = (workspaceId: string, dispatchId: string) => {
-    const row = db
-      .prepare(
-        `${dispatchSelect}
-         WHERE d.id = ?
-           AND d.workspace_id = ?
-           AND d.status IN ('queued', 'submitted')
-         LIMIT 1`
-      )
-      .get(dispatchId, workspaceId) as DispatchRow | undefined
+    const row = findOpenByIdStmt.get(dispatchId, workspaceId) as DispatchRow | undefined
 
     return row ? toRecord(row) : undefined
   }
@@ -278,15 +348,14 @@ export const createDispatchLedgerStore = (db: Database) => {
     }
 
     const reportedAt = Date.now()
-    db.prepare(
-      `UPDATE dispatches
-       SET status = ?,
-           reported_at = ?,
-           report_text = ?,
-           artifacts = ?
-       WHERE id = ?`
-    ).run('reported', reportedAt, input.reportText, JSON.stringify(input.artifacts), dispatch.id)
-    db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatch.id)
+    markReportedStmt.run(
+      'reported',
+      reportedAt,
+      input.reportText,
+      JSON.stringify(input.artifacts),
+      dispatch.id
+    )
+    deleteFailureStmt.run(dispatch.id)
 
     return {
       ...dispatch,
@@ -304,14 +373,8 @@ export const createDispatchLedgerStore = (db: Database) => {
     }
 
     const cancelledAt = Date.now()
-    db.prepare(
-      `UPDATE dispatches
-       SET status = ?,
-           reported_at = ?,
-           report_text = ?
-       WHERE id = ?`
-    ).run('cancelled', cancelledAt, input.reason, dispatch.id)
-    db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatch.id)
+    markCancelledStmt.run('cancelled', cancelledAt, input.reason, dispatch.id)
+    deleteFailureStmt.run(dispatch.id)
 
     return {
       ...dispatch,
@@ -335,56 +398,44 @@ export const createDispatchLedgerStore = (db: Database) => {
     const values: Array<string | number> = [workspaceId]
     if (options.status && options.status !== 'failed') values.push(options.status)
     values.push(limit, offset)
-    return (
-      db
-        .prepare(
-          `${dispatchSelect}
-           WHERE d.workspace_id = ?
-             ${statusClause}
-           ORDER BY d.sequence ASC
-           LIMIT ? OFFSET ?`
-        )
-        .all(...values) as DispatchRow[]
-    ).map(toRecord)
+    return (listDispatchesStmt(statusClause).all(...values) as DispatchRow[]).map(toRecord)
   }
 
   const listOpenDispatchKinds = () => {
-    return db
-      .prepare(
-        `SELECT workspace_id, to_agent_id AS worker_id, 'send' AS type
-           FROM dispatches
-           WHERE status IN ('queued', 'submitted')
-           ORDER BY sequence ASC`
-      )
-      .all() as Array<{ type: 'send'; worker_id: string; workspace_id: string }>
+    return listOpenKindsStmt.all() as Array<{
+      type: 'send'
+      worker_id: string
+      workspace_id: string
+    }>
+  }
+
+  const countPendingByWorker = (workspaceId: string) => {
+    const counts = new Map<string, number>()
+    for (const row of countPendingByWorkerStmt.all(workspaceId) as Array<{
+      pending: number
+      worker_id: string
+    }>) {
+      counts.set(row.worker_id, Number(row.pending))
+    }
+    return counts
   }
 
   const deleteWorkspaceDispatches = (workspaceId: string) => {
     db.transaction(() => {
-      db.prepare(
-        `DELETE FROM dispatch_delivery_failures
-         WHERE dispatch_id IN (SELECT id FROM dispatches WHERE workspace_id = ?)`
-      ).run(workspaceId)
-      db.prepare('DELETE FROM dispatches WHERE workspace_id = ?').run(workspaceId)
+      deleteWorkspaceFailuresStmt.run(workspaceId)
+      deleteWorkspaceDispatchesStmt.run(workspaceId)
     })()
   }
 
   const deleteWorkerDispatches = (workspaceId: string, workerId: string) => {
     db.transaction(() => {
-      db.prepare(
-        `DELETE FROM dispatch_delivery_failures
-         WHERE dispatch_id IN (
-           SELECT id FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?
-         )`
-      ).run(workspaceId, workerId)
-      db.prepare('DELETE FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?').run(
-        workspaceId,
-        workerId
-      )
+      deleteWorkerFailuresStmt.run(workspaceId, workerId)
+      deleteWorkerDispatchesStmt.run(workspaceId, workerId)
     })()
   }
 
   return {
+    countPendingByWorker,
     createDispatch,
     deleteDispatch,
     deleteWorkerDispatches,

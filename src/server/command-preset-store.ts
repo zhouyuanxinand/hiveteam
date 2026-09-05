@@ -79,35 +79,47 @@ const toRecord = (row: {
 })
 
 export const createCommandPresetStore = (db: Database) => {
-  const get = (id: string) => {
-    const row = db
-      .prepare(
-        `SELECT id, display_name, command, args, env, resume_args_template, session_id_capture, yolo_args_template, is_builtin
-         FROM command_presets WHERE id = ?`
-      )
-      .get(id)
-    return row ? toRecord(row as Parameters<typeof toRecord>[0]) : undefined
+  const selectColumns =
+    'id, display_name, command, args, env, resume_args_template, session_id_capture, yolo_args_template, is_builtin'
+  const listStmt = db.prepare(
+    `SELECT ${selectColumns} FROM command_presets ORDER BY is_builtin DESC, created_at ASC`
+  )
+  const insertStmt = db.prepare(
+    `INSERT INTO command_presets (
+       id, display_name, command, args, env, resume_args_template, session_id_capture,
+       yolo_args_template, is_builtin, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  )
+  const updateStmt = db.prepare(
+    `UPDATE command_presets
+     SET display_name = ?, command = ?, args = ?, env = ?, resume_args_template = ?,
+         session_id_capture = ?, yolo_args_template = ?, updated_at = ?
+     WHERE id = ?`
+  )
+  const removeStmt = db.prepare('DELETE FROM command_presets WHERE id = ?')
+
+  // Presets change only through this store, and the team-list enrichment reads
+  // one preset per worker per UI poll — memoize rows and drop the per-poll
+  // SQLite round trips and JSON re-parsing entirely.
+  let cache: { byId: Map<string, CommandPresetRecord>; ordered: CommandPresetRecord[] } | null =
+    null
+
+  const readAll = () => {
+    if (!cache) {
+      const ordered = listStmt.all().map((row) => toRecord(row as Parameters<typeof toRecord>[0]))
+      cache = { byId: new Map(ordered.map((record) => [record.id, record])), ordered }
+    }
+    return cache
   }
 
-  const list = () => {
-    return db
-      .prepare(
-        `SELECT id, display_name, command, args, env, resume_args_template, session_id_capture, yolo_args_template, is_builtin
-         FROM command_presets ORDER BY is_builtin DESC, created_at ASC`
-      )
-      .all()
-      .map((row) => toRecord(row as Parameters<typeof toRecord>[0]))
-  }
+  const get = (id: string) => readAll().byId.get(id)
+
+  const list = () => [...readAll().ordered]
 
   const create = (input: CommandPresetInput) => {
     const record = { id: randomUUID(), ...input, isBuiltin: false }
     const now = Date.now()
-    db.prepare(
-      `INSERT INTO command_presets (
-         id, display_name, command, args, env, resume_args_template, session_id_capture,
-         yolo_args_template, is_builtin, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
-    ).run(
+    insertStmt.run(
       record.id,
       record.displayName,
       record.command,
@@ -119,19 +131,15 @@ export const createCommandPresetStore = (db: Database) => {
       now,
       now
     )
+    cache = null
     return record
   }
 
   const update = (id: string, input: CommandPresetInput) => {
-    const current = list().find((preset) => preset.id === id)
+    const current = get(id)
     if (!current) throw new Error(`Command preset not found: ${id}`)
     if (current.isBuiltin) throw new ConflictError(`Builtin command preset is read-only: ${id}`)
-    db.prepare(
-      `UPDATE command_presets
-       SET display_name = ?, command = ?, args = ?, env = ?, resume_args_template = ?,
-           session_id_capture = ?, yolo_args_template = ?, updated_at = ?
-       WHERE id = ?`
-    ).run(
+    updateStmt.run(
       input.displayName,
       input.command,
       serializeArgs(input.args),
@@ -142,14 +150,16 @@ export const createCommandPresetStore = (db: Database) => {
       Date.now(),
       id
     )
+    cache = null
     return { ...current, ...input }
   }
 
   const remove = (id: string) => {
-    const current = list().find((preset) => preset.id === id)
+    const current = get(id)
     if (!current) throw new Error(`Command preset not found: ${id}`)
     if (current.isBuiltin) throw new ConflictError(`Builtin command preset is read-only: ${id}`)
-    db.prepare('DELETE FROM command_presets WHERE id = ?').run(id)
+    removeStmt.run(id)
+    cache = null
   }
 
   return { create, get, list, remove, update }

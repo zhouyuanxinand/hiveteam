@@ -39,6 +39,9 @@ export class TerminalStateMirror {
   private readonly parserDisposables: Array<{ dispose: () => void }> = []
   private mouseEncoding: MouseEncoding = 'DEFAULT'
   private operationQueue: Promise<void> = Promise.resolve()
+  private pendingWriteChunks: string[] = []
+  private lastPtyLineCache: string | null = null
+  private lastPtyLineDirty = true
 
   constructor(size: TerminalMirrorSize = { cols: 80, rows: 24 }) {
     const normalized = normalizeTerminalSize(size)
@@ -100,16 +103,26 @@ export class TerminalStateMirror {
    * Returns the most recent non-empty scrollback line (trimmed, ANSI-stripped,
    * truncated to `maxLen`). Returns `null` when scrollback has no printable
    * content, so the wire protocol can express "no output yet" as a null.
+   *
+   * The team-list endpoint calls this twice per second per worker, so the
+   * buffer scan is cached and only recomputed after new output was written.
    */
   lastPtyLine(maxLen = 60): string | null {
+    if (!this.lastPtyLineDirty) {
+      return this.lastPtyLineCache === null ? null : this.lastPtyLineCache.slice(0, maxLen)
+    }
     const buffer = this.terminal.buffer.active
+    let result: string | null = null
     for (let row = buffer.length - 1; row >= 0; row -= 1) {
       const raw = buffer.getLine(row)?.translateToString(true) ?? ''
       const cleaned = raw.replace(ANSI_CSI_PATTERN, '').trim()
       if (cleaned.length === 0) continue
-      return cleaned.slice(0, maxLen)
+      result = cleaned
+      break
     }
-    return null
+    this.lastPtyLineCache = result
+    this.lastPtyLineDirty = false
+    return result === null ? null : result.slice(0, maxLen)
   }
 
   resize(cols: number, rows: number) {
@@ -121,14 +134,35 @@ export class TerminalStateMirror {
       })
   }
 
+  /**
+   * Coalesces bursts of PTY chunks into a single xterm write. Heavy output
+   * arrives faster than the headless parser drains it, and queueing one
+   * promise per chunk multiplied GC pressure on every agent run.
+   */
   write(chunk: string) {
+    this.lastPtyLineDirty = true
+    this.pendingWriteChunks.push(chunk)
+    if (this.pendingWriteChunks.length > 1) return
     this.operationQueue = this.operationQueue
       .catch(() => undefined)
-      .then(
-        () =>
-          new Promise<void>((resolve) => {
-            this.terminal.write(chunk, () => resolve())
-          })
-      )
+      .then(() => this.flushPendingWrites())
+  }
+
+  private flushPendingWrites(): Promise<void> {
+    const chunks = this.pendingWriteChunks
+    if (chunks.length === 0) return Promise.resolve()
+    this.pendingWriteChunks = []
+    // Array#join returns the single element itself for one-entry arrays.
+    const data = chunks.join('')
+    return new Promise<void>((resolve) => {
+      this.terminal.write(data, () => resolve())
+    }).then(() => {
+      // The buffer just advanced past anything lastPtyLine may have cached
+      // while this batch was still queued.
+      this.lastPtyLineDirty = true
+      // Chunks that arrived while xterm parsed this batch are written before
+      // the operation queue settles, preserving snapshot ordering.
+      return this.pendingWriteChunks.length > 0 ? this.flushPendingWrites() : undefined
+    })
   }
 }

@@ -66,4 +66,42 @@ describe('pty output bus', () => {
     expect(runOne).toHaveBeenCalledWith('alpha')
     expect(runTwo).not.toHaveBeenCalled()
   })
+
+  test('publishExit notifies exit listeners exactly once', () => {
+    const bus = createPtyOutputBus()
+    const left = vi.fn()
+    const right = vi.fn()
+    const otherRun = vi.fn()
+
+    bus.subscribeExit('run-1', left)
+    bus.subscribeExit('run-1', right)
+    bus.subscribeExit('run-2', otherRun)
+    bus.publishExit('run-1')
+    bus.publishExit('run-1')
+
+    expect(left).toHaveBeenCalledTimes(1)
+    expect(right).toHaveBeenCalledTimes(1)
+    expect(otherRun).not.toHaveBeenCalled()
+  })
+
+  test('clear removes pending exit listeners without firing them', () => {
+    const bus = createPtyOutputBus()
+    const listener = vi.fn()
+
+    bus.subscribeExit('run-1', listener)
+    bus.clear('run-1')
+    bus.publishExit('run-1')
+
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  test('unsubscribed exit listener is not notified', () => {
+    const bus = createPtyOutputBus()
+    const listener = vi.fn()
+
+    bus.subscribeExit('run-1', listener)()
+    bus.publishExit('run-1')
+
+    expect(listener).not.toHaveBeenCalled()
+  })
 })
