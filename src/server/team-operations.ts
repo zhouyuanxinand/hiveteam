@@ -128,7 +128,17 @@ export const createTeamOperations = ({
    * Leave entries pending until the terminal input writer has pasted and
    * submitted them. A stopped Orchestrator is normal here: its next `team
    * list` call will retry the same durable entry.
+   *
+   * Failed entries retry with exponential backoff so a persistently
+   * undeliverable report (e.g. an Orchestrator TUI that keeps rejecting
+   * pastes) does not get retried on every drain trigger. The first retry
+   * stays immediate so a transient paste race recovers at the next drain
+   * event; backoff applies from the second failure on. Entries never
+   * expire — backoff spaces retries out, it does not give up.
    */
+  const reportDeliveryBackoffMs = (attemptCount: number) =>
+    attemptCount <= 1 ? 0 : Math.min(30_000 * 2 ** (attemptCount - 1), 30 * 60_000)
+
   const drainReportOutbox = (
     workspaceId: string,
     targetAgentId = `${workspaceId}:orchestrator`
@@ -137,10 +147,17 @@ export const createTeamOperations = ({
       return { attempted: 0, firstSyncError: null }
     }
 
+    const now = Date.now()
     let attempted = 0
     let firstSyncError: string | null = null
     for (const entry of reportOutbox.listPending(workspaceId, targetAgentId)) {
       if (drainingReportOutboxIds.has(entry.id)) continue
+      if (
+        entry.lastDeliveryAttemptAt !== null &&
+        now - entry.lastDeliveryAttemptAt < reportDeliveryBackoffMs(entry.deliveryAttemptCount)
+      ) {
+        continue
+      }
       drainingReportOutboxIds.add(entry.id)
       attempted += 1
       try {
