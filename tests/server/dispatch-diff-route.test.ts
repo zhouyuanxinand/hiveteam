@@ -83,7 +83,8 @@ describe('GET /api/ui/workspaces/:workspaceId/dispatches/:dispatchId/diff', () =
     const response = await fetch(diffUrl(server, workspace.id, dispatch.id), {
       headers: { cookie },
     })
-    expect(response.status).toBe(200)
+    // Surface the server error body so CI failures name the actual cause.
+    expect(response.status, response.clone().body ? await response.clone().text() : '').toBe(200)
     const body = (await response.json()) as {
       base_head_sha: string
       dispatch_id: string

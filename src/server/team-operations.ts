@@ -327,10 +327,16 @@ export const createTeamOperations = ({
 
       workspaceStore.markTaskDispatched(workspaceId, workerId)
       if (baseHeadCapture) {
-        const baseHeadSha = await baseHeadCapture
-        if (baseHeadSha) {
-          setDispatchBaseHeadSha?.(dispatch.id, baseHeadSha)
-          dispatch = { ...dispatch, baseHeadSha }
+        // The baseline is enrichment on top of an already-committed dispatch.
+        // A store closing mid-capture must not surface as a delivery failure.
+        try {
+          const baseHeadSha = await baseHeadCapture
+          if (baseHeadSha) {
+            setDispatchBaseHeadSha?.(dispatch.id, baseHeadSha)
+            dispatch = { ...dispatch, baseHeadSha }
+          }
+        } catch (error) {
+          console.error('[hive] swallowed:dispatchTask.baseHeadCapture', error)
         }
       }
       // A worker-start replay may have accepted the dispatch while

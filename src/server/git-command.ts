@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -86,8 +87,17 @@ export const detectGitRepository = async (workspacePath: string): Promise<GitRep
     .map((line) => line.trim())
     .filter(Boolean)
   const repoRoot = resolve(lines[0] ?? workspacePath)
+  // Git reports the toplevel through realpath, so a symlinked prefix (e.g.
+  // macOS /tmp -> /private/tmp) must be normalized on the workspace side too
+  // or the relative scope computation lands outside the repository.
+  let workspaceRealPath = resolve(workspacePath)
+  try {
+    workspaceRealPath = realpathSync(workspaceRealPath)
+  } catch {
+    // Keep the resolved path when the workspace cannot be realpathed.
+  }
   const branchValue = lines[3] ?? null
-  const relativeValue = relative(repoRoot, resolve(workspacePath)).replaceAll('\\', '/')
+  const relativeValue = relative(repoRoot, workspaceRealPath).replaceAll('\\', '/')
   return {
     branch: branchValue && branchValue !== 'HEAD' ? branchValue : null,
     headSha: await tryRunGit(repoRoot, ['rev-parse', '--verify', 'HEAD']).then(

@@ -296,9 +296,15 @@ export const createGitWorkspaceService = (db: Database): GitWorkspaceService => 
     }
   }
 
-  const getHeadShaUnlocked = async (workspaceId: string, workspacePath: string) => {
-    const result = await detect(workspaceId, workspacePath)
-    return result.repository?.headSha ?? null
+  const getHeadShaUnlocked = async (_workspaceId: string, workspacePath: string) => {
+    // Read-only on purpose: this runs on every dispatch and must never touch
+    // persisted detection state, so it cannot fail with a database error
+    // after a caller closed the store while the git spawn was in flight.
+    try {
+      return (await detectGitRepository(workspacePath)).headSha
+    } catch {
+      return null
+    }
   }
 
   const initializeUnlocked = async (workspaceId: string, workspacePath: string) => {
