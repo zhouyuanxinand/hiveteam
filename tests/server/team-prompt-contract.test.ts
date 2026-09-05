@@ -260,9 +260,10 @@ describe('team prompt contract', () => {
       expect(output).toContain('[Hive 系统消息：来自 @Orchestrator 的派单]')
       expect(output).toContain('实现登录')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
-      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(
-        process.platform === 'win32' ? 1 : 2
-      )
+      // The selected interactive CLI must receive one final submit for the
+      // dispatched task. The wrapper command itself is a process argument,
+      // not an additional prompt submission.
+      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
     }, 4000)
   })
 
@@ -342,9 +343,7 @@ describe('team prompt contract', () => {
       expect(output).toContain('[Hive 系统消息：来自 @Alice 的汇报]')
       expect(output).toContain('Done from shell-wrapped Claude')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
-      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(
-        process.platform === 'win32' ? 1 : 2
-      )
+      expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
     }, 4000)
   })
 })

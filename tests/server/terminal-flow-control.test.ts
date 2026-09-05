@@ -151,6 +151,25 @@ const openViewer = async (baseUrl: string, cookie: string, runId: string, client
   return { control, io, messageEvents, outputs }
 }
 
+const closeViewer = async (viewer: { control: WebSocket; io: WebSocket }) => {
+  await Promise.all(
+    [viewer.io, viewer.control].map(
+      (socket) =>
+        new Promise<void>((resolve) => {
+          if (socket.readyState === WebSocket.CLOSED) {
+            resolve()
+            return
+          }
+          socket.once('close', () => resolve())
+          // A test client does not need a graceful close handshake. Terminate
+          // it so http.Server.close() cannot race a still-closing WebSocket on
+          // POSIX runners.
+          socket.terminate()
+        })
+    )
+  )
+}
+
 afterEach(() => {
   Object.assign(FLOW_CONTROL, defaultFlowControl)
   vi.restoreAllMocks()
@@ -201,8 +220,7 @@ describe('terminal flow control', () => {
       )
       expect(Date.now() - startAt).toBeLessThan(300)
 
-      viewer.io.close()
-      viewer.control.close()
+      await closeViewer(viewer)
     } finally {
       await server.close()
     }
@@ -253,8 +271,7 @@ describe('terminal flow control', () => {
         expect(output).toContain(chunkC)
       })
 
-      viewer.io.close()
-      viewer.control.close()
+      await closeViewer(viewer)
     } finally {
       await server.close()
     }
@@ -295,8 +312,7 @@ describe('terminal flow control', () => {
         20
       )
 
-      viewer.io.close()
-      viewer.control.close()
+      await closeViewer(viewer)
     } finally {
       await server.close()
     }
@@ -343,8 +359,7 @@ describe('terminal flow control', () => {
       await new Promise((resolve) => setTimeout(resolve, 150))
       expect(server.resumeSpy).not.toHaveBeenCalled()
 
-      slowViewer.io.close()
-      slowViewer.control.close()
+      await closeViewer(slowViewer)
 
       await waitFor(
         () => {
@@ -354,8 +369,7 @@ describe('terminal flow control', () => {
         20
       )
 
-      fastViewer.io.close()
-      fastViewer.control.close()
+      await closeViewer(fastViewer)
     } finally {
       await server.close()
     }

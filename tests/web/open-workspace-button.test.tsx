@@ -7,7 +7,11 @@ import { I18nProvider } from '../../web/src/i18n.js'
 import { Toaster } from '../../web/src/ui/toast.js'
 import { ToastProvider } from '../../web/src/ui/useToast.js'
 import { OpenWorkspaceButton } from '../../web/src/workspace/OpenWorkspaceButton.js'
-import { PREFERRED_OPEN_TARGET_STORAGE_KEY } from '../../web/src/workspace/open-targets.js'
+import {
+  getDefaultOpenTargetIdForPlatform,
+  PREFERRED_OPEN_TARGET_STORAGE_KEY,
+  resolveOpenTargetPlatform,
+} from '../../web/src/workspace/open-targets.js'
 
 const renderHarness = (children: ReactNode) =>
   render(
@@ -68,7 +72,8 @@ afterEach(() => {
 
 describe('OpenWorkspaceButton', () => {
   test('main click POSTs target_id to /api/workspaces/:id/open and skips toast on 200', async () => {
-    const calls = stubOpenFetch(() => json({ ok: true, effective_target_id: 'vscode' }, 200))
+    const defaultTargetId = getDefaultOpenTargetIdForPlatform(resolveOpenTargetPlatform())
+    const calls = stubOpenFetch(() => json({ ok: true, effective_target_id: defaultTargetId }, 200))
 
     renderHarness(<OpenWorkspaceButton workspace={mkWorkspace()} />)
 
@@ -78,7 +83,7 @@ describe('OpenWorkspaceButton', () => {
 
     expect(calls[0]?.method).toBe('POST')
     expect(calls[0]?.url).toBe('/api/workspaces/ws-1/open')
-    expect(calls[0]?.body).toEqual({ target_id: 'vscode' })
+    expect(calls[0]?.body).toEqual({ target_id: defaultTargetId })
 
     // No error toast on success.
     expect(screen.queryByTestId('toaster')).toBeNull()
