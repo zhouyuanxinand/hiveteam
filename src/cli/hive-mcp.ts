@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { HIVE_SUPERVISOR_TOKEN_HEADER } from '../server/external-goal-auth.js'
 import { readPackageVersion } from '../server/package-version.js'
 import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
+import { fetchLocalRuntime as fetchLocalRuntimeHttp, type LocalHttpResponse } from './local-http.js'
 
 export const HIVE_MCP_TOOL_NAMES = [
   'hive.list_workspaces',
@@ -94,7 +95,7 @@ export const parseHiveMcpBaseUrl = (argv: string[], env: NodeJS.ProcessEnv) => {
   return `http://127.0.0.1:${DEFAULT_HIVE_PORT}`
 }
 
-const readHttpErrorDetail = async (response: Response) => {
+const readHttpErrorDetail = async (response: LocalHttpResponse) => {
   const text = await response.text().catch(() => '')
   if (!text.trim()) return `HTTP ${response.status}`
   try {
@@ -106,9 +107,12 @@ const readHttpErrorDetail = async (response: Response) => {
   return text.trim()
 }
 
-const fetchLocalRuntime = async (url: string, init?: RequestInit) => {
+const fetchLocalRuntime = async (
+  url: string,
+  init?: { body?: string; headers?: Record<string, string>; method?: string }
+): Promise<LocalHttpResponse> => {
   try {
-    return await fetch(url, init)
+    return await fetchLocalRuntimeHttp(url, init)
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(`Failed to reach HiveTeam runtime at ${url}: ${reason}`)
@@ -125,7 +129,11 @@ const getSupervisorToken = async (baseUrl: string) => {
   return body.token
 }
 
-const requestJson = async (baseUrl: string, path: string, init: RequestInit = {}) => {
+const requestJson = async (
+  baseUrl: string,
+  path: string,
+  init: { body?: string; headers?: Record<string, string>; method?: string } = {}
+) => {
   const supervisorToken = await getSupervisorToken(baseUrl)
   const response = await fetchLocalRuntime(`${baseUrl}${path}`, {
     ...init,

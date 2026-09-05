@@ -822,6 +822,29 @@ export const listWorkers = async (workspaceId: string): Promise<TeamListItem[]> 
   return payload.map(fromPayload)
 }
 
+export const listWorkersForWorkspaces = async (
+  workspaceIds: readonly string[]
+): Promise<Record<string, TeamListItem[]>> => {
+  const params = new URLSearchParams({ workspace_ids: workspaceIds.join(',') })
+  const response = await apiFetch(`/api/ui/team?${params.toString()}`, {
+    mode: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to load workers')
+  }
+
+  const payload = (await response.json()) as {
+    workers_by_workspace_id: Record<string, TeamListItemPayload[]>
+  }
+  return Object.fromEntries(
+    Object.entries(payload.workers_by_workspace_id).map(([workspaceId, items]) => [
+      workspaceId,
+      items.map(fromPayload),
+    ])
+  )
+}
+
 export interface DispatchSummary {
   artifacts: string[]
   attemptCount?: number

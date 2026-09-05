@@ -8,19 +8,20 @@ export interface AppStateRecord {
 }
 
 export const createAppStateStore = (db: Database) => {
+  const getStmt = db.prepare('SELECT key, value FROM app_state WHERE key = ?')
+  const setStmt = db.prepare(
+    `INSERT INTO app_state (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  )
+
   const get = (key: string): AppStateRecord | undefined => {
-    const row = db.prepare('SELECT key, value FROM app_state WHERE key = ?').get(key) as
-      | { key: string; value: string | null }
-      | undefined
+    const row = getStmt.get(key) as { key: string; value: string | null } | undefined
     return row ? { key: row.key, value: row.value } : undefined
   }
 
   const set = (key: string, value: AppStateValue) => {
-    db.prepare(
-      `INSERT INTO app_state (key, value, updated_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-    ).run(key, value, Date.now())
+    setStmt.run(key, value, Date.now())
   }
 
   return { get, set }

@@ -14,7 +14,9 @@ const tempDirs: string[] = []
 const outputBus = {
   clear: () => {},
   publish: () => {},
+  publishExit: () => {},
   subscribe: () => () => {},
+  subscribeExit: () => () => {},
 }
 
 const createFakeAgentManager = (): AgentManager => {

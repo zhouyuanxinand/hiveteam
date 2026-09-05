@@ -52,89 +52,99 @@ const toEntry = (row: ReportOutboxRow): ReportOutboxEntry => ({
 })
 
 export const createReportOutboxStore = (db: Database) => {
+  // The team-list poll drains the outbox twice per second per workspace, so
+  // every statement here is prepared once instead of on each call.
+  const enqueueStmt = db.prepare(
+    `INSERT OR IGNORE INTO report_outbox
+      (workspace_id, target_agent_id, dispatch_id, payload, created_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+  const listPendingStmt = db.prepare(
+    `SELECT id, workspace_id, target_agent_id, dispatch_id, payload, created_at, delivered_at,
+            delivery_attempts, last_delivery_attempt_at, last_delivery_error
+       FROM report_outbox
+       WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL
+       ORDER BY created_at ASC, id ASC`
+  )
+  const markDeliveredStmt = db.prepare(
+    `UPDATE report_outbox
+     SET delivered_at = ?, last_delivery_error = NULL
+     WHERE id = ? AND delivered_at IS NULL`
+  )
+  const markDeliveryAttemptStmt = db.prepare(
+    `UPDATE report_outbox
+     SET delivery_attempts = delivery_attempts + 1,
+         last_delivery_attempt_at = ?,
+         last_delivery_error = NULL
+     WHERE id = ? AND delivered_at IS NULL`
+  )
+  const markDeliveryFailedStmt = db.prepare(
+    `UPDATE report_outbox
+     SET last_delivery_error = ?, last_delivery_attempt_at = ?
+     WHERE id = ? AND delivered_at IS NULL`
+  )
+  const deletePendingForDispatchStmt = db.prepare(
+    'DELETE FROM report_outbox WHERE dispatch_id = ? AND delivered_at IS NULL'
+  )
+  const deleteWorkspaceEntriesStmt = db.prepare('DELETE FROM report_outbox WHERE workspace_id = ?')
+  const deleteWorkerEntriesStmt = db.prepare(
+    `DELETE FROM report_outbox
+     WHERE workspace_id = ?
+       AND (
+         target_agent_id = ?
+         OR dispatch_id IN (
+           SELECT id FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?
+         )
+       )`
+  )
+  const pendingCountStmt = db.prepare(
+    `SELECT COUNT(*) AS count
+       FROM report_outbox
+       WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL`
+  )
+
   const enqueue = (input: EnqueueInput) => {
     // A completed dispatch may be retried by a client after a transient
     // transport failure. Keep one durable report per dispatch, not duplicates.
-    db.prepare(
-      `INSERT OR IGNORE INTO report_outbox
-        (workspace_id, target_agent_id, dispatch_id, payload, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(input.workspaceId, input.targetAgentId, input.dispatchId, input.payload, Date.now())
+    enqueueStmt.run(
+      input.workspaceId,
+      input.targetAgentId,
+      input.dispatchId,
+      input.payload,
+      Date.now()
+    )
   }
 
   const listPending = (workspaceId: string, targetAgentId: string) =>
-    (
-      db
-        .prepare(
-          `SELECT id, workspace_id, target_agent_id, dispatch_id, payload, created_at, delivered_at,
-                  delivery_attempts, last_delivery_attempt_at, last_delivery_error
-             FROM report_outbox
-             WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL
-             ORDER BY created_at ASC, id ASC`
-        )
-        .all(workspaceId, targetAgentId) as ReportOutboxRow[]
-    ).map(toEntry)
+    (listPendingStmt.all(workspaceId, targetAgentId) as ReportOutboxRow[]).map(toEntry)
 
   const markDelivered = (id: number) => {
-    db.prepare(
-      `UPDATE report_outbox
-       SET delivered_at = ?, last_delivery_error = NULL
-       WHERE id = ? AND delivered_at IS NULL`
-    ).run(Date.now(), id)
+    markDeliveredStmt.run(Date.now(), id)
   }
 
   const markDeliveryAttempt = (id: number) => {
-    db.prepare(
-      `UPDATE report_outbox
-       SET delivery_attempts = delivery_attempts + 1,
-           last_delivery_attempt_at = ?,
-           last_delivery_error = NULL
-       WHERE id = ? AND delivered_at IS NULL`
-    ).run(Date.now(), id)
+    markDeliveryAttemptStmt.run(Date.now(), id)
   }
 
   const markDeliveryFailed = (id: number, error: string) => {
     const message = error.trim().slice(0, 1_000) || 'The Orchestrator terminal rejected the report.'
-    db.prepare(
-      `UPDATE report_outbox
-       SET last_delivery_error = ?, last_delivery_attempt_at = ?
-       WHERE id = ? AND delivered_at IS NULL`
-    ).run(message, Date.now(), id)
+    markDeliveryFailedStmt.run(message, Date.now(), id)
   }
 
   const deletePendingForDispatch = (dispatchId: string) => {
-    db.prepare('DELETE FROM report_outbox WHERE dispatch_id = ? AND delivered_at IS NULL').run(
-      dispatchId
-    )
+    deletePendingForDispatchStmt.run(dispatchId)
   }
 
   const deleteWorkspaceEntries = (workspaceId: string) => {
-    db.prepare('DELETE FROM report_outbox WHERE workspace_id = ?').run(workspaceId)
+    deleteWorkspaceEntriesStmt.run(workspaceId)
   }
 
   const deleteWorkerEntries = (workspaceId: string, workerId: string) => {
-    db.prepare(
-      `DELETE FROM report_outbox
-       WHERE workspace_id = ?
-         AND (
-           target_agent_id = ?
-           OR dispatch_id IN (
-             SELECT id FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?
-           )
-         )`
-    ).run(workspaceId, workerId, workspaceId, workerId)
+    deleteWorkerEntriesStmt.run(workspaceId, workerId, workspaceId, workerId)
   }
 
   const pendingCount = (workspaceId: string, targetAgentId: string) =>
-    (
-      db
-        .prepare(
-          `SELECT COUNT(*) AS count
-             FROM report_outbox
-             WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL`
-        )
-        .get(workspaceId, targetAgentId) as { count: number }
-    ).count
+    (pendingCountStmt.get(workspaceId, targetAgentId) as { count: number }).count
 
   return {
     deletePendingForDispatch,

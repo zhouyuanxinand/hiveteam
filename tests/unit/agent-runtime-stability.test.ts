@@ -13,7 +13,9 @@ import { createAgentRuntime } from '../../src/server/agent-runtime.js'
 const outputBus = {
   clear: () => {},
   publish: () => {},
+  publishExit: () => {},
   subscribe: () => () => {},
+  subscribeExit: () => () => {},
 }
 
 const sessionStore = {

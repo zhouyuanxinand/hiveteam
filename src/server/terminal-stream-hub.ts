@@ -20,7 +20,8 @@ interface ViewerState {
 interface RunState {
   backpressuredViewerIds: Set<string>
   exited: boolean
-  exitInterval: ReturnType<typeof setInterval> | null
+  exitCode: number | null
+  exitUnsubscribe: (() => void) | null
   mirror: TerminalStateMirror
   outputUnsubscribe: (() => void) | null
   viewers: Map<string, ViewerState>
@@ -66,7 +67,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     const state = runStates.get(runId)
     if (!state?.exited || state.viewers.size > 0) return
     state.outputUnsubscribe?.()
-    if (state.exitInterval) clearInterval(state.exitInterval)
+    state.exitUnsubscribe?.()
     state.mirror.dispose()
     runStates.delete(runId)
   }
@@ -86,7 +87,8 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       state = {
         backpressuredViewerIds: new Set(),
         exited: false,
-        exitInterval: null,
+        exitCode: null,
+        exitUnsubscribe: null,
         // runId is globally unique, so it is semantically equivalent to workspaceId:runId.
         mirror: new TerminalStateMirror(initialSize),
         outputUnsubscribe: null,
@@ -100,6 +102,18 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         nextState.mirror.write(chunk)
         for (const viewer of nextState.viewers.values()) viewer.flowState?.enqueue(chunk)
       })
+      nextState.exitUnsubscribe = store.getPtyOutputBus().subscribeExit(runId, () => {
+        handleRunExit(runId)
+      })
+      // The run may have exited between the WebSocket upgrade check and this
+      // subscription; publishExit fired before we started listening. Mark the
+      // state in place — the attaching control socket reads it right after —
+      // because handleRunExit's cleanup would dispose the mirror while this
+      // state still has no viewers to hold it open.
+      if (liveRun.status === 'exited' || liveRun.status === 'error') {
+        nextState.exited = true
+        nextState.exitCode = liveRun.exitCode
+      }
     } else if (initialSize) {
       state.mirror.resize(initialSize.cols, initialSize.rows)
     }
@@ -114,29 +128,33 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     cleanupRun(runId)
   }
 
-  const startExitWatcher = (runId: string, state: RunState) => {
-    if (state.exitInterval) return
-    state.exitInterval = setInterval(() => {
-      try {
-        const run = store.getLiveRun(runId)
-        if (run.status !== 'exited' && run.status !== 'error') return
-        state.exited = true
-        state.outputUnsubscribe?.()
-        state.outputUnsubscribe = null
-        const payload = serializeTerminalExit(run.exitCode)
-        for (const viewer of state.viewers.values()) {
-          const controlSocket = viewer.controlSocket
-          if (controlSocket && controlSocket.readyState === controlSocket.OPEN)
-            controlSocket.send(payload)
-        }
-        if (state.exitInterval) clearInterval(state.exitInterval)
-        state.exitInterval = null
-        cleanupRun(runId)
-      } catch {
-        if (state.exitInterval) clearInterval(state.exitInterval)
-        state.exitInterval = null
-      }
-    }, 25)
+  const handleRunExit = (runId: string) => {
+    const state = runStates.get(runId)
+    if (!state || state.exited) return
+    let exitCode: number | null = null
+    try {
+      const run = store.getLiveRun(runId)
+      // The PTY exit path sets the terminal status before publishing, so a
+      // still-running record means this runId was recycled or misreported.
+      if (run.status !== 'exited' && run.status !== 'error') return
+      exitCode = run.exitCode
+    } catch {
+      // The run record disappeared with the exit; still release viewers with a
+      // code-less exit instead of leaving their terminals spinning.
+    }
+    state.exited = true
+    state.exitCode = exitCode
+    state.outputUnsubscribe?.()
+    state.outputUnsubscribe = null
+    state.exitUnsubscribe?.()
+    state.exitUnsubscribe = null
+    const payload = serializeTerminalExit(exitCode)
+    for (const viewer of state.viewers.values()) {
+      const controlSocket = viewer.controlSocket
+      if (controlSocket && controlSocket.readyState === controlSocket.OPEN)
+        controlSocket.send(payload)
+    }
+    cleanupRun(runId)
   }
 
   return {
@@ -144,7 +162,10 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       const state = getOrCreateState(runId, initialSize)
       const viewer = getOrCreateViewer(state, clientId)
       viewer.controlSocket = socket
-      startExitWatcher(runId, state)
+      // A viewer attaching after the exit event still needs the terminal state.
+      if (state.exited && socket.readyState === socket.OPEN) {
+        socket.send(serializeTerminalExit(state.exitCode))
+      }
       void state.mirror
         .getSnapshot()
         .then((snapshot) => {
@@ -218,7 +239,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     close() {
       for (const [runId, state] of runStates) {
         state.outputUnsubscribe?.()
-        if (state.exitInterval) clearInterval(state.exitInterval)
+        state.exitUnsubscribe?.()
         state.mirror.dispose()
         for (const viewer of state.viewers.values()) {
           viewer.flowState?.close()

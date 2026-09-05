@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { TeamListItem } from '../../src/shared/types.js'
-import { listWorkers } from './api.js'
+import { listWorkersForWorkspaces } from './api.js'
 
 const REFRESH_INTERVAL_MS = 500
 const MAX_REFRESH_INTERVAL_MS = 5000
@@ -58,27 +58,25 @@ export const useWorkspaceWorkers = (workspaceIds: readonly string[]) => {
     const loadWorkers = () => {
       if (inFlight) return
       inFlight = true
-      void Promise.all(
-        ids.map(async (workspaceId) => {
-          try {
-            return [workspaceId, await listWorkers(workspaceId)] as const
-          } catch (error) {
-            console.error('[hive] swallowed:workspaceWorkers.list', error)
-            return null
-          }
-        })
-      )
-        .then((results) => {
+      // One bulk request keeps N workspaces from multiplying the poll into N
+      // requests per refresh tick.
+      void listWorkersForWorkspaces(ids)
+        .then((byWorkspaceId) => {
           if (cancelled) return
-          failureCount = results.some(Boolean) ? 0 : Math.min(failureCount + 1, 4)
+          failureCount = 0
           setWorkersByWorkspaceId((current) => {
             const next: Record<string, TeamListItem[]> = {}
-            for (const workspaceId of ids) next[workspaceId] = current[workspaceId] ?? []
-            for (const result of results) {
-              if (result) next[result[0]] = result[1]
+            for (const workspaceId of ids) {
+              next[workspaceId] = byWorkspaceId[workspaceId] ?? current[workspaceId] ?? []
             }
             return areWorkerMapsEqual(current, next) ? current : next
           })
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            failureCount = Math.min(failureCount + 1, 4)
+            console.error('[hive] swallowed:workspaceWorkers.list', error)
+          }
         })
         .finally(() => {
           inFlight = false

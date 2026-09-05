@@ -160,6 +160,31 @@ export const workspaceRoutes: RouteDefinition[] = [
       enrichTeamList(workspaceId, store, store.listWorkers(workspaceId)).map(serializeTeamListItem)
     )
   }),
+  // The sidebar refreshes every workspace's team list twice per second; one
+  // bulk call replaces one request per workspace.
+  route('GET', '/api/ui/team', ({ request, response, store }) => {
+    requireUiTokenFromRequest(request, store.validateUiToken)
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1')
+    const workspaceIds = (url.searchParams.get('workspace_ids') ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0)
+    const workersByWorkspaceId: Record<string, ReturnType<typeof serializeTeamListItem>[]> = {}
+    for (const workspaceId of workspaceIds) {
+      try {
+        workersByWorkspaceId[workspaceId] = enrichTeamList(
+          workspaceId,
+          store,
+          store.listWorkers(workspaceId)
+        ).map(serializeTeamListItem)
+      } catch {
+        // A workspace that vanished mid-poll reports an empty list instead of
+        // failing the whole batch.
+        workersByWorkspaceId[workspaceId] = []
+      }
+    }
+    sendJson(response, 200, { workers_by_workspace_id: workersByWorkspaceId })
+  }),
   route('GET', '/api/workspaces/:workspaceId/team', ({ params, request, response, store }) => {
     const workspaceId = getRequiredParam(
       response,

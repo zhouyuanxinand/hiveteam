@@ -2,11 +2,20 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { runTeamCommand } from '../../src/cli/team.js'
 
+const { fetchLocalRuntimeMock } = vi.hoisted(() => ({
+  fetchLocalRuntimeMock: vi.fn(),
+}))
+
+vi.mock('../../src/cli/local-http.js', () => ({
+  fetchLocalRuntime: fetchLocalRuntimeMock,
+}))
+
 const originalEnv = { ...process.env }
 
 afterEach(() => {
   process.env = { ...originalEnv }
   vi.restoreAllMocks()
+  fetchLocalRuntimeMock.mockReset()
 })
 
 describe('team cli help', () => {
@@ -56,21 +65,18 @@ describe('team cli help', () => {
       HIVE_PORT: '12345',
       HIVE_PROJECT_ID: 'workspace-1',
     }
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              dispatch_id: 'dispatch-1',
-              forward_error: 'No active run for agent: workspace-1:orchestrator',
-              forwarded: false,
-              ok: true,
-            }),
-            { headers: { 'content-type': 'application/json' }, status: 202 }
-          )
-      )
-    )
+    const body = JSON.stringify({
+      dispatch_id: 'dispatch-1',
+      forward_error: 'No active run for agent: workspace-1:orchestrator',
+      forwarded: false,
+      ok: true,
+    })
+    fetchLocalRuntimeMock.mockResolvedValue({
+      json: async () => JSON.parse(body) as unknown,
+      ok: true,
+      status: 202,
+      text: async () => body,
+    })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await runTeamCommand(['report', 'Done'])

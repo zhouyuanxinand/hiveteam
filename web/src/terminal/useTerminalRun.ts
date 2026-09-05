@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
 import { createTerminalClient } from './terminal-client.js'
+import { utf8ByteLength } from './utf8.js'
 import {
   attachAlternateScreenWheelFallback,
   type TerminalWheelInputProfile,
@@ -368,7 +369,7 @@ export const useTerminalRun = (
         onOutput(chunk, acknowledge) {
           nextTerminal.write(highlightUserInputOutput(chunk), () => {
             scheduleUserInputDecorations()
-            acknowledge(new TextEncoder().encode(chunk).byteLength)
+            acknowledge(utf8ByteLength(chunk))
           })
         },
         onRestore(snapshot) {

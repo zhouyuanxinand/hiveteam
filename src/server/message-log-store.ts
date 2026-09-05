@@ -68,48 +68,54 @@ interface MessageRow {
 }
 
 export const createMessageLogStore = (db: Database) => {
+  const listMessageKindsStmt = db.prepare(
+    `SELECT workspace_id, worker_id, type
+     FROM messages
+     WHERE type IN ('send', 'report')
+     ORDER BY sequence ASC`
+  )
+  const insertMessageStmt = db.prepare(
+    `INSERT INTO messages (
+     workspace_id,
+     worker_id,
+     type,
+     from_agent_id,
+     to_agent_id,
+     text,
+     status,
+     artifacts,
+     created_at
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+  const listRecoveryStmt = db.prepare(
+    `SELECT worker_id, type, from_agent_id, to_agent_id, text, status, artifacts, created_at
+     FROM messages
+     WHERE workspace_id = ? AND created_at >= ?
+     ORDER BY sequence ASC`
+  )
+  const deleteMessageStmt = db.prepare('DELETE FROM messages WHERE sequence = ?')
+
   const listMessageKinds = () => {
-    return db
-      .prepare(
-        `SELECT workspace_id, worker_id, type
-         FROM messages
-         WHERE type IN ('send', 'report')
-         ORDER BY sequence ASC`
-      )
-      .all() as MessageKindRow[]
+    return listMessageKindsStmt.all() as MessageKindRow[]
   }
 
   const insertMessage = (input: MessageLogRecord): MessageLogHandle => {
-    const result = db
-      .prepare(
-        `INSERT INTO messages (
-         workspace_id,
-         worker_id,
-         type,
-         from_agent_id,
-         to_agent_id,
-         text,
-         status,
-         artifacts,
-         created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        input.workspaceId,
-        input.workerId,
-        input.type,
-        input.fromAgentId ?? null,
-        input.toAgentId ?? null,
-        input.text,
-        input.status ?? null,
-        input.artifacts ? JSON.stringify(input.artifacts) : null,
-        input.createdAt
-      )
+    const result = insertMessageStmt.run(
+      input.workspaceId,
+      input.workerId,
+      input.type,
+      input.fromAgentId ?? null,
+      input.toAgentId ?? null,
+      input.text,
+      input.status ?? null,
+      input.artifacts ? JSON.stringify(input.artifacts) : null,
+      input.createdAt
+    )
     return { sequence: Number(result.lastInsertRowid) }
   }
 
   const deleteMessage = (handle: MessageLogHandle) => {
-    db.prepare('DELETE FROM messages WHERE sequence = ?').run(handle.sequence)
+    deleteMessageStmt.run(handle.sequence)
   }
 
   const parseArtifacts = (value: string | null) => {
@@ -124,13 +130,7 @@ export const createMessageLogStore = (db: Database) => {
   }
 
   const listMessagesForRecovery = (workspaceId: string, sinceMs: number) => {
-    return db
-      .prepare(
-        `SELECT worker_id, type, from_agent_id, to_agent_id, text, status, artifacts, created_at
-         FROM messages
-         WHERE workspace_id = ? AND created_at >= ?
-         ORDER BY sequence ASC`
-      )
+    return listRecoveryStmt
       .all(workspaceId, sinceMs)
       .map((row: unknown) => {
         const typedRow = row as MessageRow

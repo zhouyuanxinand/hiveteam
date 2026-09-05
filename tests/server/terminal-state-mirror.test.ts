@@ -40,4 +40,39 @@ describe('TerminalStateMirror', () => {
       mirror.dispose()
     }
   })
+
+  test('coalesced burst writes preserve content order', async () => {
+    const mirror = new TerminalStateMirror()
+
+    try {
+      for (let index = 0; index < 100; index += 1) mirror.write(`line-${index}\r\n`)
+      const snapshot = await mirror.getSnapshot()
+      let position = -1
+      for (let index = 0; index < 100; index += 1) {
+        const next = snapshot.indexOf(`line-${index}`)
+        expect(next).toBeGreaterThan(position)
+        position = next
+      }
+    } finally {
+      mirror.dispose()
+    }
+  })
+
+  test('lastPtyLine tracks the latest flushed output', async () => {
+    const mirror = new TerminalStateMirror()
+
+    try {
+      mirror.write('first\r\nsecond\r\n')
+      await mirror.getSnapshot()
+      expect(mirror.lastPtyLine()).toBe('second')
+      const cached = mirror.lastPtyLine()
+      expect(mirror.lastPtyLine()).toBe(cached)
+
+      mirror.write('third\r\n')
+      await mirror.getSnapshot()
+      expect(mirror.lastPtyLine()).toBe('third')
+    } finally {
+      mirror.dispose()
+    }
+  })
 })

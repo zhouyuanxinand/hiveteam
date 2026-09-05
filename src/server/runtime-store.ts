@@ -499,19 +499,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       // `team list` is the Orchestrator's normal first call after a restart.
       // Use it as the durable report replay trigger.
       services.teamOps.drainReportOutbox(workspaceId)
-      const pendingByWorker = new Map<string, number>()
-      for (const dispatch of services.dispatchLedgerStore.listWorkspaceDispatches(workspaceId)) {
-        if (
-          dispatch.status === 'queued' ||
-          dispatch.status === 'submitted' ||
-          dispatch.status === 'failed'
-        ) {
-          pendingByWorker.set(
-            dispatch.toAgentId,
-            (pendingByWorker.get(dispatch.toAgentId) ?? 0) + 1
-          )
-        }
-      }
+      // A single GROUP BY replaces hydrating every dispatch row on this
+      // twice-a-second UI poll path.
+      const pendingByWorker = services.dispatchLedgerStore.countPendingByWorker(workspaceId)
       return services.workspaceStore.listWorkers(workspaceId).map((worker) => ({
         ...worker,
         pendingTaskCount: pendingByWorker.get(worker.id) ?? worker.pendingTaskCount,

@@ -1,5 +1,5 @@
 import { constants } from 'node:fs'
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -77,17 +77,35 @@ const PWA_BOOT_CACHE_CONTROL: Record<string, string> = {
   '/sw.js': 'no-store',
 }
 
+interface StaticAssetCacheEntry {
+  content: Buffer
+  mtimeMs: number
+  size: number
+}
+
+// Vite output is read from disk on every request otherwise; on Windows each
+// read also pays an antivirus scan. Content is keyed by path and revalidated
+// by mtime+size, so rebuilt assets refresh on the next request.
+type StaticAssetCache = Map<string, StaticAssetCacheEntry>
+
 const sendStatic = async (
   response: ServerResponse,
   staticDir: string,
   pathname: string,
-  request: IncomingMessage
+  request: IncomingMessage,
+  cache: StaticAssetCache
 ) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') return false
   const filePath = getStaticAssetPath(staticDir, pathname)
   if (!filePath) return false
   try {
-    const content = await readFile(filePath)
+    const stats = await stat(filePath)
+    if (!stats.isFile()) return false
+    let entry = cache.get(filePath)
+    if (!entry || entry.mtimeMs !== stats.mtimeMs || entry.size !== stats.size) {
+      entry = { content: await readFile(filePath), mtimeMs: stats.mtimeMs, size: stats.size }
+      cache.set(filePath, entry)
+    }
     response.setHeader(
       'content-type',
       CONTENT_TYPES[extname(filePath)] ?? 'application/octet-stream'
@@ -95,7 +113,7 @@ const sendStatic = async (
     const cacheControl = PWA_BOOT_CACHE_CONTROL[pathname]
     if (cacheControl !== undefined) response.setHeader('cache-control', cacheControl)
     response.statusCode = 200
-    response.end(request.method === 'HEAD' ? undefined : content)
+    response.end(request.method === 'HEAD' ? undefined : entry.content)
     return true
   } catch {
     return false
@@ -117,6 +135,7 @@ export const createApp = ({
 }: CreateAppOptions) => {
   const staticDir = process.env.HIVE_STATIC_DIR ?? getDefaultStaticDir()
   const staticAvailablePromise = canServeStatic(staticDir)
+  const staticAssetCache: StaticAssetCache = new Map()
   const server = createServer(async (request, response) => {
     const method = request.method ?? 'GET'
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
@@ -145,7 +164,13 @@ export const createApp = ({
       }
 
       if (await staticAvailablePromise) {
-        const served = await sendStatic(response, staticDir, url.pathname, request)
+        const served = await sendStatic(
+          response,
+          staticDir,
+          url.pathname,
+          request,
+          staticAssetCache
+        )
         if (served) return
       }
 

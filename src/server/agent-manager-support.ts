@@ -29,6 +29,9 @@ export const finishAgentRun = (
   run.status = exitCode === 0 ? 'exited' : 'error'
   run.exitCode = exitCode
   run.onExit?.({ runId: run.runId, exitCode })
+  // Let stream subscribers react to the exit synchronously instead of polling
+  // the run status on an interval.
+  ptyOutputBus.publishExit(run.runId)
   ptyOutputBus.clear(run.runId)
 }
 

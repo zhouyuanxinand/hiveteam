@@ -12,7 +12,9 @@ import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 const outputBus = {
   clear: () => {},
   publish: () => {},
+  publishExit: () => {},
   subscribe: () => () => {},
+  subscribeExit: () => () => {},
 }
 
 const tempDirs: string[] = []
