@@ -87,6 +87,7 @@ interface RuntimeStore {
   statusTask: (workspaceId: string, workerId: string, input?: StatusTaskInput) => ReportTaskResult
   cancelTask: (workspaceId: string, dispatchId: string, input: CancelTaskInput) => ReportTaskResult
   listDispatches: (workspaceId: string, options?: ListDispatchesOptions) => DispatchRecord[]
+  getDispatch: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   listWorkers: (workspaceId: string) => TeamListItem[]
   getLastPtyLineForAgent: (workspaceId: string, agentId: string) => string | null
   getWorkspaceSnapshot: (workspaceId: string) => WorkspaceRecord
@@ -495,6 +496,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     reportTask,
     statusTask: services.teamOps.statusTask,
     listDispatches: services.dispatchLedgerStore.listWorkspaceDispatches,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
     listWorkers: (workspaceId) => {
       // `team list` is the Orchestrator's normal first call after a restart.
       // Use it as the durable report replay trigger.

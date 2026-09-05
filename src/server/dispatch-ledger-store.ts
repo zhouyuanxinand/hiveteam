@@ -6,6 +6,13 @@ export type DispatchStatus = 'queued' | 'submitted' | 'failed' | 'reported' | 'c
 
 export interface DispatchRecord {
   artifacts: string[]
+  /**
+   * Git HEAD of the workspace captured when the dispatch was created. Serves
+   * as the baseline for reviewing what changed while the dispatch was worked
+   * on. Null for dispatches created before this tracking existed or when the
+   * workspace is not a Git repository.
+   */
+  baseHeadSha: string | null
   createdAt: number
   deliveredAt: number | null
   fromAgentId: string | null
@@ -37,6 +44,7 @@ export interface DispatchRecord {
 
 interface DispatchRow {
   artifacts: string | null
+  base_head_sha?: string | null
   created_at: number
   delivered_at: number | null
   from_agent_id: string | null
@@ -61,6 +69,7 @@ interface DispatchRow {
 }
 
 interface CreateDispatchInput {
+  baseHeadSha?: string | null
   fromAgentId?: string
   text: string
   toAgentId: string
@@ -102,6 +111,7 @@ const parseArtifacts = (value: string | null) => {
 const toRecord = (row: DispatchRow): DispatchRecord => {
   const record: DispatchRecord = {
     artifacts: parseArtifacts(row.artifacts),
+    baseHeadSha: row.base_head_sha ?? null,
     createdAt: row.created_at,
     deliveredAt: row.delivered_at,
     fromAgentId: row.from_agent_id,
@@ -164,8 +174,9 @@ export const createDispatchLedgerStore = (db: Database) => {
       submitted_at,
       reported_at,
       report_text,
-      artifacts
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      artifacts,
+      base_head_sha
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const deleteFailureStmt = db.prepare(
     'DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?'
@@ -271,6 +282,7 @@ export const createDispatchLedgerStore = (db: Database) => {
   const createDispatch = (input: CreateDispatchInput) => {
     const record: DispatchRecord = {
       artifacts: [],
+      baseHeadSha: input.baseHeadSha ?? null,
       createdAt: Date.now(),
       deliveredAt: null,
       fromAgentId: input.fromAgentId ?? null,
@@ -297,10 +309,24 @@ export const createDispatchLedgerStore = (db: Database) => {
       record.submittedAt,
       record.reportedAt,
       record.reportText,
-      JSON.stringify(record.artifacts)
+      JSON.stringify(record.artifacts),
+      record.baseHeadSha
     )
 
     return record
+  }
+
+  const getDispatchById = (workspaceId: string, dispatchId: string) => {
+    const row = db
+      .prepare(
+        `${dispatchSelect}
+         WHERE d.id = ?
+           AND d.workspace_id = ?
+         LIMIT 1`
+      )
+      .get(dispatchId, workspaceId) as DispatchRow | undefined
+
+    return row ? toRecord(row) : undefined
   }
 
   const deleteDispatch = (dispatchId: string) => {
@@ -308,6 +334,10 @@ export const createDispatchLedgerStore = (db: Database) => {
       deleteFailureStmt.run(dispatchId)
       deleteDispatchStmt.run(dispatchId)
     })()
+  }
+
+  const setBaseHeadSha = (dispatchId: string, baseHeadSha: string) => {
+    db.prepare('UPDATE dispatches SET base_head_sha = ? WHERE id = ?').run(baseHeadSha, dispatchId)
   }
 
   const markSubmitted = (dispatchId: string) => {
@@ -442,11 +472,13 @@ export const createDispatchLedgerStore = (db: Database) => {
     deleteWorkspaceDispatches,
     findOpenDispatch,
     findOpenDispatchById,
+    getDispatchById,
     listOpenDispatchKinds,
     listWorkspaceDispatches,
     markDeliveryFailed,
     markCancelled,
     markReportedByWorker,
     markSubmitted,
+    setBaseHeadSha,
   }
 }

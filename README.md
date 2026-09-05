@@ -242,6 +242,11 @@ same shell environment you use to start Hive.
   restrict which CLIs workflow scripts may launch.
 - Team memory: keep workspace constraints, long-running context, and team
   decisions in Hive so later dispatches can carry the right background.
+- Dispatch change review: in Git workspaces Hive records the HEAD commit when
+  a dispatch is created, so the Activity center can show the working-tree diff
+  produced while that dispatch was being worked on, including new untracked
+  files. Reviewing changes no longer means trusting a worker's report at face
+  value.
 - `.hive/tasks.md` editor with external-file conflict handling.
 - Background PTY preservation and best-effort native session resume.
 - A What's New dialog after upgrades with curated release highlights.

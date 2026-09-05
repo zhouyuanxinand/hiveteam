@@ -154,6 +154,70 @@ export const listStagedFiles = async (repository: GitRepositoryInfo) => {
   return output.split('\0').filter(Boolean)
 }
 
+export const listUntrackedFiles = async (repository: GitRepositoryInfo) => {
+  const output = await runGit(repository.repoRoot, [
+    'status',
+    '--porcelain=v1',
+    '-z',
+    '--untracked-files=all',
+    ...getScopeArgs(repository.relativePath),
+  ])
+  return output
+    .split('\0')
+    .filter((entry) => entry.startsWith('?? '))
+    .map((entry) => entry.slice(3))
+}
+
+export interface GitWorkingTreeDiff {
+  /** Patch text, truncated to `maxChars` when needed. */
+  patch: string
+  truncated: boolean
+  untrackedFiles: string[]
+}
+
+const GIT_DIFF_MAX_BUFFER = 16 * 1024 * 1024
+
+/**
+ * Read the patch between a commit and the current working tree (index
+ * included) restricted to the workspace scope. Untracked files have no blob
+ * in the baseline, so they are reported separately instead of being patched
+ * into the index with `git add -N` — keeping this path read-only avoids index
+ * lock contention with concurrent snapshots on Windows.
+ */
+export const readGitWorkingTreeDiff = async (
+  repository: GitRepositoryInfo,
+  baseSha: string,
+  input: { maxChars?: number } = {}
+): Promise<GitWorkingTreeDiff> => {
+  if (!/^[0-9a-f]{7,64}$/iu.test(baseSha)) {
+    throw new GitCommandError('Invalid Git commit SHA')
+  }
+  const maxChars = Math.max(1024, Math.floor(input.maxChars ?? 512 * 1024))
+  const [patch, untrackedFiles] = await Promise.all([
+    runGit(
+      repository.repoRoot,
+      [
+        'diff',
+        '--no-color',
+        '--no-ext-diff',
+        '--no-textconv',
+        '--find-renames',
+        '--unified=3',
+        baseSha,
+        ...getScopeArgs(repository.relativePath),
+      ],
+      { maxBuffer: GIT_DIFF_MAX_BUFFER }
+    ),
+    listUntrackedFiles(repository),
+  ])
+  const truncated = patch.length > maxChars
+  return {
+    patch: truncated ? `${patch.slice(0, maxChars)}\n` : patch,
+    truncated,
+    untrackedFiles,
+  }
+}
+
 const parseGitDate = (value: string) => {
   const parsed = Date.parse(value)
   return Number.isFinite(parsed) ? parsed : 0

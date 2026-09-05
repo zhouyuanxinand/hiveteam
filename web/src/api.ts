@@ -848,6 +848,11 @@ export const listWorkersForWorkspaces = async (
 export interface DispatchSummary {
   artifacts: string[]
   attemptCount?: number
+  /**
+   * Git HEAD recorded when the dispatch was created. Null for older
+   * dispatches or workspaces without a usable Git repository.
+   */
+  baseHeadSha: string | null
   createdAt: number
   deliveredAt: number | null
   fromAgentId: string | null
@@ -872,6 +877,7 @@ export interface DispatchSummary {
 interface DispatchSummaryPayload {
   artifacts: string[]
   attempt_count?: number
+  base_head_sha?: string | null
   created_at: number
   delivered_at: number | null
   from_agent_id: string | null
@@ -896,6 +902,7 @@ interface DispatchSummaryPayload {
 const fromDispatchPayload = (payload: DispatchSummaryPayload): DispatchSummary => ({
   artifacts: payload.artifacts,
   ...(payload.attempt_count !== undefined ? { attemptCount: payload.attempt_count } : {}),
+  baseHeadSha: payload.base_head_sha ?? null,
   createdAt: payload.created_at,
   deliveredAt: payload.delivered_at,
   fromAgentId: payload.from_agent_id,
@@ -932,6 +939,45 @@ export const listWorkspaceDispatches = async (
   const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/dispatches${suffix}`)
   if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to load dispatches'))
   return ((await response.json()) as DispatchSummaryPayload[]).map(fromDispatchPayload)
+}
+
+export interface DispatchDiff {
+  baseHeadSha: string
+  dispatchId: string
+  headSha: string | null
+  patch: string
+  truncated: boolean
+  untrackedFiles: string[]
+}
+
+interface DispatchDiffPayload {
+  base_head_sha: string
+  dispatch_id: string
+  head_sha: string | null
+  patch: string
+  truncated: boolean
+  untracked_files: string[]
+}
+
+export const getDispatchDiff = async (
+  workspaceId: string,
+  dispatchId: string
+): Promise<DispatchDiff> => {
+  const response = await apiFetch(
+    `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/dispatches/${encodeURIComponent(dispatchId)}/diff`
+  )
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to load dispatch diff'))
+  }
+  const payload = (await response.json()) as DispatchDiffPayload
+  return {
+    baseHeadSha: payload.base_head_sha,
+    dispatchId: payload.dispatch_id,
+    headSha: payload.head_sha,
+    patch: payload.patch,
+    truncated: payload.truncated,
+    untrackedFiles: payload.untracked_files,
+  }
 }
 
 export interface WorkspaceActivityMessage {

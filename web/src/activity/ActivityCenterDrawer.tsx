@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Copy,
+  FileDiff,
   GitBranch,
   MessageCircleQuestion,
   RefreshCw,
@@ -14,6 +15,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { type DispatchSummary, getWorkspaceActivity, type WorkspaceActivityBundle } from '../api.js'
 import { useI18n } from '../i18n.js'
+
+import { DispatchDiffDialog } from './DispatchDiffDialog.js'
 
 interface ActivityCenterDrawerProps {
   onClose: () => void
@@ -83,6 +86,7 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'report' | 'diagnostics' | null>(null)
+  const [reviewDispatchId, setReviewDispatchId] = useState<string | null>(null)
 
   const dateFormatter = useMemo(
     () =>
@@ -145,214 +149,247 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
 
   const gitStatus = bundle?.git && 'workspaceId' in bundle.git ? bundle.git : null
   const openDispatchCount = bundle?.dispatches.filter(isOpenDispatch).length ?? 0
+  const reviewDispatch =
+    bundle?.dispatches.find((dispatch) => dispatch.id === reviewDispatchId) ?? null
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="app-overlay activity-center-overlay fixed inset-0 z-40" />
-        <Dialog.Content
-          className="activity-center-drawer fixed z-50 flex flex-col border-l"
-          data-testid="activity-center-drawer"
-        >
-          <header className="activity-center-header">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="activity-center-heading-icon" aria-hidden>
-                <ClipboardList size={18} />
+    <>
+      <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="app-overlay activity-center-overlay fixed inset-0 z-40" />
+          <Dialog.Content
+            className="activity-center-drawer fixed z-50 flex flex-col border-l"
+            data-testid="activity-center-drawer"
+          >
+            <header className="activity-center-header">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="activity-center-heading-icon" aria-hidden>
+                  <ClipboardList size={18} />
+                </div>
+                <div className="min-w-0">
+                  <Dialog.Title className="text-lg font-semibold text-pri">
+                    {t('activity.title')}
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-0.5 text-xs text-ter">
+                    {t('activity.description')}
+                  </Dialog.Description>
+                </div>
               </div>
-              <div className="min-w-0">
-                <Dialog.Title className="text-lg font-semibold text-pri">
-                  {t('activity.title')}
-                </Dialog.Title>
-                <Dialog.Description className="mt-0.5 text-xs text-ter">
-                  {t('activity.description')}
-                </Dialog.Description>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="activity-center-icon-button"
-                onClick={() => void load()}
-                disabled={loading}
-                aria-label={t('activity.refresh')}
-                title={t('activity.refresh')}
-              >
-                <RefreshCw size={15} className={loading ? 'animate-spin' : undefined} aria-hidden />
-              </button>
-              <Dialog.Close asChild>
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   className="activity-center-icon-button"
-                  aria-label={t('common.close')}
+                  onClick={() => void load()}
+                  disabled={loading}
+                  aria-label={t('activity.refresh')}
+                  title={t('activity.refresh')}
                 >
-                  <X size={16} aria-hidden />
+                  <RefreshCw
+                    size={15}
+                    className={loading ? 'animate-spin' : undefined}
+                    aria-hidden
+                  />
                 </button>
-              </Dialog.Close>
-            </div>
-          </header>
-
-          <div className="activity-center-actions">
-            <button
-              type="button"
-              className="icon-btn icon-btn--primary"
-              disabled={!bundle || loading}
-              onClick={() => void copyText('report')}
-              data-testid="activity-copy-report"
-            >
-              <Copy size={14} aria-hidden />
-              {copied === 'report' ? t('activity.copied') : t('activity.copyReport')}
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              disabled={!bundle || loading}
-              onClick={() => void copyText('diagnostics')}
-              data-testid="activity-copy-diagnostics"
-            >
-              <Copy size={14} aria-hidden />
-              {copied === 'diagnostics' ? t('activity.copied') : t('activity.copyDiagnostics')}
-            </button>
-          </div>
-
-          {error ? (
-            <div className="activity-center-message activity-center-message--error" role="alert">
-              <AlertTriangle size={14} aria-hidden /> {error}
-            </div>
-          ) : null}
-
-          <div className="activity-center-body scroll-y">
-            {loading && !bundle ? (
-              <div className="activity-center-empty">
-                <RefreshCw size={20} className="animate-spin" aria-hidden />
-                {t('activity.loading')}
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    className="activity-center-icon-button"
+                    aria-label={t('common.close')}
+                  >
+                    <X size={16} aria-hidden />
+                  </button>
+                </Dialog.Close>
               </div>
-            ) : bundle ? (
-              <>
-                <section className="activity-center-summary" aria-label={t('activity.title')}>
-                  <div>
-                    <Users size={14} aria-hidden />
-                    <strong>{bundle.workers.length}</strong>
-                    <span>{t('activity.workers')}</span>
-                  </div>
-                  <div>
-                    <ClipboardList size={14} aria-hidden />
-                    <strong>{openDispatchCount}</strong>
-                    <span>{t('activity.openDispatches')}</span>
-                  </div>
-                  <div>
-                    <TerminalSquare size={14} aria-hidden />
-                    <strong>{bundle.terminalRuns.length}</strong>
-                    <span>{t('activity.terminals')}</span>
-                  </div>
-                </section>
+            </header>
 
-                <section className="activity-center-section">
-                  <div className="activity-center-section-heading">
-                    <h3>{t('activity.dispatches')}</h3>
-                    {gitStatus?.branch ? (
-                      <span>
-                        <GitBranch size={12} aria-hidden /> {gitStatus.branch}
-                      </span>
-                    ) : null}
-                  </div>
-                  {bundle.dispatches.length === 0 ? (
-                    <p className="activity-center-muted">{t('activity.noDispatches')}</p>
-                  ) : (
-                    <div className="activity-center-list">
-                      {bundle.dispatches.slice(0, 50).map((dispatch) => (
-                        <article className="activity-center-dispatch" key={dispatch.id}>
-                          <div className="activity-center-dispatch-topline">
-                            <span
-                              className={`activity-center-state activity-center-state--${dispatch.state}`}
-                            >
-                              {t(stateKey(dispatch.state))}
-                            </span>
-                            <time dateTime={new Date(dispatch.createdAt).toISOString()}>
-                              {dateFormatter.format(dispatch.createdAt)}
-                            </time>
-                          </div>
-                          <div className="activity-center-dispatch-route">
-                            {formatAgentId(dispatch.fromAgentId, workspaceId, bundle.workers)}
-                            <span aria-hidden>→</span>
-                            {formatAgentId(dispatch.toAgentId, workspaceId, bundle.workers)}
-                          </div>
-                          <p title={dispatch.text}>{dispatch.text}</p>
-                          {dispatch.lastError ? <small>{dispatch.lastError}</small> : null}
-                          {!dispatch.lastError && dispatch.reportDelivery?.lastError ? (
-                            <small>
-                              {t('activity.reportDeliveryQueued', {
-                                error: dispatch.reportDelivery.lastError,
-                              })}
-                            </small>
-                          ) : null}
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </section>
+            <div className="activity-center-actions">
+              <button
+                type="button"
+                className="icon-btn icon-btn--primary"
+                disabled={!bundle || loading}
+                onClick={() => void copyText('report')}
+                data-testid="activity-copy-report"
+              >
+                <Copy size={14} aria-hidden />
+                {copied === 'report' ? t('activity.copied') : t('activity.copyReport')}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!bundle || loading}
+                onClick={() => void copyText('diagnostics')}
+                data-testid="activity-copy-diagnostics"
+              >
+                <Copy size={14} aria-hidden />
+                {copied === 'diagnostics' ? t('activity.copied') : t('activity.copyDiagnostics')}
+              </button>
+            </div>
 
-                <section className="activity-center-section">
-                  <div className="activity-center-section-heading">
-                    <h3>{t('activity.messages')}</h3>
-                  </div>
-                  {bundle.messages.length === 0 ? (
-                    <p className="activity-center-muted">{t('activity.noMessages')}</p>
-                  ) : (
-                    <div className="activity-center-message-list">
-                      {bundle.messages
-                        .slice(-20)
-                        .reverse()
-                        .map((message) => {
-                          const presentation = messagePresentation(message.type)
-                          const MessageIcon = presentation.icon
-                          return (
-                            <article
-                              className={`activity-center-message-row ${presentation.className}`}
-                              data-message-type={message.type}
-                              key={`${message.type}-${message.createdAt}-${message.from ?? ''}-${message.to ?? ''}-${message.text}`}
-                            >
-                              <span className="activity-center-message-icon" aria-hidden>
-                                <MessageIcon size={14} />
-                              </span>
-                              <div className="activity-center-message-content">
-                                <span className="activity-center-message-type">
-                                  {t(presentation.labelKey)}
-                                </span>
-                                <span className="activity-center-message-text" title={message.text}>
-                                  {message.text}
-                                </span>
-                              </div>
-                              <time dateTime={new Date(message.createdAt).toISOString()}>
-                                {dateFormatter.format(message.createdAt)}
-                              </time>
-                            </article>
-                          )
-                        })}
-                    </div>
-                  )}
-                </section>
-
-                <section className="activity-center-section activity-center-git-section">
-                  <div className="activity-center-section-heading">
-                    <h3>{t('activity.git')}</h3>
-                  </div>
-                  {gitStatus ? (
-                    <p className="activity-center-muted">
-                      {gitStatus.branch ?? t('activity.noGit')} ·{' '}
-                      {gitStatus.isDirty ? t('activity.gitDirty') : t('activity.gitClean')} ·{' '}
-                      {bundle.gitCommits.length} {t('activity.commits')}
-                    </p>
-                  ) : (
-                    <p className="activity-center-muted">
-                      {bundle.git?.error ?? t('activity.noGit')}
-                    </p>
-                  )}
-                </section>
-              </>
+            {error ? (
+              <div className="activity-center-message activity-center-message--error" role="alert">
+                <AlertTriangle size={14} aria-hidden /> {error}
+              </div>
             ) : null}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+
+            <div className="activity-center-body scroll-y">
+              {loading && !bundle ? (
+                <div className="activity-center-empty">
+                  <RefreshCw size={20} className="animate-spin" aria-hidden />
+                  {t('activity.loading')}
+                </div>
+              ) : bundle ? (
+                <>
+                  <section className="activity-center-summary" aria-label={t('activity.title')}>
+                    <div>
+                      <Users size={14} aria-hidden />
+                      <strong>{bundle.workers.length}</strong>
+                      <span>{t('activity.workers')}</span>
+                    </div>
+                    <div>
+                      <ClipboardList size={14} aria-hidden />
+                      <strong>{openDispatchCount}</strong>
+                      <span>{t('activity.openDispatches')}</span>
+                    </div>
+                    <div>
+                      <TerminalSquare size={14} aria-hidden />
+                      <strong>{bundle.terminalRuns.length}</strong>
+                      <span>{t('activity.terminals')}</span>
+                    </div>
+                  </section>
+
+                  <section className="activity-center-section">
+                    <div className="activity-center-section-heading">
+                      <h3>{t('activity.dispatches')}</h3>
+                      {gitStatus?.branch ? (
+                        <span>
+                          <GitBranch size={12} aria-hidden /> {gitStatus.branch}
+                        </span>
+                      ) : null}
+                    </div>
+                    {bundle.dispatches.length === 0 ? (
+                      <p className="activity-center-muted">{t('activity.noDispatches')}</p>
+                    ) : (
+                      <div className="activity-center-list">
+                        {bundle.dispatches.slice(0, 50).map((dispatch) => (
+                          <article className="activity-center-dispatch" key={dispatch.id}>
+                            <div className="activity-center-dispatch-topline">
+                              <span
+                                className={`activity-center-state activity-center-state--${dispatch.state}`}
+                              >
+                                {t(stateKey(dispatch.state))}
+                              </span>
+                              <time dateTime={new Date(dispatch.createdAt).toISOString()}>
+                                {dateFormatter.format(dispatch.createdAt)}
+                              </time>
+                            </div>
+                            <div className="activity-center-dispatch-route">
+                              {formatAgentId(dispatch.fromAgentId, workspaceId, bundle.workers)}
+                              <span aria-hidden>→</span>
+                              {formatAgentId(dispatch.toAgentId, workspaceId, bundle.workers)}
+                            </div>
+                            <p title={dispatch.text}>{dispatch.text}</p>
+                            {dispatch.baseHeadSha ? (
+                              <button
+                                type="button"
+                                className="activity-center-diff-button"
+                                onClick={() => setReviewDispatchId(dispatch.id)}
+                                data-testid={`dispatch-review-${dispatch.id}`}
+                              >
+                                <FileDiff size={12} aria-hidden />
+                                {t('activity.reviewChanges')}
+                              </button>
+                            ) : null}
+                            {dispatch.lastError ? <small>{dispatch.lastError}</small> : null}
+                            {!dispatch.lastError && dispatch.reportDelivery?.lastError ? (
+                              <small>
+                                {t('activity.reportDeliveryQueued', {
+                                  error: dispatch.reportDelivery.lastError,
+                                })}
+                              </small>
+                            ) : null}
+                          </article>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="activity-center-section">
+                    <div className="activity-center-section-heading">
+                      <h3>{t('activity.messages')}</h3>
+                    </div>
+                    {bundle.messages.length === 0 ? (
+                      <p className="activity-center-muted">{t('activity.noMessages')}</p>
+                    ) : (
+                      <div className="activity-center-message-list">
+                        {bundle.messages
+                          .slice(-20)
+                          .reverse()
+                          .map((message) => {
+                            const presentation = messagePresentation(message.type)
+                            const MessageIcon = presentation.icon
+                            return (
+                              <article
+                                className={`activity-center-message-row ${presentation.className}`}
+                                data-message-type={message.type}
+                                key={`${message.type}-${message.createdAt}-${message.from ?? ''}-${message.to ?? ''}-${message.text}`}
+                              >
+                                <span className="activity-center-message-icon" aria-hidden>
+                                  <MessageIcon size={14} />
+                                </span>
+                                <div className="activity-center-message-content">
+                                  <span className="activity-center-message-type">
+                                    {t(presentation.labelKey)}
+                                  </span>
+                                  <span
+                                    className="activity-center-message-text"
+                                    title={message.text}
+                                  >
+                                    {message.text}
+                                  </span>
+                                </div>
+                                <time dateTime={new Date(message.createdAt).toISOString()}>
+                                  {dateFormatter.format(message.createdAt)}
+                                </time>
+                              </article>
+                            )
+                          })}
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="activity-center-section activity-center-git-section">
+                    <div className="activity-center-section-heading">
+                      <h3>{t('activity.git')}</h3>
+                    </div>
+                    {gitStatus ? (
+                      <p className="activity-center-muted">
+                        {gitStatus.branch ?? t('activity.noGit')} ·{' '}
+                        {gitStatus.isDirty ? t('activity.gitDirty') : t('activity.gitClean')} ·{' '}
+                        {bundle.gitCommits.length} {t('activity.commits')}
+                      </p>
+                    ) : (
+                      <p className="activity-center-muted">
+                        {bundle.git?.error ?? t('activity.noGit')}
+                      </p>
+                    )}
+                  </section>
+                </>
+              ) : null}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <DispatchDiffDialog
+        dispatch={reviewDispatch}
+        onClose={() => setReviewDispatchId(null)}
+        open={reviewDispatch !== null}
+        targetLabel={
+          reviewDispatch && bundle
+            ? formatAgentId(reviewDispatch.toAgentId, workspaceId, bundle.workers)
+            : ''
+        }
+        workspaceId={workspaceId}
+      />
+    </>
   )
 }

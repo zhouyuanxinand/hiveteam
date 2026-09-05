@@ -196,6 +196,7 @@ describe('schema version', () => {
         'submitted_at',
         'reported_at',
         'report_text',
+        'base_head_sha',
         'artifacts',
       ])
     )
@@ -277,6 +278,9 @@ describe('schema version', () => {
     })
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(32)).toEqual({
       version: 32,
+    })
+    expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
+      version: 33,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

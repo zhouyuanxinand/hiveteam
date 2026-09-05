@@ -174,6 +174,7 @@ Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里�
 - Workflows（实验性，默认关闭）：Orchestrator 可以运行多阶段、多 agent 的 workflow，Hive 在 Workflows 面板里展示运行、日志、结果、定时任务和停止控制。
 - Workflow CLI 策略：为 workflow 创建的 agent 选择默认 CLI，并限制允许使用的 CLI，避免脚本误启未配置的 agent。
 - 团队记忆：把 workspace 约束、长期上下文和团队共识留在 Hive 里，后续派单时更容易把背景带给正确的 agent。
+- 派单改动审查：在 Git 工作区里，Hive 会在创建派单时记录 HEAD 提交，活动中心可以查看该派单处理期间产生的工作区 diff（含新增未跟踪文件），不必再盲信成员的口头汇报。
 - `.hive/tasks.md` 编辑器，带外部文件冲突处理。
 - PTY 后台保留 + 尽力使用各 CLI 原生 session 恢复。
 - 升级后的 What's New 弹窗，用简短 release highlights 告诉你新版改了什么。

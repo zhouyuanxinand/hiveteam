@@ -1,5 +1,6 @@
 import { serializeDispatchRecord } from './dispatch-ledger-serializer.js'
 import type { DispatchStatus } from './dispatch-ledger-store.js'
+import { ConflictError, HttpError } from './http-errors.js'
 import { getRequiredParam, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
@@ -91,6 +92,48 @@ export const dispatchRoutes: RouteDefinition[] = [
         200,
         store.listDispatches(workspaceId, options).map(serializeDispatchRecord)
       )
+    }
+  ),
+  route(
+    'GET',
+    '/api/ui/workspaces/:workspaceId/dispatches/:dispatchId/diff',
+    async ({ params, request, response, store }) => {
+      const workspaceId = getRequiredParam(
+        response,
+        params,
+        'workspaceId',
+        'Workspace id is required'
+      )
+      if (!workspaceId) return
+      const dispatchId = getRequiredParam(response, params, 'dispatchId', 'Dispatch id is required')
+      if (!dispatchId) return
+
+      requireUiTokenFromRequest(request, store.validateUiToken)
+
+      const workspace = store.getWorkspaceSnapshot(workspaceId)
+      const dispatch = store.getDispatch(workspaceId, dispatchId)
+      if (!dispatch) {
+        throw new HttpError(404, 'Dispatch not found')
+      }
+      if (!dispatch.baseHeadSha) {
+        throw new ConflictError(
+          'This dispatch has no Git baseline. Only dispatches created after baseline tracking was enabled in a Git workspace can be reviewed.'
+        )
+      }
+
+      const diff = await store.git.getDispatchDiff(
+        workspaceId,
+        workspace.summary.path,
+        dispatch.baseHeadSha
+      )
+      sendJson(response, 200, {
+        base_head_sha: diff.baseSha,
+        dispatch_id: dispatch.id,
+        head_sha: diff.headSha,
+        patch: diff.patch,
+        truncated: diff.truncated,
+        untracked_files: diff.untrackedFiles,
+      })
     }
   ),
 ]

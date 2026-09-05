@@ -51,6 +51,7 @@ const isStaticAsset = (pathname) =>
   pathname.startsWith('/screenshots/') ||
   pathname.startsWith('/cli-icons/') ||
   pathname.startsWith('/sounds/') ||
+  pathname.startsWith('/fonts/') ||
   pathname === '/logo.png'
 const isShell = (pathname) => pathname === '/' || pathname === '/index.html'
 
