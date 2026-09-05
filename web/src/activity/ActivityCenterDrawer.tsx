@@ -326,6 +326,7 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
       <DispatchDiffDialog
         dispatch={reviewDispatch}
         onClose={() => setReviewDispatchId(null)}
+        onFeedbackSent={() => void load()}
         open={reviewDispatch !== null}
         targetLabel={
           reviewDispatch && bundle

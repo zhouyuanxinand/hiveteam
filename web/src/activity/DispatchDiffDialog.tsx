@@ -1,13 +1,20 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { AlertTriangle, Copy, FileDiff, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, Check, Copy, FileDiff, RefreshCw, Send, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
-import { type DispatchDiff, type DispatchSummary, getDispatchDiff } from '../api.js'
+import {
+  type DispatchDiff,
+  type DispatchSummary,
+  getDispatchDiff,
+  sendDispatchFeedback,
+} from '../api.js'
 import { useI18n } from '../i18n.js'
 
 interface DispatchDiffDialogProps {
   dispatch: DispatchSummary | null
   onClose: () => void
+  /** Called after feedback was delivered so the parent can refresh. */
+  onFeedbackSent?: () => void
   open: boolean
   targetLabel: string
   workspaceId: string
@@ -27,6 +34,7 @@ const classifyPatchLine = (line: string): PatchLineKind | null => {
 export const DispatchDiffDialog = ({
   dispatch,
   onClose,
+  onFeedbackSent,
   open,
   targetLabel,
   workspaceId,
@@ -36,6 +44,9 @@ export const DispatchDiffDialog = ({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [feedback, setFeedback] = useState('')
+  const [sending, setSending] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState(false)
 
   const dispatchId = dispatch?.id ?? null
 
@@ -46,6 +57,8 @@ export const DispatchDiffDialog = ({
     setError(null)
     setDiff(null)
     setCopied(false)
+    setFeedback('')
+    setFeedbackSent(false)
     getDispatchDiff(workspaceId, dispatchId)
       .then((result) => {
         if (!cancelled) setDiff(result)
@@ -79,6 +92,23 @@ export const DispatchDiffDialog = ({
   // A rename-only diff has no +/- lines but is still a real change, so gate
   // the empty state on the patch text itself rather than on line kinds.
   const hasPatch = (diff?.patch.trim().length ?? 0) > 0
+
+  const sendFeedback = async () => {
+    if (!dispatchId || sending) return
+    setSending(true)
+    setError(null)
+    try {
+      await sendDispatchFeedback(workspaceId, dispatchId, feedback.trim())
+      setFeedback('')
+      setFeedbackSent(true)
+      window.setTimeout(() => setFeedbackSent(false), 3000)
+      onFeedbackSent?.()
+    } catch (sendError: unknown) {
+      setError(sendError instanceof Error ? sendError.message : String(sendError))
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
@@ -194,7 +224,32 @@ export const DispatchDiffDialog = ({
             </div>
 
             <footer className="dispatch-diff-footer">
-              <p className="activity-center-muted">{t('activity.diff.hint')}</p>
+              <div className="dispatch-diff-feedback-row">
+                <textarea
+                  value={feedback}
+                  onChange={(event) => setFeedback(event.target.value)}
+                  placeholder={t('activity.diff.feedbackPlaceholder', { name: targetLabel })}
+                  rows={2}
+                  className="dispatch-diff-feedback-input"
+                  data-testid="dispatch-feedback-input"
+                  disabled={sending}
+                />
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--primary dispatch-diff-feedback-send"
+                  disabled={feedback.trim().length === 0 || sending || !dispatch}
+                  onClick={() => void sendFeedback()}
+                  data-testid="dispatch-feedback-send"
+                >
+                  <Send size={13} aria-hidden />
+                  {sending ? t('activity.diff.sending') : t('activity.diff.sendFeedback')}
+                </button>
+              </div>
+              {feedbackSent ? (
+                <p className="dispatch-diff-feedback-sent" role="status">
+                  <Check size={13} aria-hidden /> {t('activity.diff.feedbackSent')}
+                </p>
+              ) : null}
             </footer>
           </Dialog.Content>
         </div>

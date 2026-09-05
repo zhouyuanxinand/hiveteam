@@ -246,7 +246,8 @@ same shell environment you use to start Hive.
   a dispatch is created, so the Activity center can show the working-tree diff
   produced while that dispatch was being worked on, including new untracked
   files. Reviewing changes no longer means trusting a worker's report at face
-  value.
+  value — and you can send review feedback straight back into the worker's
+  terminal, which reopens the dispatch for another report round.
 - `.hive/tasks.md` editor with external-file conflict handling.
 - Background PTY preservation and best-effort native session resume.
 - A What's New dialog after upgrades with curated release highlights.

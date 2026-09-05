@@ -235,6 +235,27 @@ export const createDispatchLedgerStore = (db: Database) => {
     db.prepare('UPDATE dispatches SET base_head_sha = ? WHERE id = ?').run(baseHeadSha, dispatchId)
   }
 
+  /**
+   * Reopen a reported dispatch when review feedback arrives, so the worker
+   * can address it and report again under the same dispatch id. Returns false
+   * when the dispatch is not currently in the reported state.
+   */
+  const reopenReportedDispatch = (workspaceId: string, dispatchId: string) => {
+    const result = db
+      .prepare(
+        `UPDATE dispatches
+         SET status = 'submitted',
+             reported_at = NULL,
+             report_text = NULL,
+             artifacts = '[]'
+         WHERE id = ? AND workspace_id = ? AND status = 'reported'`
+      )
+      .run(dispatchId, workspaceId)
+    if (result.changes === 0) return false
+    db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatchId)
+    return true
+  }
+
   const markSubmitted = (dispatchId: string) => {
     const submittedAt = Date.now()
     db.prepare(
@@ -428,6 +449,7 @@ export const createDispatchLedgerStore = (db: Database) => {
     markCancelled,
     markReportedByWorker,
     markSubmitted,
+    reopenReportedDispatch,
     setBaseHeadSha,
   }
 }

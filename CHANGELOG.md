@@ -9,6 +9,13 @@ All notable user-facing changes will be documented in this file.
   dialog per dispatch with the working-tree patch since that baseline, new
   untracked files, and a copyable patch. Dispatches from before this change
   (or from non-Git workspaces) report that no baseline is available.
+- Closes the review loop: the dispatch diff dialog can send review feedback
+  straight into the worker's terminal. Feedback on a reported dispatch reopens
+  it, so the worker addresses the comments and reports again under the same
+  dispatch id.
+- Retries failed report deliveries with exponential backoff (capped at 30
+  minutes) instead of on every drain trigger, so a persistently unreachable
+  Orchestrator terminal no longer causes retry churn. Entries never expire.
 - Self-hosts the Inter and DM Mono UI fonts instead of loading them from the
   Google Fonts CDN, so the installed PWA no longer makes third-party requests
   and keeps its typography offline.

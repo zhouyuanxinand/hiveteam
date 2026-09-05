@@ -81,6 +81,12 @@ export interface AgentRuntime {
     input?: { requireActiveRun?: boolean }
   ) => void
   writeUserInputPrompt: (workspaceId: string, text: string) => void
+  writeWorkerFeedbackPrompt: (
+    workspaceId: string,
+    workerId: string,
+    dispatchId: string,
+    text: string
+  ) => void
 }
 
 export type { StartAgentOptions }

@@ -180,6 +180,9 @@ export const createAgentRuntime = (
     writeUserInputPrompt(workspaceId, text) {
       stdinDispatcher.writeUserInputPrompt(workspaceId, text)
     },
+    writeWorkerFeedbackPrompt(workspaceId, workerId, dispatchId, text) {
+      stdinDispatcher.writeWorkerFeedbackPrompt(workspaceId, workerId, dispatchId, text)
+    },
   }
 }
 

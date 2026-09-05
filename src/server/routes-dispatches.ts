@@ -1,7 +1,7 @@
 import { serializeDispatchRecord } from './dispatch-ledger-serializer.js'
 import type { DispatchStatus } from './dispatch-ledger-store.js'
 import { ConflictError, HttpError } from './http-errors.js'
-import { getRequiredParam, route, sendJson } from './route-helpers.js'
+import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 
@@ -14,6 +14,7 @@ const DISPATCH_STATUSES = new Set<DispatchStatus>([
 ])
 const MAX_DISPATCH_LIMIT = 100
 const MAX_DISPATCH_OFFSET = 100_000
+const MAX_FEEDBACK_CHARS = 10_000
 
 const readBoundedInt = (
   response: Parameters<typeof sendJson>[0],
@@ -134,6 +135,39 @@ export const dispatchRoutes: RouteDefinition[] = [
         truncated: diff.truncated,
         untracked_files: diff.untrackedFiles,
       })
+    }
+  ),
+  route(
+    'POST',
+    '/api/ui/workspaces/:workspaceId/dispatches/:dispatchId/feedback',
+    async ({ params, request, response, store }) => {
+      const workspaceId = getRequiredParam(
+        response,
+        params,
+        'workspaceId',
+        'Workspace id is required'
+      )
+      if (!workspaceId) return
+      const dispatchId = getRequiredParam(response, params, 'dispatchId', 'Dispatch id is required')
+      if (!dispatchId) return
+
+      requireUiTokenFromRequest(request, store.validateUiToken)
+
+      const body = await readJsonBody<{ text?: unknown }>(request)
+      const text = typeof body.text === 'string' ? body.text : ''
+      if (text.trim().length === 0) {
+        sendJson(response, 400, { error: 'Feedback text cannot be empty' })
+        return
+      }
+      if (text.length > MAX_FEEDBACK_CHARS) {
+        sendJson(response, 400, {
+          error: `Feedback text must be at most ${MAX_FEEDBACK_CHARS} characters`,
+        })
+        return
+      }
+
+      const dispatch = store.sendDispatchFeedback(workspaceId, dispatchId, text)
+      sendJson(response, 202, serializeDispatchRecord(dispatch))
     }
   ),
 ]
