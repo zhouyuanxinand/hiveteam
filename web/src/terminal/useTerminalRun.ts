@@ -1,5 +1,5 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
-import type { Terminal as XtermTerminal } from '@xterm/xterm'
+import type { IDecoration, Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
@@ -14,6 +14,18 @@ const LEGACY_MOUSE_REPORT_PATTERN = new RegExp(
   `${String.fromCharCode(0x1b)}\\[M([\\s\\S])([\\s\\S])([\\s\\S])`,
   'g'
 )
+
+const USER_INPUT_LINE_PATTERN = /^\s*[›❯]\s+\S/
+const USER_INPUT_DECORATION_SCAN_LINES = 2_000
+const USER_INPUT_DISPLAY_PATTERN = /(^|[\r\n])([ \t]*[›❯][^\r\n]*)/g
+
+// This is intentionally applied only to bytes being rendered by xterm. The
+// original chunk is still acknowledged and sent over the PTY unchanged.
+const highlightUserInputOutput = (chunk: string): string =>
+  chunk.replace(
+    USER_INPUT_DISPLAY_PATTERN,
+    (_match, lineStart: string, line: string) => `${lineStart}\x1b[38;2;96;165;250m${line}\x1b[0m`
+  )
 
 const legacyMouseReportToSgr = (
   report: string,
@@ -78,6 +90,8 @@ export const useTerminalRun = (
     let onCompositionEnd: ((event: Event) => void) | undefined
     let restored = false
     let terminalExited = false
+    let userInputDecorationFrame: number | undefined
+    const userInputDecorations: IDecoration[] = []
     const isComposingRef = { current: false }
 
     void Promise.all([
@@ -100,6 +114,12 @@ export const useTerminalRun = (
           foreground: rootStyles?.getPropertyValue('--text-primary').trim() || '#ebebeb',
         }
       }
+      const readTerminalColor = (name: string, fallback: string) => {
+        const rootStyles =
+          typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
+        const value = rootStyles?.getPropertyValue(name).trim()
+        return value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
+      }
       const nextTerminal = new xtermModule.Terminal({
         allowProposedApi: true,
         convertEol: false,
@@ -119,6 +139,64 @@ export const useTerminalRun = (
       nextFitAddon.fit()
       terminal = nextTerminal
       fitAddon = nextFitAddon
+      const userInputAccent = readTerminalColor('--accent', '#60a5fa')
+      const userInputBackground = readTerminalColor('--bg-2', '#1d2b45')
+
+      const decorateUserInputRows = () => {
+        userInputDecorationFrame = undefined
+        if (
+          disposed ||
+          terminal !== nextTerminal ||
+          typeof nextTerminal.registerDecoration !== 'function' ||
+          nextTerminal.buffer.active.type === 'alternate'
+        ) {
+          return
+        }
+
+        const buffer = nextTerminal.buffer.active
+        const cursorLine = buffer.baseY + buffer.cursorY
+        const firstLine = Math.max(0, buffer.length - USER_INPUT_DECORATION_SCAN_LINES)
+        const lastLine = Math.min(buffer.length - 1, cursorLine + nextTerminal.rows + 1)
+
+        for (let line = firstLine; line <= lastLine; line += 1) {
+          const text = buffer.getLine(line)?.translateToString(true) ?? ''
+          if (!USER_INPUT_LINE_PATTERN.test(text)) continue
+          if (
+            userInputDecorations.some(
+              (decoration) => !decoration.marker.isDisposed && decoration.marker.line === line
+            )
+          ) {
+            continue
+          }
+
+          const marker = nextTerminal.registerMarker(line - cursorLine)
+          const decoration = nextTerminal.registerDecoration({
+            backgroundColor: userInputBackground,
+            foregroundColor: userInputAccent,
+            height: 1,
+            layer: 'bottom',
+            marker,
+            overviewRulerOptions: { color: userInputAccent, position: 'left' },
+            width: Math.max(1, nextTerminal.cols),
+            x: 0,
+          })
+          if (decoration) userInputDecorations.push(decoration)
+          else marker.dispose()
+        }
+
+        for (const decoration of userInputDecorations) {
+          if (decoration.marker.isDisposed) decoration.dispose()
+        }
+      }
+      const scheduleUserInputDecorations = () => {
+        if (userInputDecorationFrame !== undefined) return
+        const decorate = () => decorateUserInputRows()
+        if (typeof window.requestAnimationFrame === 'function') {
+          userInputDecorationFrame = window.requestAnimationFrame(decorate)
+        } else {
+          userInputDecorationFrame = window.setTimeout(decorate, 0)
+        }
+      }
       onThemeChange = () => {
         nextTerminal.options.theme = readTerminalTheme()
       }
@@ -288,13 +366,17 @@ export const useTerminalRun = (
           setStatus('stopped')
         },
         onOutput(chunk, acknowledge) {
-          nextTerminal.write(chunk, () => acknowledge(new TextEncoder().encode(chunk).byteLength))
+          nextTerminal.write(highlightUserInputOutput(chunk), () => {
+            scheduleUserInputDecorations()
+            acknowledge(new TextEncoder().encode(chunk).byteLength)
+          })
         },
         onRestore(snapshot) {
           return new Promise<void>((resolve) => {
-            nextTerminal.write(snapshot, () => {
+            nextTerminal.write(highlightUserInputOutput(snapshot), () => {
               if (!disposed) {
                 restored = true
+                scheduleUserInputDecorations()
                 refreshTerminal()
                 focusTerminal()
               }
@@ -333,6 +415,14 @@ export const useTerminalRun = (
       if (onThemeChange) window.removeEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       resizeObserver?.disconnect()
       if (resizeTimer) window.clearTimeout(resizeTimer)
+      if (userInputDecorationFrame !== undefined) {
+        if (typeof window.cancelAnimationFrame === 'function') {
+          window.cancelAnimationFrame(userInputDecorationFrame)
+        } else {
+          window.clearTimeout(userInputDecorationFrame)
+        }
+      }
+      for (const decoration of userInputDecorations) decoration.dispose()
       wheelFallbackDispose?.()
       if (helperTextarea && onCompositionStart) {
         helperTextarea.removeEventListener('compositionstart', onCompositionStart, {

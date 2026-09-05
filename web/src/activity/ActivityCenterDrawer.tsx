@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Copy,
   GitBranch,
+  MessageCircleQuestion,
   RefreshCw,
   TerminalSquare,
   Users,
@@ -38,6 +39,42 @@ const stateKey = (state: DispatchSummary['state']) => {
   if (state === 'cancelled') return 'activity.state.cancelled' as const
   if (state === 'submitted') return 'activity.state.submitted' as const
   return 'activity.state.queued' as const
+}
+
+const messagePresentation = (type: string) => {
+  if (type === 'user_input') {
+    return {
+      className: 'activity-center-message-row--user',
+      icon: MessageCircleQuestion,
+      labelKey: 'activity.message.userInput' as const,
+    }
+  }
+  if (type === 'send') {
+    return {
+      className: 'activity-center-message-row--dispatch',
+      icon: ClipboardList,
+      labelKey: 'activity.message.dispatch' as const,
+    }
+  }
+  if (type === 'report') {
+    return {
+      className: 'activity-center-message-row--report',
+      icon: Users,
+      labelKey: 'activity.message.report' as const,
+    }
+  }
+  if (type === 'status') {
+    return {
+      className: 'activity-center-message-row--status',
+      icon: AlertTriangle,
+      labelKey: 'activity.message.status' as const,
+    }
+  }
+  return {
+    className: 'activity-center-message-row--system',
+    icon: TerminalSquare,
+    labelKey: 'activity.message.system' as const,
+  }
 }
 
 export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCenterDrawerProps) => {
@@ -265,16 +302,32 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
                       {bundle.messages
                         .slice(-20)
                         .reverse()
-                        .map((message) => (
-                          <div
-                            className="activity-center-message-row"
-                            key={`${message.type}-${message.createdAt}-${message.from ?? ''}-${message.to ?? ''}-${message.text}`}
-                          >
-                            <span className="activity-center-message-type">{message.type}</span>
-                            <span className="activity-center-message-text">{message.text}</span>
-                            <time>{dateFormatter.format(message.createdAt)}</time>
-                          </div>
-                        ))}
+                        .map((message) => {
+                          const presentation = messagePresentation(message.type)
+                          const MessageIcon = presentation.icon
+                          return (
+                            <article
+                              className={`activity-center-message-row ${presentation.className}`}
+                              data-message-type={message.type}
+                              key={`${message.type}-${message.createdAt}-${message.from ?? ''}-${message.to ?? ''}-${message.text}`}
+                            >
+                              <span className="activity-center-message-icon" aria-hidden>
+                                <MessageIcon size={14} />
+                              </span>
+                              <div className="activity-center-message-content">
+                                <span className="activity-center-message-type">
+                                  {t(presentation.labelKey)}
+                                </span>
+                                <span className="activity-center-message-text" title={message.text}>
+                                  {message.text}
+                                </span>
+                              </div>
+                              <time dateTime={new Date(message.createdAt).toISOString()}>
+                                {dateFormatter.format(message.createdAt)}
+                              </time>
+                            </article>
+                          )
+                        })}
                     </div>
                   )}
                 </section>

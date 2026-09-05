@@ -2361,9 +2361,18 @@ html, body {
 .activity-center-dispatch small { display: block; margin-top: 5px; overflow: hidden; color: var(--status-red); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .activity-center-muted { margin: 0; color: var(--text-tertiary); font-size: 12px; }
 .activity-center-message-list { display: grid; gap: 5px; }
-.activity-center-message-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 7px 9px; border-radius: 5px; background: var(--bg-1); font-size: 11px; }
-.activity-center-message-type { color: var(--accent); font-family: var(--font-mono); font-size: 10px; }
-.activity-center-message-text { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-message-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid transparent; border-radius: 5px; background: var(--bg-1); font-size: 11px; }
+.activity-center-message-icon { display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+.activity-center-message-content { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+.activity-center-message-type { flex: none; color: var(--text-tertiary); font-size: 10px; font-weight: 600; }
+.activity-center-message-text { min-width: 0; overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.activity-center-message-row--user { border-color: color-mix(in oklab, var(--accent) 34%, var(--border)); border-left: 3px solid var(--accent); background: color-mix(in oklab, var(--accent) 10%, var(--bg-1)); }
+.activity-center-message-row--user .activity-center-message-icon,
+.activity-center-message-row--user .activity-center-message-type { color: var(--accent); }
+.activity-center-message-row--user .activity-center-message-type { font-weight: 700; }
+.activity-center-message-row--dispatch .activity-center-message-type { color: var(--status-yellow); }
+.activity-center-message-row--report .activity-center-message-type { color: var(--status-green); }
+.activity-center-message-row--status .activity-center-message-type { color: var(--status-red); }
 .activity-center-message-row time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
 .activity-center-git-section { padding-top: 14px; border-top: 1px solid var(--border); }
 .activity-center-empty { display: flex; min-height: 240px; align-items: center; justify-content: center; flex-direction: column; gap: 9px; color: var(--text-tertiary); font-size: 12px; }
@@ -2382,6 +2391,7 @@ html, body {
   .activity-center-body { padding: 14px 14px 24px; }
   .activity-center-summary { grid-template-columns: 1fr; }
   .activity-center-message-row { grid-template-columns: auto minmax(0, 1fr); }
+  .activity-center-message-content { display: block; }
   .activity-center-message-row time { display: none; }
 }
 
