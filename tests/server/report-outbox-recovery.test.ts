@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
@@ -43,6 +44,64 @@ afterEach(async () => {
 })
 
 describe('report outbox recovery', () => {
+  test('drains an in-flight report delivery before closing its runtime database', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-report-outbox-close-'))
+    const workspacePath = join(dataDir, 'workspace')
+    mkdirSync(workspacePath, { recursive: true })
+    tempDirs.push(dataDir)
+
+    const orchestratorScript = join(workspacePath, 'orchestrator-prompt.js')
+    writeFileSync(
+      orchestratorScript,
+      [
+        "process.stdin.setEncoding('utf8')",
+        "process.stdout.write('❯ ')",
+        "process.stdin.on('data', (chunk) => {",
+        "  if (chunk.includes('\\u001b[201~')) process.stdout.write('[Pasted text #1 +1 lines]')",
+        '})',
+        'process.stdin.resume()',
+      ].join('\n')
+    )
+
+    const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
+    stores.push(store)
+    const workspace = store.createWorkspace(workspacePath, 'Alpha')
+    const [orchestrator] = store.getWorkspaceSnapshot(workspace.id).agents
+    if (!orchestrator) throw new Error('Expected Orchestrator')
+    const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+
+    store.configureAgentLaunch(workspace.id, orchestrator.id, {
+      args: [orchestratorScript],
+      command: process.execPath,
+      interactiveCommand: 'claude',
+    })
+    await store.startAgent(workspace.id, orchestrator.id, { hivePort: '4010' })
+    await waitFor(() => {
+      const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
+      expect(run?.output).toContain('❯')
+    })
+
+    await store.dispatchTask(workspace.id, worker.id, 'Implement login')
+    expect(
+      store.reportTask(workspace.id, worker.id, {
+        requireActiveRun: true,
+        text: 'Login implementation is complete',
+      })
+    ).toMatchObject({ deliveryState: 'delivering' })
+
+    await store.close()
+
+    const db = new Database(join(dataDir, 'runtime.sqlite'))
+    try {
+      const entry = db
+        .prepare('SELECT delivered_at FROM report_outbox WHERE workspace_id = ?')
+        .get(workspace.id) as { delivered_at: number | null } | undefined
+      expect(entry?.delivered_at).toEqual(expect.any(Number))
+    } finally {
+      db.close()
+    }
+  })
+
   test('replays a queued report when the restarted Orchestrator next lists its team', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-report-outbox-'))
     const workspacePath = join(dataDir, 'workspace')

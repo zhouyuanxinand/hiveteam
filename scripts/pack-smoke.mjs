@@ -8,7 +8,11 @@ const tempDir = mkdtempSync(join(tmpdir(), 'hive-pack-smoke-'))
 let packedFile
 const binLinkName = (name) => (process.platform === 'win32' ? `${name}.cmd` : name)
 const runtimeStartTimeoutMs = process.platform === 'win32' ? 60_000 : 5_000
-const npmInstallTimeoutMs = process.platform === 'win32' ? 180_000 : 60_000
+// A cold npm cache can take longer than a minute to install native runtime
+// dependencies on macOS and Linux. Keep the same budget on every platform so
+// the smoke test verifies the package rather than failing on an arbitrary
+// platform-specific cutoff.
+const npmInstallTimeoutMs = 180_000
 const activeNodeDir = dirname(process.execPath)
 const activeNpmCli = join(activeNodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
 

@@ -124,6 +124,7 @@ export const createTeamOperations = ({
   const runMutation = runDataMutation ?? ((mutation: () => void) => mutation())
   const drainingReportOutboxIds = new Set<number>()
   const pendingDispatches = new Set<Promise<DispatchRecord>>()
+  const pendingReportDeliveries = new Set<Promise<void>>()
   let closing = false
 
   const trackDispatch = (pending: Promise<DispatchRecord>) => {
@@ -135,10 +136,19 @@ export const createTeamOperations = ({
     return pending
   }
 
+  const trackReportDelivery = (pending: Promise<void>) => {
+    pendingReportDeliveries.add(pending)
+    void pending.then(
+      () => pendingReportDeliveries.delete(pending),
+      () => pendingReportDeliveries.delete(pending)
+    )
+    return pending
+  }
+
   const close = async () => {
     closing = true
-    while (pendingDispatches.size > 0) {
-      await Promise.allSettled(Array.from(pendingDispatches))
+    while (pendingDispatches.size > 0 || pendingReportDeliveries.size > 0) {
+      await Promise.allSettled([...pendingDispatches, ...pendingReportDeliveries])
     }
   }
 
@@ -161,6 +171,10 @@ export const createTeamOperations = ({
     workspaceId: string,
     targetAgentId = `${workspaceId}:orchestrator`
   ) => {
+    // Runtime shutdown must not start a fresh write after it has begun waiting
+    // for already-started deliveries. Existing deliveries stay tracked below
+    // and finish before RuntimeStore closes SQLite.
+    if (closing) return { attempted: 0, firstSyncError: null }
     if (!reportOutbox || !agentRuntime.getActiveRunByAgentId(workspaceId, targetAgentId)) {
       return { attempted: 0, firstSyncError: null }
     }
@@ -180,7 +194,7 @@ export const createTeamOperations = ({
       attempted += 1
       try {
         reportOutbox.markDeliveryAttempt(entry.id)
-        void agentRuntime
+        const delivery = agentRuntime
           .deliverSystemMessageToAgent(workspaceId, targetAgentId, entry.payload, {
             requireActiveRun: true,
           })
@@ -194,6 +208,7 @@ export const createTeamOperations = ({
           .finally(() => {
             drainingReportOutboxIds.delete(entry.id)
           })
+        void trackReportDelivery(delivery)
       } catch (error) {
         reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
         drainingReportOutboxIds.delete(entry.id)

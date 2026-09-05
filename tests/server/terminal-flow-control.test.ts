@@ -186,13 +186,19 @@ describe('terminal flow control', () => {
     writeFileSync(
       script,
       [
-        "console.log('ready')",
         "process.stdin.setEncoding('utf8')",
+        'if (process.stdin.isTTY) process.stdin.setRawMode(true)',
         "process.stdin.on('data', (chunk) => { process.stdout.write('IN:' + chunk) })",
+        'process.stdin.resume()',
+        // A child can print before the browser has completed both WebSocket
+        // upgrades on Unix. Delay the readiness marker so this test measures
+        // the flow-control delivery path, not startup output replay.
+        "setTimeout(() => console.log('ready'), 1000)",
       ].join('\n')
     )
 
     const server = await startSpyServer()
+    let viewer: Awaited<ReturnType<typeof openViewer>> | null = null
     try {
       const cookie = await getUiCookie(server.baseUrl)
       const workspace = await createWorkspace(server.baseUrl, cookie, workspacePath)
@@ -201,7 +207,7 @@ describe('terminal flow control', () => {
         script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-      const viewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
+      viewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
 
       await waitFor(() => {
         expect(viewer.outputs.join('')).toContain('ready')
@@ -209,7 +215,9 @@ describe('terminal flow control', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 20))
       const startAt = Date.now()
-      viewer.io.send('tiny\n')
+      // xterm sends carriage return for Enter. A bare LF is only echoed by
+      // the Unix PTY line discipline and never reaches the child process.
+      viewer.io.send('tiny\r')
 
       await waitFor(
         () => {
@@ -219,10 +227,12 @@ describe('terminal flow control', () => {
         10
       )
       expect(Date.now() - startAt).toBeLessThan(300)
-
-      await closeViewer(viewer)
     } finally {
-      await server.close()
+      try {
+        if (viewer) await closeViewer(viewer)
+      } finally {
+        await server.close()
+      }
     }
   }, 15000)
 

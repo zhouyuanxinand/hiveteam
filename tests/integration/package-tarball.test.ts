@@ -14,7 +14,9 @@ interface PackResult {
   version: string
 }
 
-const PACK_SMOKE_TIMEOUT_MS = process.platform === 'win32' ? 210_000 : 120_000
+// Match the pack-smoke install budget plus startup and cleanup time. npm may
+// need to populate a cold cache while resolving the packaged native runtime.
+const PACK_SMOKE_TIMEOUT_MS = 210_000
 
 const terminateProcessTree = (pid: number) => {
   if (process.platform === 'win32') {
