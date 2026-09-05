@@ -28,7 +28,11 @@ export const writeNodeCli = (directory: string, name: string, source: string): s
   }
 
   const commandPath = join(directory, name)
-  writeFileSync(commandPath, source, 'utf8')
+  // A shebang is required: without it the kernel reports ENOEXEC and the
+  // exec falls back to /bin/sh, whose interpretation of node source (syntax
+  // errors exit 2) breaks fixtures that must exit with a specific code.
+  const body = source.startsWith('#!') ? source : `#!/usr/bin/env node\n${source}`
+  writeFileSync(commandPath, body, 'utf8')
   chmodSync(commandPath, 0o755)
   return commandPath
 }
