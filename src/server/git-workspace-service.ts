@@ -5,6 +5,7 @@ import type {
   GitCommitSummary,
   GitRevertResult,
   GitSnapshotResult,
+  WorkspaceDispatchDiff,
   WorkspaceGitStatus,
 } from '../shared/git.js'
 import {
@@ -16,6 +17,7 @@ import {
   isGitAncestor,
   listGitCommits,
   readGitStatus,
+  readGitWorkingTreeDiff,
   revertGitCommit,
   stageGitChanges,
 } from './git-command.js'
@@ -82,6 +84,17 @@ export interface GitWorkspaceService {
     workspaceId: string
     workspacePath: string
   }) => Promise<GitSnapshotResult>
+  getDispatchDiff: (
+    workspaceId: string,
+    workspacePath: string,
+    baseSha: string,
+    input?: { maxChars?: number }
+  ) => Promise<WorkspaceDispatchDiff>
+  /**
+   * Lightweight HEAD lookup used when recording dispatch baselines. Returns
+   * null when the workspace is not a usable Git repository.
+   */
+  getHeadSha: (workspaceId: string, workspacePath: string) => Promise<string | null>
   getStatus: (workspaceId: string, workspacePath: string) => Promise<WorkspaceGitStatus>
   initialize: (workspaceId: string, workspacePath: string) => Promise<WorkspaceGitStatus>
   listCommits: (
@@ -262,6 +275,32 @@ export const createGitWorkspaceService = (db: Database): GitWorkspaceService => 
     }
   }
 
+  const getDispatchDiffUnlocked = async (
+    workspaceId: string,
+    workspacePath: string,
+    baseSha: string,
+    input: { maxChars?: number } = {}
+  ): Promise<WorkspaceDispatchDiff> => {
+    if (!SHA_PATTERN.test(baseSha)) throw new Error('Invalid Git commit SHA')
+    const result = await detect(workspaceId, workspacePath)
+    if (!result.repository) {
+      throw new Error(result.settings.error ?? 'Workspace is not a Git repository')
+    }
+    const diff = await readGitWorkingTreeDiff(result.repository, baseSha, input)
+    return {
+      baseSha,
+      headSha: result.repository.headSha,
+      patch: diff.patch,
+      truncated: diff.truncated,
+      untrackedFiles: diff.untrackedFiles,
+    }
+  }
+
+  const getHeadShaUnlocked = async (workspaceId: string, workspacePath: string) => {
+    const result = await detect(workspaceId, workspacePath)
+    return result.repository?.headSha ?? null
+  }
+
   const initializeUnlocked = async (workspaceId: string, workspacePath: string) => {
     const current = await detect(workspaceId, workspacePath)
     if (current.repository) return getStatusUnlocked(workspaceId, workspacePath)
@@ -320,6 +359,12 @@ export const createGitWorkspaceService = (db: Database): GitWorkspaceService => 
     deleteWorkspace(workspaceId: string) {
       snapshotStore.deleteWorkspace(workspaceId)
     },
+    getDispatchDiff: (workspaceId, workspacePath, baseSha, input) =>
+      runExclusive(workspaceId, () =>
+        getDispatchDiffUnlocked(workspaceId, workspacePath, baseSha, input)
+      ),
+    getHeadSha: (workspaceId, workspacePath) =>
+      runExclusive(workspaceId, () => getHeadShaUnlocked(workspaceId, workspacePath)),
     getStatus: (workspaceId, workspacePath) =>
       runExclusive(workspaceId, () => getStatusUnlocked(workspaceId, workspacePath)),
     initialize: (workspaceId, workspacePath) =>

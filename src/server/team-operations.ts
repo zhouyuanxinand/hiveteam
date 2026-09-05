@@ -14,7 +14,14 @@ import type { WorkspaceStore } from './workspace-store.js'
 
 export interface TeamOperationsInput {
   agentRuntime: AgentRuntime
+  /**
+   * Optional hook that records the workspace Git HEAD as the dispatch
+   * baseline. Must be side-effect free and resolve to null when no baseline
+   * is available (non-Git workspace, Git missing); it must never throw.
+   */
+  captureBaseHeadSha?: (workspaceId: string) => Promise<string | null>
   createDispatch: (input: {
+    baseHeadSha?: string | null
     fromAgentId?: string
     text: string
     toAgentId: string
@@ -47,6 +54,8 @@ export interface TeamOperationsInput {
   markDispatchDeliveryFailed?: (dispatchId: string, error: string) => void
   reportOutbox?: ReportOutboxStore
   runDataMutation?: (mutation: () => void) => void
+  /** Optional persistence hook for the review baseline captured post-insert. */
+  setDispatchBaseHeadSha?: (dispatchId: string, baseHeadSha: string) => void
   workspaceStore: WorkspaceStore
 }
 
@@ -88,6 +97,7 @@ const reportForwardErrorMessage = (error: unknown) =>
 
 export const createTeamOperations = ({
   agentRuntime,
+  captureBaseHeadSha,
   createDispatch,
   deleteDispatch,
   deleteMessage,
@@ -101,6 +111,7 @@ export const createTeamOperations = ({
   markDispatchDeliveryFailed,
   reportOutbox,
   runDataMutation,
+  setDispatchBaseHeadSha,
   workspaceStore,
 }: TeamOperationsInput) => {
   const runMutation = runDataMutation ?? ((mutation: () => void) => mutation())
@@ -240,12 +251,19 @@ export const createTeamOperations = ({
     if (text.trim().length === 0) {
       throw new BadRequestError('Task text cannot be empty')
     }
+    // Kick off the review-baseline capture immediately so the HEAD it reads
+    // predates any worker edit, but only await it after all synchronous state
+    // mutations — dispatchTask historically commits the dispatch row and the
+    // worker's working status before its first await, and callers rely on
+    // that. The hook is documented as never throwing.
+    const baseHeadCapture = captureBaseHeadSha ? captureBaseHeadSha(workspaceId) : null
     const message = createSendMessage(workspaceId, workerId, text, input.fromAgentId)
     const messageHandle = insertMessage(message)
     let dispatch: DispatchRecord | undefined
 
     try {
       const dispatchInput: {
+        baseHeadSha?: string | null
         fromAgentId?: string
         text: string
         toAgentId: string
@@ -284,6 +302,13 @@ export const createTeamOperations = ({
       }
 
       workspaceStore.markTaskDispatched(workspaceId, workerId)
+      if (baseHeadCapture) {
+        const baseHeadSha = await baseHeadCapture
+        if (baseHeadSha) {
+          setDispatchBaseHeadSha?.(dispatch.id, baseHeadSha)
+          dispatch = { ...dispatch, baseHeadSha }
+        }
+      }
       // A worker-start replay may have accepted the dispatch while
       // ensureWorkerRun was yielding. Return the durable record so callers
       // immediately see the submitted/failed state instead of the stale

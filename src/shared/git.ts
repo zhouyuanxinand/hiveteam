@@ -55,3 +55,16 @@ export interface GitRevertResult {
   commit: GitCommitSummary
   revertedSha: string
 }
+
+/**
+ * Working-tree changes relative to the commit recorded when a dispatch was
+ * created. `untrackedFiles` are listed separately because they have no blob
+ * in the baseline commit and therefore never appear in `patch`.
+ */
+export interface WorkspaceDispatchDiff {
+  baseSha: string
+  headSha: string | null
+  patch: string
+  truncated: boolean
+  untrackedFiles: string[]
+}

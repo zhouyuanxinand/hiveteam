@@ -2,6 +2,17 @@
 
 All notable user-facing changes will be documented in this file.
 
+## Unreleased
+
+- Adds per-dispatch change review: Hive records the workspace Git HEAD when a
+  dispatch is created, and the Activity center now offers a Review changes
+  dialog per dispatch with the working-tree patch since that baseline, new
+  untracked files, and a copyable patch. Dispatches from before this change
+  (or from non-Git workspaces) report that no baseline is available.
+- Self-hosts the Inter and DM Mono UI fonts instead of loading them from the
+  Google Fonts CDN, so the installed PWA no longer makes third-party requests
+  and keeps its typography offline.
+
 ## 2.1.19 - 2026-07-22
 
 HiveTeam release for the self-hosted fork.

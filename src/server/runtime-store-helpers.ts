@@ -187,6 +187,10 @@ export const createRuntimeStoreServices = (
   )
   const teamOps = createTeamOperations({
     agentRuntime,
+    captureBaseHeadSha: (workspaceId) => {
+      const workspacePath = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path
+      return git.getHeadSha(workspaceId, workspacePath)
+    },
     createDispatch: dispatchLedgerStore.createDispatch,
     deleteDispatch: dispatchLedgerStore.deleteDispatch,
     deleteMessage: messageLogStore.deleteMessage,
@@ -208,6 +212,7 @@ export const createRuntimeStoreServices = (
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
     reportOutbox,
     runDataMutation: (mutation) => db.transaction(mutation)(),
+    setDispatchBaseHeadSha: dispatchLedgerStore.setBaseHeadSha,
     workspaceStore,
   })
   const workflowRuntime = createWorkflowRuntime({
