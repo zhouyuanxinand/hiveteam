@@ -122,6 +122,27 @@ export const buildWorkerCancelPayload = (dispatchId: string, reason: string): st
     '',
   ].join('\n')
 
+export const buildWorkerFeedbackPayload = (
+  dispatchId: string,
+  text: string,
+  language?: WorkspaceLanguage
+): string => {
+  const english = language === 'en'
+  return [
+    english
+      ? `[Hive system message: review feedback from the user on dispatch ${dispatchId}]`
+      : `[Hive 系统消息：用户针对派单 ${dispatchId} 的审查反馈]`,
+    '',
+    english
+      ? `The user reviewed your changes for this dispatch. Address the feedback, then run \`team report "<result>" --dispatch ${dispatchId}\` again when done.`
+      : `用户审查了你在这条派单中的改动。请按反馈继续修改，完成后再次执行 \`team report "<结果>" --dispatch ${dispatchId}\`。`,
+    '',
+    english ? 'Feedback:' : '反馈内容：',
+    wrapUntrustedPromptData('review-feedback', text),
+    '',
+  ].join('\n')
+}
+
 export const createAgentStdinDispatcher = ({
   agentManager,
   getDispatchMemoryDigest,
@@ -288,6 +309,19 @@ export const createAgentStdinDispatcher = ({
         workspaceId,
         `${workspaceId}:orchestrator`,
         buildOrchestratorUserInputPayload(text, getWorkspaceLanguage?.(workspaceId)),
+        { requireActiveRun: true }
+      )
+    },
+    writeWorkerFeedbackPrompt(
+      workspaceId: string,
+      workerId: string,
+      dispatchId: string,
+      text: string
+    ) {
+      writeToActiveAgentRun(
+        workspaceId,
+        workerId,
+        buildWorkerFeedbackPayload(dispatchId, text, getWorkspaceLanguage?.(workspaceId)),
         { requireActiveRun: true }
       )
     },

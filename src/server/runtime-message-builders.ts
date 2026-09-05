@@ -12,6 +12,19 @@ export const createUserInputMessage = (
   workspaceId,
 })
 
+export const createFeedbackMessage = (
+  workspaceId: string,
+  workerId: string,
+  text: string
+): MessageLogRecord => ({
+  createdAt: Date.now(),
+  text,
+  toAgentId: workerId,
+  type: 'feedback',
+  workerId,
+  workspaceId,
+})
+
 export const createSendMessage = (
   workspaceId: string,
   workerId: string,

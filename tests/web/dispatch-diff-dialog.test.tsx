@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { DispatchDiffDialog } from '../../web/src/activity/DispatchDiffDialog.js'
 import type { DispatchSummary } from '../../web/src/api.js'
 import { I18nProvider } from '../../web/src/i18n.js'
 
 const getDispatchDiff = vi.hoisted(() => vi.fn())
+const sendDispatchFeedback = vi.hoisted(() => vi.fn())
 
 vi.mock('../../web/src/api.js', () => ({
   getDispatchDiff: (...args: unknown[]) => getDispatchDiff(...args),
+  sendDispatchFeedback: (...args: unknown[]) => sendDispatchFeedback(...args),
 }))
 
 const dispatch: DispatchSummary = {
@@ -43,6 +45,7 @@ const renderDialog = (open = true) =>
 beforeEach(() => {
   window.localStorage.clear()
   getDispatchDiff.mockReset()
+  sendDispatchFeedback.mockReset()
 })
 
 afterEach(() => {
@@ -103,5 +106,58 @@ describe('DispatchDiffDialog', () => {
     renderDialog()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Dispatch has no Git baseline')
+  })
+
+  test('sends review feedback to the worker and confirms delivery', async () => {
+    getDispatchDiff.mockResolvedValue({
+      baseHeadSha: dispatch.baseHeadSha,
+      dispatchId: dispatch.id,
+      headSha: dispatch.baseHeadSha,
+      patch: '',
+      truncated: false,
+      untrackedFiles: [],
+    })
+    sendDispatchFeedback.mockResolvedValue({ ...dispatch, state: 'submitted' })
+
+    renderDialog()
+
+    const sendButton = screen.getByTestId('dispatch-feedback-send')
+    expect(sendButton).toBeDisabled()
+
+    fireEvent.change(screen.getByTestId('dispatch-feedback-input'), {
+      target: { value: '  请把按钮换成红色  ' },
+    })
+    expect(sendButton).toBeEnabled()
+    fireEvent.click(sendButton)
+
+    expect(sendDispatchFeedback).toHaveBeenCalledWith(
+      'workspace-1',
+      'dispatch-1',
+      '请把按钮换成红色'
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent(/Feedback sent|反馈已送达/)
+    expect((screen.getByTestId('dispatch-feedback-input') as HTMLTextAreaElement).value).toBe('')
+  })
+
+  test('shows the server error when feedback cannot be delivered', async () => {
+    getDispatchDiff.mockResolvedValue({
+      baseHeadSha: dispatch.baseHeadSha,
+      dispatchId: dispatch.id,
+      headSha: dispatch.baseHeadSha,
+      patch: '',
+      truncated: false,
+      untrackedFiles: [],
+    })
+    sendDispatchFeedback.mockRejectedValue(new Error('The worker is not running'))
+
+    renderDialog()
+
+    fireEvent.change(screen.getByTestId('dispatch-feedback-input'), {
+      target: { value: 'please fix' },
+    })
+    fireEvent.click(screen.getByTestId('dispatch-feedback-send'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The worker is not running')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

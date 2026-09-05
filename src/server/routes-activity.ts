@@ -96,6 +96,8 @@ export const activityRoutes: RouteDefinition[] = [
           if (message.type === 'send') {
             payload.from = message.from ?? null
             payload.to = message.to
+          } else if (message.type === 'feedback') {
+            payload.to = message.to
           } else if (message.type === 'report' || message.type === 'status') {
             payload.artifacts = message.artifacts
             payload.from = message.from

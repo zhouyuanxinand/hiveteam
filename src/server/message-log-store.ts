@@ -7,7 +7,14 @@ export interface MessageLogRecord {
   status?: string
   text: string
   toAgentId?: string
-  type: 'user_input' | 'send' | 'report' | 'status' | 'system_env_sync' | 'system_recovery_summary'
+  type:
+    | 'user_input'
+    | 'send'
+    | 'report'
+    | 'status'
+    | 'feedback'
+    | 'system_env_sync'
+    | 'system_recovery_summary'
   workerId: string
   workspaceId: string
 }
@@ -44,11 +51,17 @@ interface StatusRecoveryMessage extends RecoveryMessageBase {
   type: 'status'
 }
 
+interface FeedbackRecoveryMessage extends RecoveryMessageBase {
+  to: string
+  type: 'feedback'
+}
+
 export type RecoveryMessage =
   | UserInputRecoveryMessage
   | SendRecoveryMessage
   | ReportRecoveryMessage
   | StatusRecoveryMessage
+  | FeedbackRecoveryMessage
 
 interface MessageKindRow {
   type: 'send' | 'report'
@@ -63,7 +76,14 @@ interface MessageRow {
   status: string | null
   text: string | null
   to_agent_id: string | null
-  type: 'user_input' | 'send' | 'report' | 'status' | 'system_env_sync' | 'system_recovery_summary'
+  type:
+    | 'user_input'
+    | 'send'
+    | 'report'
+    | 'status'
+    | 'feedback'
+    | 'system_env_sync'
+    | 'system_recovery_summary'
   worker_id: string
 }
 
@@ -156,6 +176,15 @@ export const createMessageLogStore = (db: Database) => {
           }
 
           return message
+        }
+
+        if (typedRow.type === 'feedback') {
+          return {
+            createdAt: typedRow.created_at,
+            text: typedRow.text ?? '',
+            to: typedRow.to_agent_id ?? typedRow.worker_id,
+            type: 'feedback',
+          } satisfies RecoveryMessage
         }
 
         if (typedRow.type !== 'report' && typedRow.type !== 'status') {

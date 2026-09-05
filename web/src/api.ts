@@ -980,6 +980,25 @@ export const getDispatchDiff = async (
   }
 }
 
+export const sendDispatchFeedback = async (
+  workspaceId: string,
+  dispatchId: string,
+  text: string
+): Promise<DispatchSummary> => {
+  const response = await apiFetch(
+    `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/dispatches/${encodeURIComponent(dispatchId)}/feedback`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }
+  )
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to send feedback'))
+  }
+  return fromDispatchPayload((await response.json()) as DispatchSummaryPayload)
+}
+
 export interface WorkspaceActivityMessage {
   artifacts?: string[]
   createdAt: number

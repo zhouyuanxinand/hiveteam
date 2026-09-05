@@ -2752,3 +2752,28 @@ html, body {
   background: var(--bg-3);
   color: var(--text-primary);
 }
+
+.dispatch-diff-feedback-row { display: flex; align-items: flex-end; gap: 8px; }
+.dispatch-diff-feedback-input {
+  flex: 1;
+  min-height: 44px;
+  padding: 7px 10px;
+  resize: vertical;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.dispatch-diff-feedback-input:focus { border-color: var(--accent); outline: none; }
+.dispatch-diff-feedback-send { flex-shrink: 0; }
+.dispatch-diff-feedback-sent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0 0;
+  color: var(--status-green);
+  font-size: 12px;
+}

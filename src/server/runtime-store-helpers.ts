@@ -196,6 +196,7 @@ export const createRuntimeStoreServices = (
     deleteMessage: messageLogStore.deleteMessage,
     findOpenDispatch: dispatchLedgerStore.findOpenDispatch,
     findOpenDispatchById: dispatchLedgerStore.findOpenDispatchById,
+    getDispatchById: dispatchLedgerStore.getDispatchById,
     listOpenWorkspaceDispatches: (workspaceId) =>
       dispatchLedgerStore
         .listWorkspaceDispatches(workspaceId)
@@ -211,6 +212,7 @@ export const createRuntimeStoreServices = (
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
     reportOutbox,
+    reopenReportedDispatch: dispatchLedgerStore.reopenReportedDispatch,
     runDataMutation: (mutation) => db.transaction(mutation)(),
     setDispatchBaseHeadSha: dispatchLedgerStore.setBaseHeadSha,
     workspaceStore,

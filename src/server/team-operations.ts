@@ -1,10 +1,11 @@
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
-import { BadRequestError, ConflictError } from './http-errors.js'
+import { BadRequestError, ConflictError, HttpError, PtyInactiveError } from './http-errors.js'
 import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
 import {
+  createFeedbackMessage,
   createReportMessage,
   createSendMessage,
   createStatusMessage,
@@ -35,6 +36,8 @@ export interface TeamOperationsInput {
     dispatchId?: string
   ) => DispatchRecord | undefined
   findOpenDispatchById: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  /** Required for the review-feedback path; optional for lightweight callers. */
+  getDispatchById?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
   insertMessage: (record: MessageLogRecord) => MessageLogHandle
   markDispatchCancelled: (input: {
@@ -53,6 +56,8 @@ export interface TeamOperationsInput {
   /** Optional for lightweight callers that do not persist delivery failures. */
   markDispatchDeliveryFailed?: (dispatchId: string, error: string) => void
   reportOutbox?: ReportOutboxStore
+  /** Required for the review-feedback path; optional for lightweight callers. */
+  reopenReportedDispatch?: (workspaceId: string, dispatchId: string) => boolean
   runDataMutation?: (mutation: () => void) => void
   /** Optional persistence hook for the review baseline captured post-insert. */
   setDispatchBaseHeadSha?: (dispatchId: string, baseHeadSha: string) => void
@@ -103,6 +108,7 @@ export const createTeamOperations = ({
   deleteMessage,
   findOpenDispatch,
   findOpenDispatchById,
+  getDispatchById,
   listOpenWorkspaceDispatches = () => [],
   insertMessage,
   markDispatchCancelled,
@@ -110,6 +116,7 @@ export const createTeamOperations = ({
   markDispatchSubmitted,
   markDispatchDeliveryFailed,
   reportOutbox,
+  reopenReportedDispatch,
   runDataMutation,
   setDispatchBaseHeadSha,
   workspaceStore,
@@ -121,7 +128,17 @@ export const createTeamOperations = ({
    * Leave entries pending until the terminal input writer has pasted and
    * submitted them. A stopped Orchestrator is normal here: its next `team
    * list` call will retry the same durable entry.
+   *
+   * Failed entries retry with exponential backoff so a persistently
+   * undeliverable report (e.g. an Orchestrator TUI that keeps rejecting
+   * pastes) does not get retried on every drain trigger. The first retry
+   * stays immediate so a transient paste race recovers at the next drain
+   * event; backoff applies from the second failure on. Entries never
+   * expire — backoff spaces retries out, it does not give up.
    */
+  const reportDeliveryBackoffMs = (attemptCount: number) =>
+    attemptCount <= 1 ? 0 : Math.min(30_000 * 2 ** (attemptCount - 1), 30 * 60_000)
+
   const drainReportOutbox = (
     workspaceId: string,
     targetAgentId = `${workspaceId}:orchestrator`
@@ -130,10 +147,17 @@ export const createTeamOperations = ({
       return { attempted: 0, firstSyncError: null }
     }
 
+    const now = Date.now()
     let attempted = 0
     let firstSyncError: string | null = null
     for (const entry of reportOutbox.listPending(workspaceId, targetAgentId)) {
       if (drainingReportOutboxIds.has(entry.id)) continue
+      if (
+        entry.lastDeliveryAttemptAt !== null &&
+        now - entry.lastDeliveryAttemptAt < reportDeliveryBackoffMs(entry.deliveryAttemptCount)
+      ) {
+        continue
+      }
       drainingReportOutboxIds.add(entry.id)
       attempted += 1
       try {
@@ -378,6 +402,46 @@ export const createTeamOperations = ({
       workspaceStore.getAgent(workspaceId, orchestratorId)
       agentRuntime.writeUserInputPrompt(workspaceId, text)
       insertMessage(createUserInputMessage(workspaceId, orchestratorId, text))
+    },
+    sendDispatchFeedback(workspaceId: string, dispatchId: string, text: string) {
+      if (text.trim().length === 0) {
+        throw new BadRequestError('Feedback text cannot be empty')
+      }
+      if (!getDispatchById) {
+        throw new Error('Dispatch lookup is not configured for this caller')
+      }
+      const dispatch = getDispatchById(workspaceId, dispatchId)
+      if (!dispatch) {
+        throw new HttpError(404, 'Dispatch not found')
+      }
+      if (dispatch.status === 'cancelled') {
+        throw new ConflictError('This dispatch was cancelled; dispatch a new task instead')
+      }
+      // Feedback only makes sense when the worker can actually read it.
+      if (!agentRuntime.getActiveRunByAgentId(workspaceId, dispatch.toAgentId)) {
+        throw new PtyInactiveError('The worker is not running. Start it first, then send feedback.')
+      }
+
+      // A reported dispatch reopens so the worker can address the feedback
+      // and report again under the same dispatch id. DB first, then the
+      // in-memory pending counter.
+      if (dispatch.status === 'reported' && reopenReportedDispatch) {
+        if (reopenReportedDispatch(workspaceId, dispatchId)) {
+          workspaceStore.markTaskDispatched(workspaceId, dispatch.toAgentId)
+        }
+      }
+
+      insertMessage(createFeedbackMessage(workspaceId, dispatch.toAgentId, text))
+      try {
+        agentRuntime.writeWorkerFeedbackPrompt(workspaceId, dispatch.toAgentId, dispatchId, text)
+      } catch (error) {
+        markDispatchDeliveryFailed?.(
+          dispatch.id,
+          error instanceof Error ? error.message : String(error)
+        )
+        throw error
+      }
+      return getDispatchById(workspaceId, dispatchId) ?? dispatch
     },
     statusTask(workspaceId: string, workerId: string, input: StatusTaskInput = {}) {
       const text = input.text ?? ''
