@@ -123,6 +123,24 @@ export const createTeamOperations = ({
 }: TeamOperationsInput) => {
   const runMutation = runDataMutation ?? ((mutation: () => void) => mutation())
   const drainingReportOutboxIds = new Set<number>()
+  const pendingDispatches = new Set<Promise<DispatchRecord>>()
+  let closing = false
+
+  const trackDispatch = (pending: Promise<DispatchRecord>) => {
+    pendingDispatches.add(pending)
+    void pending.then(
+      () => pendingDispatches.delete(pending),
+      () => pendingDispatches.delete(pending)
+    )
+    return pending
+  }
+
+  const close = async () => {
+    closing = true
+    while (pendingDispatches.size > 0) {
+      await Promise.allSettled(Array.from(pendingDispatches))
+    }
+  }
 
   /**
    * Leave entries pending until the terminal input writer has pasted and
@@ -222,6 +240,9 @@ export const createTeamOperations = ({
   }
 
   const replayQueuedDispatches = (workspaceId: string, workerId: string) => {
+    // Runtime shutdown may race the post-start microtask that normally replays
+    // queued work. Do not touch the stores after the shutdown boundary.
+    if (closing) return 0
     if (workspaceStore.getAgent(workspaceId, workerId).role === 'orchestrator') return 0
     if (workspaceStore.isAgentManuallyStopped?.(workspaceId, workerId)) return 0
     if (!agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) return 0
@@ -266,7 +287,7 @@ export const createTeamOperations = ({
     return replayed
   }
 
-  const dispatchTask = async (
+  const dispatchTaskImpl = async (
     workspaceId: string,
     workerId: string,
     text: string,
@@ -362,7 +383,15 @@ export const createTeamOperations = ({
     }
   }
 
+  const dispatchTask = (...args: Parameters<typeof dispatchTaskImpl>) => {
+    if (closing) {
+      return Promise.reject(new ConflictError('Hive runtime is closing'))
+    }
+    return trackDispatch(dispatchTaskImpl(...args))
+  }
+
   return {
+    close,
     cancelTask(workspaceId: string, dispatchId: string, input: CancelTaskInput) {
       workspaceStore.getAgent(workspaceId, input.fromAgentId)
       const openDispatch = findOpenDispatchById(workspaceId, dispatchId)

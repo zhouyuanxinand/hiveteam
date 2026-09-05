@@ -122,6 +122,28 @@ describe('runtime rehydration', () => {
     )
   })
 
+  test('drains a pending dispatch before closing its runtime database', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-runtime-close-dispatch-'))
+    const workspacePath = join(dataDir, 'workspace')
+    tempDirs.push(dataDir)
+    mkdirSync(workspacePath, { recursive: true })
+
+    const store = createRuntimeStore({ dataDir })
+    stores.push(store)
+    const workspace = store.createWorkspace(workspacePath, 'Alpha')
+    const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+
+    // Do not await before closing: this mirrors a shutdown while the Git
+    // baseline capture is still in flight.
+    const pendingDispatch = store.dispatchTask(workspace.id, worker.id, 'Implement login')
+
+    await store.close()
+    await expect(pendingDispatch).resolves.toMatchObject({
+      toAgentId: worker.id,
+      workspaceId: workspace.id,
+    })
+  })
+
   test('captures Claude session id into sqlite and reuses it on next start', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-runtime-session-'))
     const workspacePath = join(dataDir, 'workspace')

@@ -267,6 +267,11 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const close = () => {
     if (closePromise) return closePromise
     closePromise = (async () => {
+      // Stop new dispatches immediately and drain any task that already began.
+      // A dispatch captures its Git baseline asynchronously; closing SQLite
+      // before that promise settles used to make the failure-recovery write run
+      // against a closed database.
+      const closeTeamOperations = services.teamOps.close()
       // Workspace binding performs Git detection in the background so the API
       // remains fast. Await those processes before closing the database and
       // deleting test/workspace directories; otherwise Windows can keep the
@@ -274,6 +279,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       while (pendingGitScans.size > 0) {
         await Promise.all(Array.from(pendingGitScans))
       }
+      await closeTeamOperations
       await memoryDreamScheduler?.close()
       await lifecycle.close()
     })()
