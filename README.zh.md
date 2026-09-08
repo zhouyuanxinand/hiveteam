@@ -80,13 +80,17 @@ Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在�
 ```bash
 git clone https://github.com/zhouyuanxinand/hiveteam.git
 cd hiveteam
-pnpm install
-pnpm dev
+npm install
+npm start
 ```
+
+`npm start` 会同时启动本机 HiveTeam Runtime 和 Vite Web 页面。请打开 Vite
+打印出的地址，通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
+习惯 pnpm 的开发流程。
 
 安装时如果看到 `npm warn allow-scripts` 或 `prebuild-install@7.1.3 deprecated`，先看最后是否显示 `added ... packages`。这些 warning 多数来自 npm 对安装脚本的安全审查，以及 `node-pty` / `better-sqlite3` / `esbuild` 这类原生依赖的二进制安装链路；不代表 Hive 启动失败。下面的故障排查里有逐项解释。
 
-打开终端打印出来的本机地址，通常是 `http://127.0.0.1:3000/`。如果你想指定端口，可以用 `hive --port 4010`。
+通过安装包运行时，`hive` 仍会在终端打印生产页面地址。如果你想指定端口，可以用 `hive --port 4010`。
 
 更新源码驱动的构建：
 

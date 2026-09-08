@@ -106,9 +106,13 @@ Clone, install, and start this fork:
 ```bash
 git clone https://github.com/zhouyuanxinand/hiveteam.git
 cd hiveteam
-pnpm install
-pnpm dev
+npm install
+npm start
 ```
+
+`npm start` launches both the local HiveTeam runtime and the Vite web app. Open
+the web URL printed by Vite, normally `http://127.0.0.1:5180/`. The existing
+`pnpm dev` command remains available for pnpm-based development.
 
 If npm prints `npm warn allow-scripts` or `prebuild-install@7.1.3 deprecated`
 during install, first check whether the command ends with `added ... packages`.
@@ -116,8 +120,8 @@ Those warnings usually come from npm's install-script review plus native
 binary setup for `node-pty`, `better-sqlite3`, and `esbuild`; they do not mean
 Hive failed to install. The troubleshooting section below breaks them down.
 
-Open the printed local URL, usually `http://127.0.0.1:3000/`. Use
-`hive --port 4010` when you need a specific local port.
+For a packaged installation, `hive` still starts the production UI on its
+printed local URL. Use `hive --port 4010` when you need a specific local port.
 
 To update the source-controlled build:
 

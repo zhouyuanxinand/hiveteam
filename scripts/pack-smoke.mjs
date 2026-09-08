@@ -122,6 +122,7 @@ try {
   const internalTeam = join(packageRoot, 'dist', 'bin', 'team')
   const internalTeamCmd = join(packageRoot, 'dist', 'bin', 'team.cmd')
   const internalTeamLauncher = process.platform === 'win32' ? internalTeamCmd : internalTeam
+  const packagedRuntimeEntry = join(packageRoot, 'dist', 'src', 'cli', 'hive.js')
 
   if (!existsSync(hiveBin)) throw new Error('Packaged hive bin was not linked')
   if (existsSync(teamBin) || existsSync(teamCmdBin)) {
@@ -131,13 +132,20 @@ try {
   if (!existsSync(internalTeamCmd)) throw new Error('Internal dist/bin/team.cmd is missing')
 
   logPhase('starting packaged runtime')
-  const child = spawn(hiveBin, ['--port', '0'], {
+  // Starting a .cmd shim through shell:true on Windows can detach its Node
+  // grandchild when the shell is stopped, leaving runtime.sqlite locked. The
+  // linked shim is verified above; launch the packaged JS entry directly so
+  // the smoke test owns the actual runtime process it must shut down.
+  const runtimeCommand =
+    process.platform === 'win32'
+      ? { args: [packagedRuntimeEntry, '--port', '0'], file: process.execPath }
+      : { args: ['--port', '0'], file: hiveBin }
+  const child = spawn(runtimeCommand.file, runtimeCommand.args, {
     env: withActiveNodeEnv({
       HIVE_DATA_DIR: join(tempDir, 'data'),
       HIVE_ORCHESTRATOR_COMMAND: internalTeamLauncher,
       HIVE_ORCHESTRATOR_ARGS_JSON: JSON.stringify(['list']),
     }),
-    shell: process.platform === 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let stdout = ''

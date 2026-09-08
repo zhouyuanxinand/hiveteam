@@ -115,6 +115,7 @@ describe('npm package tarball', () => {
     expect(paths).toContain('dist/bin/team')
     expect(paths).toContain('dist/bin/team.cmd')
     expect(paths).toContain('web/dist/index.html')
+    expect(paths).toContain('scripts/dev-start.mjs')
     expect(paths).toContain('scripts/fix-runtime-artifacts.mjs')
     expect(paths).toContain('CHANGELOG.md')
     expect(paths).toContain('LICENSE')
