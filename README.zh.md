@@ -88,7 +88,13 @@ npm start
 打印出的地址，通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
 习惯 pnpm 的开发流程。
 
-安装时如果看到 `npm warn allow-scripts` 或 `prebuild-install@7.1.3 deprecated`，先看最后是否显示 `added ... packages`。这些 warning 多数来自 npm 对安装脚本的安全审查，以及 `node-pty` / `better-sqlite3` / `esbuild` 这类原生依赖的二进制安装链路；不代表 Hive 启动失败。下面的故障排查里有逐项解释。
+npm 11 的 `npm warn allow-scripts` 只是审查提示；npm 12 则会默认阻止未批准的依赖安装脚本，即使命令最后显示 `added ... packages` 也不代表原生模块可用。本仓库已为源码安装仅批准经过审查的 `node-pty`、`better-sqlite3` 和 `esbuild`。如果是全局安装包，请显式批准同一条已知运行时链路：
+
+```bash
+npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hiveteam
+```
+
+具体规则见 [npm 安装脚本批准文档](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/) 和下方故障排查。
 
 通过安装包运行时，`hive` 仍会在终端打印生产页面地址。如果你想指定端口，可以用 `hive --port 4010`。
 
@@ -285,16 +291,15 @@ Hive 依赖 `node-pty` 和 `better-sqlite3`，它们用原生二进制。确认 
 
 安装时如果看到 `prebuild-install@7.1.3` 的 deprecated warning，可以忽略。它来自 `better-sqlite3` 的原生二进制下载链路，只是上游安装器维护状态提示，不代表 Hive 安装失败，也不会影响运行。
 
-安装成功但看到 npm warning 时，可以按来源判断：
+判断时要看 warning 文本，不能只看 npm 的退出码：
 
 | warning | 来源 | 处理 |
 | --- | --- | --- |
-| `allow-scripts hiveteam` | Hive 的 postinstall 会修正打包后的 native/PTY helper 权限。 | 安装成功后可忽略。 |
-| `allow-scripts better-sqlite3` | SQLite 原生绑定需要下载预编译二进制，失败时会本机构建。 | 安装成功后可忽略；失败再检查构建工具链。 |
-| `allow-scripts node-pty` | 终端 PTY 原生绑定需要准备平台二进制。 | 安装成功后可忽略；失败再检查构建工具链。 |
-| `allow-scripts esbuild` | esbuild 会校验/选择当前平台的二进制包。 | 安装成功后可忽略。 |
+| `allow-scripts ... not yet covered` | npm 11 安装脚本审查 | 未启用 strict 模式时只是提示；可用 `npm install-scripts ls` 检查。 |
+| `install-scripts ... blocked` | npm 12 默认拒绝策略 | 不能忽略。只在消费者项目的 `allowScripts` 中批准列出的包，或使用上面的全局安装命令。 |
+| `prebuild-install@7.1.3 deprecated` | `better-sqlite3` 安装链 | 上游维护提示；原生模块构建成功时可以忽略。 |
 
-这是 npm 11 的安装脚本审查提示。当前 npm 版本仍是提示性质，未来可能要求用户显式批准这些脚本。你想审查时可以运行 `npm approve-scripts --allow-scripts-pending` 查看待审列表。
+安装包运行需要 `hiveteam`、`better-sqlite3` 和 `node-pty` 的安装脚本；源码安装还会批准 `esbuild`。不要为此使用 `--dangerously-allow-all-scripts`。
 
 **Linux 上目录选择器不弹**
 

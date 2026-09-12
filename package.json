@@ -4,6 +4,11 @@
   "description": "HiveTeam runs Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
+  "allowScripts": {
+    "better-sqlite3": true,
+    "esbuild": true,
+    "node-pty": true
+  },
   "license": "BUSL-1.1",
   "keywords": [
     "ai-agents",

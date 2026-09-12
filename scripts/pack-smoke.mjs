@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 
@@ -109,19 +109,29 @@ try {
   })
   const packResult = parseSinglePackResult(packJson)
   packedFile = resolve(root, packResult.filename)
+  const packageSpecifier = `file:${packedFile.replaceAll('\\', '/')}`
+  writeFileSync(
+    join(tempDir, 'package.json'),
+    `${JSON.stringify(
+      {
+        allowScripts: {
+          [packageSpecifier]: true,
+          'better-sqlite3': true,
+          'node-pty': true,
+        },
+        dependencies: { hiveteam: packageSpecifier },
+        name: 'hive-pack-smoke-consumer',
+        private: true,
+        version: '0.0.0',
+      },
+      null,
+      2
+    )}\n`
+  )
 
   logPhase('installing packaged runtime')
   runNpm(
-    [
-      'install',
-      '--silent',
-      '--no-audit',
-      '--no-fund',
-      '--prefer-offline',
-      '--prefix',
-      tempDir,
-      packedFile,
-    ],
+    ['install', '--silent', '--no-audit', '--no-fund', '--prefer-offline', '--prefix', tempDir],
     {
       stdio: 'inherit',
       timeout: npmInstallTimeoutMs,

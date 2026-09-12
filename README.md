@@ -114,11 +114,18 @@ npm start
 the web URL printed by Vite, normally `http://127.0.0.1:5180/`. The existing
 `pnpm dev` command remains available for pnpm-based development.
 
-If npm prints `npm warn allow-scripts` or `prebuild-install@7.1.3 deprecated`
-during install, first check whether the command ends with `added ... packages`.
-Those warnings usually come from npm's install-script review plus native
-binary setup for `node-pty`, `better-sqlite3`, and `esbuild`; they do not mean
-Hive failed to install. The troubleshooting section below breaks them down.
+On npm 11, `npm warn allow-scripts` is advisory. npm 12 instead blocks
+unapproved dependency scripts by default, even when the command ends with
+`added ... packages`. This repository approves only the reviewed
+`node-pty`, `better-sqlite3`, and `esbuild` scripts for a source checkout. For
+a global package install, approve the same known runtime chain explicitly:
+
+```bash
+npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hiveteam
+```
+
+See [npm's install-script approval documentation](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/)
+and the troubleshooting section below for details.
 
 For a packaged installation, `hive` still starts the production UI on its
 printed local URL. Use `hive --port 4010` when you need a specific local port.
@@ -405,18 +412,17 @@ ignore. The warning comes from `better-sqlite3`'s native binary download chain;
 it is an upstream installer maintenance notice, not a Hive install failure, and
 does not affect runtime behavior.
 
-When installation succeeds but npm prints warnings, use the source to decide:
+Use the warning text, not only npm's exit code, to decide:
 
 | warning | Source | What to do |
 | --- | --- | --- |
-| `allow-scripts hiveteam` | Hive's postinstall fixes packaged native/PTY helper permissions. | Ignore after a successful install. |
-| `allow-scripts better-sqlite3` | SQLite native bindings download a prebuilt binary or build locally. | Ignore after success; check build tools if install fails. |
-| `allow-scripts node-pty` | Terminal PTY native bindings prepare the platform binary. | Ignore after success; check build tools if install fails. |
-| `allow-scripts esbuild` | esbuild verifies/selects the current platform binary. | Ignore after success. |
+| `allow-scripts ... not yet covered` | npm 11 install-script review | Advisory unless strict mode is enabled; inspect with `npm install-scripts ls`. |
+| `install-scripts ... blocked` | npm 12 default-deny policy | Do not ignore it. Approve only the listed packages in the consumer project's `allowScripts`, or use the explicit global-install command above. |
+| `prebuild-install@7.1.3 deprecated` | `better-sqlite3` installer chain | Upstream maintenance notice; safe to ignore when the native module built successfully. |
 
-This is npm 11's install-script review prompt. Today it is usually advisory;
-future npm versions may require explicit approval. To inspect pending scripts,
-run `npm approve-scripts --allow-scripts-pending`.
+Hive needs `hiveteam`, `better-sqlite3`, and `node-pty` install scripts for a
+packaged runtime; a source checkout also approves `esbuild`. Never use
+`--dangerously-allow-all-scripts` for this purpose.
 
 **Folder picker does not open on Linux**
 
