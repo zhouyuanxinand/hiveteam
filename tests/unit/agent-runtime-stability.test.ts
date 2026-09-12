@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
 import { createAgentRuntime } from '../../src/server/agent-runtime.js'
+import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
   clear: () => {},
@@ -76,6 +77,7 @@ describe('agent runtime stability (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 

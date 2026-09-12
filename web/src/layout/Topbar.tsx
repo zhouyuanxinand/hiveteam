@@ -1,4 +1,4 @@
-import { Brain, ClipboardList, GitBranch, ListChecks, Workflow } from 'lucide-react'
+import { Brain, ClipboardList, GitBranch, ListChecks, Package, Workflow } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useI18n } from '../i18n.js'
@@ -14,12 +14,14 @@ type TopbarProps = {
   onToggleTaskGraph?: (() => void) | undefined
   onToggleActivity?: (() => void) | undefined
   onToggleMemory?: (() => void) | undefined
+  onToggleSkills?: (() => void) | undefined
   onToggleGit?: (() => void) | undefined
   onToggleWorkflows?: (() => void) | undefined
   openTaskCount?: number
   taskGraphOpen?: boolean
   activityOpen?: boolean
   memoryOpen?: boolean
+  skillsOpen?: boolean
   gitOpen?: boolean
   workflowsOpen?: boolean
   version?: string
@@ -31,12 +33,14 @@ export const Topbar = ({
   onToggleTaskGraph,
   onToggleActivity,
   onToggleMemory,
+  onToggleSkills,
   onToggleGit,
   onToggleWorkflows,
   openTaskCount = 0,
   taskGraphOpen = false,
   activityOpen = false,
   memoryOpen = false,
+  skillsOpen = false,
   gitOpen = false,
   workflowsOpen = false,
   version = APP_VERSION,
@@ -134,6 +138,22 @@ export const Topbar = ({
                 >
                   <Workflow size={13} aria-hidden />
                   <span>{t('workflows.tab')}</span>
+                </button>
+              </Tooltip>
+            ) : null}
+            {onToggleSkills ? (
+              <Tooltip label={t('skills.title')}>
+                <button
+                  type="button"
+                  onClick={onToggleSkills}
+                  aria-pressed={skillsOpen}
+                  aria-label={t('skills.title')}
+                  className="topbar-knowledge-button"
+                  data-active={skillsOpen ? 'true' : undefined}
+                  data-testid="topbar-skills"
+                >
+                  <Package size={13} aria-hidden />
+                  <span>{t('skills.topbar')}</span>
                 </button>
               </Tooltip>
             ) : null}

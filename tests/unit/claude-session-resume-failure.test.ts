@@ -8,6 +8,7 @@ import { createAgentRuntime } from '../../src/server/agent-runtime.js'
 import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
 import { encodeClaudeProjectPath } from '../../src/server/session-capture-claude.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
+import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
   clear: () => {},
@@ -124,6 +125,7 @@ describe('claude session resume failure', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 

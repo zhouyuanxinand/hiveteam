@@ -179,6 +179,43 @@ fan out across implementation, review, testing, or other stages. The topbar
 controls. The same panel also lets you choose which CLI workflow-created
 agents use by default and which CLIs they are allowed to use.
 
+## Share Skills with Skill Packs
+
+Open **Skills** in the active Workspace topbar to bind one locked Skill source
+for the whole team:
+
+1. In **Packs**, choose GitHub and enter
+   `tt-a1i/matt-skills-with-to-goal` with ref `main`.
+2. Click **Resolve release**. Hive fetches without Git submodules or hooks,
+   inventories scripts without running them, and previews the exact commit and
+   full-tree digest.
+3. Assign only the relevant Skills to each role profile. Native exposure is an
+   optional, workspace-wide Codex convenience and is limited to 12 Skills.
+4. Review the exact filesystem Change Plan, then click **Apply**. Nothing is
+   bound or updated before this explicit step.
+5. Use **Members** to distinguish universal prompt delivery from native
+   discovery, and **Changes** to inspect Receipts or Undo an owned change.
+
+Inside the Orchestrator terminal:
+
+```bash
+team skill list
+team skill load matt/to-goal
+team send "Alice" "Implement the approved change test-first" --skill matt/tdd
+```
+
+The dispatch pins and delivers exactly one immutable Skill snapshot. A Worker
+can reload that dispatch's Skill with `team skill load --dispatch <id>` and
+read an authorized text reference with
+`team skill read --dispatch <id> <relative-path>`.
+
+For Codex, a natively exposed Skill can also be invoked as `$to-goal` after
+restarting the affected member. Other CLIs and custom commands remain fully
+functional through Hive prompt delivery even when their native Skill directory
+is unknown. Matt Skills that assume Codex forks or built-in subagents
+(`spec-executor`, `roundtable`, and `execute-spec-in-fork`) are marked as
+requiring a Hive adapter and are not selected by default.
+
 ## How It Works
 
 ```text

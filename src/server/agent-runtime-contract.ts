@@ -1,3 +1,4 @@
+import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { WorkspaceLanguage, WorkspaceSummary } from '../shared/types.js'
 
 import type { PersistedAgentRun } from './agent-run-store.js'
@@ -71,7 +72,8 @@ export interface AgentRuntime {
     fromAgentName: string,
     workerDescription: string,
     text: string,
-    language?: WorkspaceLanguage
+    language?: WorkspaceLanguage,
+    skillActivation?: ResolvedSkillActivation
   ) => void
   writeCancelPrompt: (
     workspaceId: string,

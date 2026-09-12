@@ -5,13 +5,13 @@
  * instruction inside a native CLI conversation.
  */
 const HIVE_CONTROL_TAG_PATTERN =
-  /<\/?hive-(?:system-reminder|memory|untrusted-data|dispatch-task|user-request|workflow-data)\b[^>]*>/giu
+  /<\/?(?:hive-(?:system-reminder|memory|untrusted-data|dispatch-task|user-request|workflow-data|skill-catalog|skill-instructions)|hive_skill_instructions)\b[^>]*>/giu
+
+export const sanitizePromptControlMarkers = (value: string) =>
+  value.replaceAll('\u0000', '').replace(HIVE_CONTROL_TAG_PATTERN, '[Hive control marker removed]')
 
 export const sanitizePromptData = (value: string, maxLength = 8_000) =>
-  value
-    .replaceAll('\u0000', '')
-    .replace(HIVE_CONTROL_TAG_PATTERN, '[Hive control marker removed]')
-    .slice(0, maxLength)
+  sanitizePromptControlMarkers(value).slice(0, maxLength)
 
 export const wrapUntrustedPromptData = (
   kind:
@@ -20,6 +20,7 @@ export const wrapUntrustedPromptData = (
     | 'memory'
     | 'report'
     | 'review-feedback'
+    | 'skill-catalog'
     | 'status'
     | 'workflow',
   value: string,

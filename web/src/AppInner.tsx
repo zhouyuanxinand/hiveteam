@@ -41,11 +41,13 @@ export const AppInner = () => {
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab | null>(null)
   const [gitOpen, setGitOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
   useEffect(() => {
     if (demoMode) {
       setKnowledgeTab(null)
       setGitOpen(false)
       setActivityOpen(false)
+      setSkillsOpen(false)
     }
   }, [demoMode])
   const toast = useToast()
@@ -110,6 +112,7 @@ export const AppInner = () => {
       setKnowledgeTab(null)
       setGitOpen(false)
       setActivityOpen(false)
+      setSkillsOpen(false)
     },
     selectWorkspace,
     setWorkersByWorkspaceId,
@@ -148,27 +151,38 @@ export const AppInner = () => {
                 setGitOpen((value) => !value)
                 setKnowledgeTab(null)
                 setActivityOpen(false)
+                setSkillsOpen(false)
               },
               onToggleActivity: () => {
                 setActivityOpen((value) => !value)
                 setGitOpen(false)
                 setKnowledgeTab(null)
+                setSkillsOpen(false)
               },
               onToggleMemory: () => {
                 setGitOpen(false)
                 setActivityOpen(false)
+                setSkillsOpen(false)
                 setKnowledgeTab((value) => (value === 'memory' ? null : 'memory'))
               },
               onToggleWorkflows: () => {
                 setGitOpen(false)
                 setActivityOpen(false)
+                setSkillsOpen(false)
                 setKnowledgeTab((value) => (value === 'workflows' ? null : 'workflows'))
+              },
+              onToggleSkills: () => {
+                setGitOpen(false)
+                setActivityOpen(false)
+                setKnowledgeTab(null)
+                setSkillsOpen((value) => !value)
               },
             }
           : {})}
         gitOpen={gitOpen}
         activityOpen={activityOpen}
         memoryOpen={knowledgeTab === 'memory'}
+        skillsOpen={skillsOpen}
         workflowsOpen={knowledgeTab === 'workflows'}
         openTaskCount={openTaskCount}
         topbarActions={<OpenWorkspaceButton workspace={eff.effectiveActiveWorkspace} />}
@@ -229,6 +243,7 @@ export const AppInner = () => {
           onCloseKnowledge={() => setKnowledgeTab(null)}
           onCloseGit={() => setGitOpen(false)}
           onCloseActivity={() => setActivityOpen(false)}
+          onCloseSkills={() => setSkillsOpen(false)}
           onCloseWizard={closeWizard}
           onCreateWorkspace={wsCreate.createNewWorkspace}
           onTryDemo={enableDemo}
@@ -236,6 +251,7 @@ export const AppInner = () => {
           knowledgeTab={knowledgeTab}
           gitOpen={gitOpen}
           activityOpen={activityOpen}
+          skillsOpen={skillsOpen}
           tasksFile={tasksFile}
           workspacePath={eff.effectiveActiveWorkspace?.path ?? null}
           workspaceId={demoMode ? null : (activeWorkspaceId ?? null)}

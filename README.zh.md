@@ -122,6 +122,34 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 
 想试更强的自动化，可以在右上角设置里开启实验性的 **Workflow** 开关。开启后，Orchestrator 可以编写并运行多 agent workflow，把一个目标拆成 fan-out / review / test 等阶段；顶部的 **Workflows** 面板会显示运行记录、阶段结果、定时任务和停止按钮。Workflow 创建的新 agent 默认使用哪种 CLI、允许使用哪些 CLI，也可以在 Workflows 面板里配置。
 
+## 用 Skill Pack 给团队共享 Skills
+
+在当前 Workspace 顶栏打开 **Skills**，即可让全队使用同一份锁定来源：
+
+1. 在 **Packs** 选择 GitHub，输入
+   `tt-a1i/matt-skills-with-to-goal`，ref 填 `main`。
+2. 点击 **解析 Release**。Hive 不加载 submodule、不运行 Git hook 或仓库脚本，只清点脚本并预览精确 commit 与完整树摘要。
+3. 按角色只勾选需要的 Skills。原生暴露是 Workspace 级的 Codex 便利入口，最多 12 个；它不是按成员隔离的权限边界。
+4. 查看包含精确路径的 Change Plan，再点 **Apply**。在明确 Apply 之前，绑定和锁文件都不会变化。
+5. 在 **成员** 页分别查看通用提示词交付与原生发现状态；在 **变更** 页查看 Receipt，或 Undo 由 Hive 创建且指纹仍匹配的改动。
+
+在 Orchestrator 终端中：
+
+```bash
+team skill list
+team skill load matt/to-goal
+team send "Alice" "用测试先行实现已批准的改动" --skill matt/tdd
+```
+
+每次派单只会锁定并交付一个不可变 Skill 快照，不会把完整仓库塞给 Worker。Worker
+可用 `team skill load --dispatch <id>` 重新加载本次派单的 Skill，并用
+`team skill read --dispatch <id> <relative-path>` 读取获准的文本引用。
+
+Codex 成员重启后，还可以用 `$to-goal` 调用已选择的原生 Skill。其他 CLI
+和自定义命令即使没有已验证的原生目录，也仍可通过 Hive 提示词交付使用
+Skills。依赖 Codex fork 或内建 subagent 的 Matt Skills（`spec-executor`、
+`roundtable`、`execute-spec-in-fork`）会标记为“需要 Hive 适配”，默认不勾选。
+
 ## 工作方式
 
 ```text

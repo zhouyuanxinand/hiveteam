@@ -20,6 +20,7 @@ import type { RuntimeStore } from './runtime-store.js'
 import { authenticateCliAgent, requireCommandForRole } from './team-authz.js'
 import { enrichTeamList } from './team-list-enrichment.js'
 import { serializeTeamListItem } from './team-list-serializer.js'
+import { TeamSkillRuntimeError } from './team-skill-runtime.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 import { validateWorkspacePath } from './workspace-path-validation.js'
 import { getOrchestratorId } from './workspace-store-support.js'
@@ -383,9 +384,16 @@ export const workspaceRoutes: RouteDefinition[] = [
       ) {
         seedOrchestratorLaunchConfig(store, store.settings, workspaceId)
       }
-      const run = await store.startAgent(workspaceId, agentId, {
-        hivePort: getRuntimePort(request),
-      })
+      let run: Awaited<ReturnType<typeof store.startAgent>>
+      try {
+        run = await store.startAgent(workspaceId, agentId, {
+          hivePort: getRuntimePort(request),
+        })
+      } catch (error) {
+        if (!(error instanceof TeamSkillRuntimeError)) throw error
+        sendJson(response, 409, { error: error.message, error_code: error.code })
+        return
+      }
       const threadId =
         store.listTerminalRuns(workspaceId).find((terminalRun) => terminalRun.run_id === run.runId)
           ?.thread_id ?? null

@@ -3,6 +3,7 @@ import '../helpers/mock-node-pty.ts'
 import { describe, expect, test } from 'vitest'
 
 import { createAgentRuntime } from '../../src/server/agent-runtime.js'
+import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
   clear: () => {},
@@ -71,6 +72,7 @@ describe('agent run status model (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 

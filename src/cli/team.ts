@@ -29,7 +29,10 @@ const TEAM_USAGE = [
   'Usage:',
   '  team list',
   `  team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`,
-  '  team send "<worker-name>" "<task>"',
+  '  team send "<worker-name>" "<task>" [--skill <pack/skill>]',
+  '  team skill list',
+  '  team skill load (<pack/skill> | --dispatch <dispatch-id>)',
+  '  team skill read --dispatch <dispatch-id> <relative-text-path>',
   '  team cancel --dispatch <dispatch-id> "<reason>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed "<body>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed --stdin',
@@ -134,6 +137,12 @@ interface ParsedCancelArgs {
   reason: string
 }
 
+export interface ParsedSendArgs {
+  skillName: string | undefined
+  task: string
+  workerName: string
+}
+
 const REPORT_USAGE =
   'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--artifact <path>]'
 const STATUS_USAGE = 'Usage: team status (<current status> | --stdin) [--artifact <path>]'
@@ -142,6 +151,9 @@ const GUIDE_USAGE = `Usage: team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`
 const GOAL_REPORT_USAGE =
   'Usage: team goal report --goal <goal-id> --status progress|done|blocked|failed (<body> | --stdin) [--artifact <path>]'
 const GOAL_REPORT_STATUSES = new Set(['progress', 'done', 'blocked', 'failed'])
+const SEND_USAGE = 'Usage: team send "<worker-name>" "<task>" [--skill <pack/skill>]'
+const SKILL_USAGE =
+  'Usage: team skill (list | load (<pack/skill> | --dispatch <dispatch-id>) | read --dispatch <dispatch-id> <relative-text-path>)'
 
 const usageFor = (command: string) => {
   if (command === 'status') return STATUS_USAGE
@@ -303,6 +315,59 @@ export const parseCancelArgs = (args: string[]): ParsedCancelArgs => {
   return { dispatchId, reason }
 }
 
+export const parseSendArgs = (args: string[]): ParsedSendArgs => {
+  const positionals: string[] = []
+  let skillName: string | undefined
+  let positionalOnly = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === undefined) continue
+    if (!positionalOnly && arg === '--') {
+      positionalOnly = true
+      continue
+    }
+    if (!positionalOnly && arg === '--skill') {
+      const value = args[index + 1]
+      if (!value || value.startsWith('--')) {
+        throw new Error(`--skill requires a value\n\n${SEND_USAGE}`)
+      }
+      if (skillName) throw new Error(`--skill may be supplied only once\n\n${SEND_USAGE}`)
+      skillName = value
+      index += 1
+      continue
+    }
+    if (!positionalOnly && arg.startsWith('--')) {
+      throw new Error(`Unknown argument: ${arg}\n\n${SEND_USAGE}`)
+    }
+    positionals.push(arg)
+  }
+
+  const [workerName, ...taskParts] = positionals
+  const task = taskParts.join(' ').trim()
+  if (!workerName || !task || uuidPattern.test(workerName)) throw new Error(SEND_USAGE)
+  return { skillName, task, workerName }
+}
+
+export const parseSkillDispatchArgs = (args: string[]) => {
+  const positionals: string[] = []
+  let dispatchId: string | undefined
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === '--dispatch') {
+      const value = args[index + 1]
+      if (!value || value.startsWith('--')) throw new Error(SKILL_USAGE)
+      if (dispatchId) throw new Error(SKILL_USAGE)
+      dispatchId = value
+      index += 1
+      continue
+    }
+    if (arg?.startsWith('--')) throw new Error(SKILL_USAGE)
+    if (arg) positionals.push(arg)
+  }
+  return { dispatchId, positionals }
+}
+
 export const parseGoalReportArgs = (args: string[]): ParsedGoalReportArgs => {
   const positionals: string[] = []
   const artifacts: string[] = []
@@ -418,24 +483,78 @@ export const runTeamCommand = async (argv: string[]) => {
   }
 
   if (command === 'send') {
-    const [workerName, ...taskParts] = args
-    const task = taskParts.join(' ').trim()
-    if (!workerName || !task || uuidPattern.test(workerName)) {
-      throw new Error('Usage: team send "<worker-name>" "<task>"')
-    }
+    const send = parseSendArgs(args)
 
     const env = getHiveEnv()
     const baseUrl = getBaseUrl(env)
     const response = await postJson(baseUrl, '/api/team/send', {
       hive_port: env.HIVE_PORT,
       project_id: env.HIVE_PROJECT_ID,
+      ...(send.skillName ? { skill_name: send.skillName } : {}),
       from_agent_id: env.HIVE_AGENT_ID,
       token: env.HIVE_AGENT_TOKEN,
-      to: workerName,
-      text: task,
+      to: send.workerName,
+      text: send.task,
     })
     console.log(JSON.stringify(await response.json()))
     return
+  }
+
+  if (command === 'skill') {
+    const [subcommand, ...skillArgs] = args
+    const env = getHiveEnv()
+    const baseUrl = getBaseUrl(env)
+    if (subcommand === 'list' && skillArgs.length === 0) {
+      const response = await fetchRuntime(
+        baseUrl,
+        `/api/team/skills?project_id=${encodeURIComponent(env.HIVE_PROJECT_ID)}`,
+        {
+          headers: {
+            'x-hive-agent-id': env.HIVE_AGENT_ID,
+            'x-hive-agent-token': env.HIVE_AGENT_TOKEN,
+          },
+          method: 'GET',
+        }
+      )
+      if (!response.ok) await throwHttpError(response)
+      console.log(JSON.stringify(await response.json()))
+      return
+    }
+    if (subcommand === 'load') {
+      const parsed = parseSkillDispatchArgs(skillArgs)
+      if (
+        parsed.positionals.length > 1 ||
+        (!parsed.dispatchId && parsed.positionals.length !== 1)
+      ) {
+        throw new Error(SKILL_USAGE)
+      }
+      if (parsed.dispatchId && parsed.positionals.length > 0) throw new Error(SKILL_USAGE)
+      const response = await postJson(baseUrl, '/api/team/skills/load', {
+        ...(parsed.dispatchId ? { dispatch_id: parsed.dispatchId } : {}),
+        from_agent_id: env.HIVE_AGENT_ID,
+        project_id: env.HIVE_PROJECT_ID,
+        ...(parsed.positionals[0] ? { skill_name: parsed.positionals[0] } : {}),
+        token: env.HIVE_AGENT_TOKEN,
+      })
+      const payload = (await response.json()) as { instruction_snapshot: string }
+      console.log(payload.instruction_snapshot)
+      return
+    }
+    if (subcommand === 'read') {
+      const parsed = parseSkillDispatchArgs(skillArgs)
+      if (!parsed.dispatchId || parsed.positionals.length !== 1) throw new Error(SKILL_USAGE)
+      const response = await postJson(baseUrl, '/api/team/skills/read', {
+        dispatch_id: parsed.dispatchId,
+        from_agent_id: env.HIVE_AGENT_ID,
+        path: parsed.positionals[0],
+        project_id: env.HIVE_PROJECT_ID,
+        token: env.HIVE_AGENT_TOKEN,
+      })
+      const payload = (await response.json()) as { content: string }
+      console.log(payload.content)
+      return
+    }
+    throw new Error(SKILL_USAGE)
   }
 
   if (command === 'cancel') {

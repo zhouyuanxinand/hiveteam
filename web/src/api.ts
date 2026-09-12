@@ -59,7 +59,7 @@ const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
   ...(payload.command_preset_id ? { commandPresetId: payload.command_preset_id } : {}),
 })
 
-const readErrorMessage = async (response: Response, fallback: string): Promise<string> => {
+export const readErrorMessage = async (response: Response, fallback: string): Promise<string> => {
   try {
     const body = (await response.json()) as { error?: unknown }
     if (typeof body.error === 'string' && body.error.trim()) return body.error
@@ -101,7 +101,7 @@ const refreshUiSession = (): Promise<void> => {
   return uiSessionRefreshPromise
 }
 
-const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+export const apiFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const response = await fetch(input, init)
   if (!(await isStaleUiSession(response))) return response
 

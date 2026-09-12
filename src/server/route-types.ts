@@ -13,10 +13,27 @@ import type { VersionService } from './version-service.js'
 export interface SendTaskBody {
   hive_port?: string
   project_id: string
+  skill_name?: string
   from_agent_id: string
   token?: string
   to: string
   text: string
+}
+
+export interface LoadSkillBody {
+  dispatch_id?: string
+  from_agent_id: string
+  project_id: string
+  skill_name?: string
+  token?: string
+}
+
+export interface ReadSkillBody {
+  dispatch_id: string
+  from_agent_id: string
+  path: string
+  project_id: string
+  token?: string
 }
 
 export interface ReportTaskBody {

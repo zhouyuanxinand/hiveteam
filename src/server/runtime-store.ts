@@ -50,6 +50,10 @@ import type {
 } from './team-operations.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
+import {
+  createWorkspaceSkillManager,
+  type WorkspaceSkillManager,
+} from './workspace-skill-manager.js'
 import type { WorkerInput, WorkspaceRecord } from './workspace-store.js'
 
 export interface LocalRetentionDiagnostics {
@@ -138,6 +142,7 @@ interface RuntimeStore {
   settings: SettingsStore
   memory: TeamMemoryStore
   memoryDream: TeamMemoryDreamStore
+  skills: WorkspaceSkillManager
   workflows: WorkflowRuntime
   requestMemoryDream: (workspaceId: string) => Promise<TeamMemoryDreamRun>
   requestMemoryDreamWorkerReview: (
@@ -182,6 +187,7 @@ interface RuntimeStore {
 interface RuntimeStoreOptions {
   dataDir?: string
   agentManager?: AgentManager
+  skillHomePath?: string
 }
 
 interface StartAgentOptions {
@@ -193,6 +199,25 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const skillPackResolver = services.skillPackResolver
+  const skills = createWorkspaceSkillManager({
+    getCommandPresetId: (workspaceId, agentId) => {
+      const config = services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId)
+      if (!config || config.presetAugmentationDisabled) return null
+      if (config.commandPresetId) return config.commandPresetId
+      const implicit = services.settings.getCommandPreset(config.command)
+      return implicit?.command === config.command ? implicit.id : null
+    },
+    getActiveRunStartedAt: (workspaceId, agentId) =>
+      services.agentRuntime.getActiveRunByAgentId(workspaceId, agentId)?.startedAt ?? null,
+    getWorkspace: services.workspaceStore.getWorkspaceSnapshot,
+    ...(options.skillHomePath ? { homePath: options.skillHomePath } : {}),
+    ...(skillPackResolver ? { packResolver: skillPackResolver } : {}),
+    changeStore: services.skillPackChangeStore,
+    releaseStore: services.skillPackReleaseStore,
+    snapshotStore: services.skillSnapshotStore,
+    teamSkillRuntime: services.teamSkillRuntime,
+  })
   const externalGoals = createRuntimeStoreExternalGoalMethods(services)
   const buildDreamPrompt = (run: TeamMemoryDreamRun) =>
     [
@@ -322,6 +347,12 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         memoryDreamRuns: count('memory_dream_runs'),
         messages: count('messages'),
         workflows: count('workflow_runs'),
+        skillSnapshots: count('skill_snapshots'),
+        skillChangePlans: count('skill_change_plans'),
+        skillChangeAttempts: count('skill_change_attempts'),
+        skillPlacements: count('skill_placements'),
+        dispatchSkillActivations: count('dispatch_skill_activations'),
+        skillPackReleases: count('skill_pack_releases'),
         workspaces: count('workspaces'),
       },
       schemaVersion: Number(versionRow.version ?? 0),
@@ -470,8 +501,11 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         services.memoryDreamStore.deleteWorkspace(workspaceId)
         services.externalGoalStore.deleteWorkspaceGoals(workspaceId)
         services.reportOutbox.deleteWorkspaceEntries(workspaceId)
+        services.dispatchSkillActivationStore.deleteWorkspace(workspaceId)
         services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
         services.git.deleteWorkspace(workspaceId)
+        services.skillPackChangeStore.deleteWorkspace(workspaceId)
+        services.skillSnapshotStore.deleteWorkspace(workspaceId)
         services.workspaceStore.deleteWorkspace(workspaceId)
       })
       if (services.settings.getAppState('active_workspace_id')?.value === workspaceId) {
@@ -489,7 +523,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       services.agentRuntime.deleteAgentLaunchConfig(workspaceId, workerId)
       runDataMutation(() => {
         services.reportOutbox.deleteWorkerEntries(workspaceId, workerId)
+        services.dispatchSkillActivationStore.deleteWorker(workspaceId, workerId)
         services.dispatchLedgerStore.deleteWorkerDispatches(workspaceId, workerId)
+        services.skillSnapshotStore.deleteAgent(workspaceId, workerId)
         services.workspaceStore.deleteWorker(workspaceId, workerId)
       })
     },
@@ -552,6 +588,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     settings: services.settings,
     memory: services.memoryStore,
     memoryDream: services.memoryDreamStore,
+    skills,
     requestMemoryDream,
     requestMemoryDreamWorkerReview,
     workflows: services.workflowRuntime,

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import type { WorkspaceLanguage } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import {
@@ -10,6 +11,7 @@ import { createAgentRuntime } from './agent-runtime.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
 import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
+import { createDispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import { createExternalGoalStore } from './external-goal-store.js'
 import { createGitTurnCoordinator, type GitTurnCoordinator } from './git-turn-coordinator.js'
 import { createGitWorkspaceService } from './git-workspace-service.js'
@@ -33,12 +35,17 @@ import { createReportOutboxStore } from './report-outbox-store.js'
 import { openRuntimeDatabase } from './runtime-database.js'
 import { buildRuntimeRestartPolicy } from './runtime-restart-policy.js'
 import { createSettingsStore } from './settings-store.js'
+import { createSkillPackChangeStore } from './skill-pack-change-store.js'
+import { createSkillPackReleaseStore } from './skill-pack-release-store.js'
+import { createSkillPackResolver, type SkillPackResolver } from './skill-pack-resolver.js'
+import { createSkillSnapshotStore } from './skill-snapshot-store.js'
 import { createTasksFileService } from './tasks-file.js'
 import { createTasksFileWatcher } from './tasks-file-watcher.js'
 import { createTeamMemoryDigestProvider } from './team-memory-digest.js'
 import { createTeamMemoryDreamStore } from './team-memory-dream-store.js'
 import { createTeamMemoryStore } from './team-memory-store.js'
 import { createTeamOperations } from './team-operations.js'
+import { createTeamSkillRuntime, type TeamSkillRuntime } from './team-skill-runtime.js'
 import { resolveTerminalInputProfile } from './terminal-input-profile.js'
 import { createUiAuth } from './ui-auth.js'
 import { createWorkerOutputTracker, type WorkerOutputTracker } from './worker-output-tracker.js'
@@ -56,6 +63,7 @@ export interface RuntimeStoreServices {
   db: ReturnType<typeof openRuntimeDatabase>
   dataDir: string | null
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
+  dispatchSkillActivationStore: ReturnType<typeof createDispatchSkillActivationStore>
   externalGoalStore: ReturnType<typeof createExternalGoalStore>
   messageLogStore: ReturnType<typeof createMessageLogStore>
   memoryStore: ReturnType<typeof createTeamMemoryStore>
@@ -67,11 +75,16 @@ export interface RuntimeStoreServices {
   remoteSessions: DeviceSessionProvider
   remotePairing: RemotePairing
   settings: ReturnType<typeof createSettingsStore>
+  skillPackChangeStore: ReturnType<typeof createSkillPackChangeStore>
+  skillPackReleaseStore: ReturnType<typeof createSkillPackReleaseStore>
+  skillPackResolver: SkillPackResolver | undefined
+  skillSnapshotStore: ReturnType<typeof createSkillSnapshotStore>
   shellRuntime: ReturnType<typeof createWorkspaceShellRuntime>
   tasksFileWatcher: ReturnType<typeof createTasksFileWatcher>
   tasksFileWatchCallbacks: Set<(workspaceId: string, content: string) => void>
   tasksFileService: ReturnType<typeof createTasksFileService>
   teamOps: ReturnType<typeof createTeamOperations>
+  teamSkillRuntime: TeamSkillRuntime
   uiAuth: ReturnType<typeof createUiAuth>
   workerOutputTracker: WorkerOutputTracker | null
   workflowRuntime: WorkflowRuntime
@@ -114,11 +127,21 @@ export const createRuntimeStoreServices = (
   const git = createGitWorkspaceService(db)
   const messageLogStore = createMessageLogStore(db)
   const dispatchLedgerStore = createDispatchLedgerStore(db)
+  const dispatchSkillActivationStore = createDispatchSkillActivationStore(db)
   const externalGoalStore = createExternalGoalStore(db)
   const reportOutbox = createReportOutboxStore(db)
   const agentRunStore = createAgentRunStore(db)
   const agentSessionStore = createAgentSessionStore(db)
   const settings = createSettingsStore(db)
+  const skillPackChangeStore = createSkillPackChangeStore(db)
+  const skillPackReleaseStore = createSkillPackReleaseStore(db)
+  const skillPackResolver = options.dataDir
+    ? createSkillPackResolver({
+        cacheRoot: join(options.dataDir, 'skill-packs'),
+        releaseStore: skillPackReleaseStore,
+      })
+    : undefined
+  const skillSnapshotStore = createSkillSnapshotStore(db)
   const memoryStore = createTeamMemoryStore(db)
   const memoryDreamStore = createTeamMemoryDreamStore(db, memoryStore)
   if (!settings.getAppState(REMOTE_DAEMON_ID_KEY)?.value) {
@@ -148,6 +171,16 @@ export const createRuntimeStoreServices = (
   agentRunStore.markUnfinishedRunsStale()
 
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
+  const teamSkillRuntime = createTeamSkillRuntime({
+    activationStore: dispatchSkillActivationStore,
+    getAgent: workspaceStore.getAgent,
+    getDispatch: dispatchLedgerStore.getDispatchById,
+    getWorkspacePath: (workspaceId) =>
+      workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path,
+    listActivePlacements: skillPackChangeStore.listActivePlacements,
+    releaseStore: skillPackReleaseStore,
+    ...(skillPackResolver ? { resolver: skillPackResolver } : {}),
+  })
   const startExistingWorkspaceWatches = () => {
     for (const workspace of workspaceStore.listWorkspaces()) {
       void tasksFileWatcher.start(workspace.id, workspace.path, workspace.language ?? 'zh')
@@ -173,6 +206,7 @@ export const createRuntimeStoreServices = (
     agentRunStore,
     agentSessionStore,
     settings.getCommandPreset,
+    teamSkillRuntime,
     (workspaceId, agentId) => {
       workerOutputTracker?.detach(workspaceId, agentId)
       gitTurnCoordinator.detach(workspaceId, agentId)
@@ -192,11 +226,13 @@ export const createRuntimeStoreServices = (
       return git.getHeadSha(workspaceId, workspacePath)
     },
     createDispatch: dispatchLedgerStore.createDispatch,
+    createDispatchActivation: dispatchSkillActivationStore.insert,
     deleteDispatch: dispatchLedgerStore.deleteDispatch,
     deleteMessage: messageLogStore.deleteMessage,
     findOpenDispatch: dispatchLedgerStore.findOpenDispatch,
     findOpenDispatchById: dispatchLedgerStore.findOpenDispatchById,
     getDispatchById: dispatchLedgerStore.getDispatchById,
+    getDispatchActivation: dispatchSkillActivationStore.get,
     listOpenWorkspaceDispatches: (workspaceId) =>
       dispatchLedgerStore
         .listWorkspaceDispatches(workspaceId)
@@ -212,6 +248,7 @@ export const createRuntimeStoreServices = (
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
     reportOutbox,
+    resolveDispatchActivation: teamSkillRuntime.resolveDispatchActivation,
     reopenReportedDispatch: dispatchLedgerStore.reopenReportedDispatch,
     runDataMutation: (mutation) => db.transaction(mutation)(),
     setDispatchBaseHeadSha: dispatchLedgerStore.setBaseHeadSha,
@@ -234,6 +271,7 @@ export const createRuntimeStoreServices = (
     db,
     dataDir: options.dataDir ?? null,
     dispatchLedgerStore,
+    dispatchSkillActivationStore,
     externalGoalStore,
     messageLogStore,
     memoryStore,
@@ -245,11 +283,16 @@ export const createRuntimeStoreServices = (
     remoteSessions,
     remotePairing,
     settings,
+    skillPackChangeStore,
+    skillPackReleaseStore,
+    skillPackResolver,
+    skillSnapshotStore,
     shellRuntime,
     tasksFileWatcher,
     tasksFileWatchCallbacks,
     tasksFileService,
     teamOps,
+    teamSkillRuntime,
     uiAuth,
     workerOutputTracker,
     workflowRuntime,

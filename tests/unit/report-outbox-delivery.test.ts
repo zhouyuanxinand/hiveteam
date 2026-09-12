@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { createReportOutboxStore } from '../../src/server/report-outbox-store.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { createTeamOperations } from '../../src/server/team-operations.js'
+import { rejectUnexpectedTeamSkillOperations } from '../helpers/team-skill-stubs.js'
 
 describe('report outbox delivery', () => {
   test('persists a report while the Orchestrator is down and replays it after recovery', async () => {
@@ -38,6 +39,7 @@ describe('report outbox delivery', () => {
     const deliverSystemMessageToAgent = vi.fn(() => Promise.resolve())
     const markTaskReported = vi.fn()
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         deliverSystemMessageToAgent,
         getActiveRunByAgentId: vi.fn(() =>
@@ -128,6 +130,7 @@ describe('report outbox delivery', () => {
       .mockRejectedValueOnce(new Error('PTY exited before input was accepted'))
       .mockResolvedValueOnce()
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         deliverSystemMessageToAgent,
         getActiveRunByAgentId: vi.fn(() => ({ runId: 'orchestrator-run' })),

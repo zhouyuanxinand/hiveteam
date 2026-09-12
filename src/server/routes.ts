@@ -19,6 +19,7 @@ import { openWorkspaceRoutes } from './routes-open-workspace.js'
 import { remoteRoutes } from './routes-remote.js'
 import { runtimeRoutes } from './routes-runtime.js'
 import { settingsRoutes } from './routes-settings.js'
+import { skillPackRoutes } from './routes-skill-packs.js'
 import { taskRoutes } from './routes-tasks.js'
 import { teamRoutes } from './routes-team.js'
 import { teamGoalRoutes } from './routes-team-goals.js'
@@ -40,6 +41,7 @@ const routes: RouteDefinition[] = [
   ...versionRoutes,
   ...uiRoutes,
   ...settingsRoutes,
+  ...skillPackRoutes,
   ...taskRoutes,
   ...runtimeRoutes,
   ...remoteRoutes,

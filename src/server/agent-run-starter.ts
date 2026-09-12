@@ -13,6 +13,7 @@ import type { CommandPresetRecord } from './command-preset-store.js'
 import type { LiveRunRegistry } from './live-run-registry.js'
 import { createPostStartInputWriter, isInteractiveAgentCommand } from './post-start-input-writer.js'
 import type { RestartPolicy } from './restart-policy.js'
+import type { TeamSkillRuntime } from './team-skill-runtime.js'
 
 interface AgentRunStarterInput {
   agentManager: AgentManager | undefined
@@ -24,7 +25,18 @@ interface AgentRunStarterInput {
   getCommandPreset: (id: string) => CommandPresetRecord | undefined
   getAgent: ((workspaceId: string, agentId: string) => AgentSummary | undefined) | undefined
   getStartupMemoryDigest?: (workspaceId: string, agent: AgentSummary) => string
+  assertSkillLaunchReady: TeamSkillRuntime['assertLaunchReady']
   restartPolicy: RestartPolicy
+}
+
+const resolveCommandPresetId = (
+  config: AgentLaunchConfigInput,
+  getCommandPreset: (id: string) => CommandPresetRecord | undefined
+) => {
+  if (config.presetAugmentationDisabled) return null
+  if (config.commandPresetId) return config.commandPresetId
+  const implicit = getCommandPreset(config.command)
+  return implicit?.command === config.command ? implicit.id : null
 }
 
 export const createAgentRunStarter =
@@ -38,6 +50,7 @@ export const createAgentRunStarter =
     getCommandPreset,
     getAgent,
     getStartupMemoryDigest,
+    assertSkillLaunchReady,
     restartPolicy,
   }: AgentRunStarterInput) =>
   async (
@@ -53,6 +66,11 @@ export const createAgentRunStarter =
     const agent = getAgent?.(workspace.id, agentId)
     const { sessionCaptureDiscriminator, sessionCaptureSnapshot, startConfig, startEnv } =
       buildAgentRunBootstrap(workspace, agentId, config, sessionStore, getCommandPreset, agent)
+    const skillReadiness = await assertSkillLaunchReady({
+      agentId,
+      commandPresetId: resolveCommandPresetId(startConfig, getCommandPreset),
+      workspaceId: workspace.id,
+    })
     const handledRunExits = new Set<string>()
     const abortedRunIds = new Set<string>()
     const startedAt = Date.now()
@@ -165,6 +183,7 @@ export const createAgentRunStarter =
                   ...(getStartupMemoryDigest
                     ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent) }
                     : {}),
+                  skillCatalog: skillReadiness.catalog,
                   ...(workspace.language ? { language: workspace.language } : {}),
                   workspace,
                 })

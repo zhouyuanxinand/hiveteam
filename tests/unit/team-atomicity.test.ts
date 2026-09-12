@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { DispatchRecord } from '../../src/server/dispatch-ledger-store.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTeamOperations } from '../../src/server/team-operations.js'
+import { rejectUnexpectedTeamSkillOperations } from '../helpers/team-skill-stubs.js'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -56,6 +57,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
     const markTaskDispatched = vi.fn()
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         writeSendPrompt,
         writeReportPrompt: vi.fn(),
@@ -125,6 +127,7 @@ describe('team atomicity', () => {
     const deleteMessage = vi.fn()
 
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
         peekAgentLaunchConfig: vi.fn(() => undefined),
@@ -198,6 +201,7 @@ describe('team atomicity', () => {
     }
 
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
         peekAgentLaunchConfig: vi.fn(() => ({ command: 'node' })),
@@ -249,6 +253,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
         peekAgentLaunchConfig: vi.fn(() => ({ command: 'node' })),
@@ -346,6 +351,7 @@ describe('team atomicity', () => {
     const writeReportPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => ({ runId: 'run-1' })),
         writeReportPrompt,
@@ -404,6 +410,7 @@ describe('team atomicity', () => {
     const reportForwardError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const ops = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => ({ runId: 'run-1' })),
         writeReportPrompt: vi.fn(() => {

@@ -16,6 +16,7 @@ interface PackResult {
 
 // Match the pack-smoke install budget plus startup and cleanup time. npm may
 // need to populate a cold cache while resolving the packaged native runtime.
+const PACK_DRY_RUN_TIMEOUT_MS = 30_000
 const PACK_SMOKE_TIMEOUT_MS = 210_000
 
 const terminateProcessTree = (pid: number) => {
@@ -99,39 +100,43 @@ const runNpm = (args: string[]) => {
 }
 
 describe('npm package tarball', () => {
-  test('publish dry-run exposes only runtime files and the hive bin', () => {
-    expect(existsSync(join(process.cwd(), 'dist', 'src', 'cli', 'hive.js'))).toBe(true)
-    expect(existsSync(join(process.cwd(), 'web', 'dist', 'index.html'))).toBe(true)
+  test(
+    'publish dry-run exposes only runtime files and the hive bin',
+    () => {
+      expect(existsSync(join(process.cwd(), 'dist', 'src', 'cli', 'hive.js'))).toBe(true)
+      expect(existsSync(join(process.cwd(), 'web', 'dist', 'index.html'))).toBe(true)
 
-    const output = runNpm(['pack', '--dry-run', '--json'])
-    const [result] = JSON.parse(output) as PackResult[]
-    if (!result) throw new Error('npm pack --dry-run returned no package metadata')
-    const paths = result.files.map((file) => file.path)
+      const output = runNpm(['pack', '--dry-run', '--json'])
+      const [result] = JSON.parse(output) as PackResult[]
+      if (!result) throw new Error('npm pack --dry-run returned no package metadata')
+      const paths = result.files.map((file) => file.path)
 
-    expect(result.name).toBe('hiveteam')
-    expect(result.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
-    expect(paths).toContain('dist/src/cli/hive.js')
-    expect(paths).toContain('dist/src/cli/team.js')
-    expect(paths).toContain('dist/bin/team')
-    expect(paths).toContain('dist/bin/team.cmd')
-    expect(paths).toContain('web/dist/index.html')
-    expect(paths).toContain('scripts/dev-start.mjs')
-    expect(paths).toContain('scripts/fix-runtime-artifacts.mjs')
-    expect(paths).toContain('CHANGELOG.md')
-    expect(paths).toContain('LICENSE')
-    expect(paths).toContain('README.md')
-    expect(paths).toContain('SECURITY.md')
+      expect(result.name).toBe('hiveteam')
+      expect(result.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
+      expect(paths).toContain('dist/src/cli/hive.js')
+      expect(paths).toContain('dist/src/cli/team.js')
+      expect(paths).toContain('dist/bin/team')
+      expect(paths).toContain('dist/bin/team.cmd')
+      expect(paths).toContain('web/dist/index.html')
+      expect(paths).toContain('scripts/dev-start.mjs')
+      expect(paths).toContain('scripts/fix-runtime-artifacts.mjs')
+      expect(paths).toContain('CHANGELOG.md')
+      expect(paths).toContain('LICENSE')
+      expect(paths).toContain('README.md')
+      expect(paths).toContain('SECURITY.md')
 
-    expect(paths.some((path) => path.startsWith('src/'))).toBe(false)
-    expect(paths.some((path) => path.startsWith('tests/'))).toBe(false)
-    expect(paths.some((path) => path.startsWith('web/src/'))).toBe(false)
-    expect(paths.some((path) => path.startsWith('dist/tests/'))).toBe(false)
-    expect(paths.some((path) => path.endsWith('.map'))).toBe(false)
-    expect(paths).not.toContain('AGENTS.md')
-    expect(paths).not.toContain('CLAUDE.md')
-    expect(paths).not.toContain('TODO.md')
-    expect(paths).not.toContain('bin/team')
-  })
+      expect(paths.some((path) => path.startsWith('src/'))).toBe(false)
+      expect(paths.some((path) => path.startsWith('tests/'))).toBe(false)
+      expect(paths.some((path) => path.startsWith('web/src/'))).toBe(false)
+      expect(paths.some((path) => path.startsWith('dist/tests/'))).toBe(false)
+      expect(paths.some((path) => path.endsWith('.map'))).toBe(false)
+      expect(paths).not.toContain('AGENTS.md')
+      expect(paths).not.toContain('CLAUDE.md')
+      expect(paths).not.toContain('TODO.md')
+      expect(paths).not.toContain('bin/team')
+    },
+    PACK_DRY_RUN_TIMEOUT_MS
+  )
 
   test(
     'published tarball installs and starts the packaged runtime',

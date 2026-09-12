@@ -3,6 +3,7 @@ import '../helpers/mock-node-pty.ts'
 import { describe, expect, test, vi } from 'vitest'
 
 import { createAgentRuntime } from '../../src/server/agent-runtime.js'
+import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
   clear: () => {},
@@ -66,6 +67,7 @@ describe('agent runtime races (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 
@@ -115,6 +117,7 @@ describe('agent runtime races (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 
@@ -168,6 +171,7 @@ describe('agent runtime races (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 
@@ -233,6 +237,7 @@ describe('agent runtime races (unit)', () => {
       },
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       () => {}
     )
 

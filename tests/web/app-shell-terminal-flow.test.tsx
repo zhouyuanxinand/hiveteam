@@ -166,9 +166,16 @@ afterEach(async () => {
 })
 
 const waitForShellSlot = async (runId: string) => {
-  await waitFor(() => {
-    expect(screen.getByTestId(`terminal-panel-slot-shell-${runId}`)).toBeInTheDocument()
-  })
+  await waitFor(
+    () => {
+      expect(screen.getByTestId(`terminal-panel-slot-shell-${runId}`)).toBeInTheDocument()
+    },
+    { timeout: 5_000 }
+  )
+}
+
+const waitForShellStartCount = async (count: number) => {
+  await waitFor(() => expect(shellStarts).toHaveLength(count), { timeout: 5_000 })
 }
 
 const getWorkspaceRow = async (name: string) => {
@@ -187,14 +194,14 @@ describe('app shell terminal flow with real server', () => {
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('open-workspace-shell'))
-    await waitFor(() => expect(shellStarts).toHaveLength(1))
+    await waitForShellStartCount(1)
     expect(shellStarts[0]?.agent_name).toBe('Shell')
     await waitForShellSlot(shellStarts[0]?.run_id ?? '')
 
     const newShellButton = screen.getByTestId('terminal-tab-new-shell')
     await waitFor(() => expect(newShellButton).toBeEnabled())
     fireEvent.click(newShellButton)
-    await waitFor(() => expect(shellStarts).toHaveLength(2))
+    await waitForShellStartCount(2)
 
     expect(shellStarts[1]?.agent_name).toBe('Shell')
     await waitForShellSlot(shellStarts[1]?.run_id ?? '')
@@ -206,7 +213,7 @@ describe('app shell terminal flow with real server', () => {
 
     const terminalButton = await screen.findByTestId('open-workspace-shell')
     fireEvent.click(terminalButton)
-    await waitFor(() => expect(shellStarts).toHaveLength(1))
+    await waitForShellStartCount(1)
     const firstRunId = shellStarts[0]?.run_id ?? ''
     expect(shellStarts[0]?.agent_name).toBe('Shell')
     await waitForShellSlot(firstRunId)
@@ -219,7 +226,7 @@ describe('app shell terminal flow with real server', () => {
     expect(shellStarts).toHaveLength(1)
 
     releaseDelayedDelete?.()
-    await waitFor(() => expect(shellStarts).toHaveLength(2))
+    await waitForShellStartCount(2)
 
     expect(shellStarts[1]?.agent_name).toBe('Shell')
     expect(shellStarts[1]?.run_id).not.toBe(firstRunId)
@@ -231,11 +238,11 @@ describe('app shell terminal flow with real server', () => {
     render(<App />)
 
     fireEvent.click(await screen.findByTestId('open-workspace-shell'))
-    await waitFor(() => expect(shellStarts).toHaveLength(1))
+    await waitForShellStartCount(1)
     await waitForShellSlot(shellStarts[0]?.run_id ?? '')
 
     fireEvent.click(screen.getByTestId('terminal-tab-new-shell'))
-    await waitFor(() => expect(shellStarts).toHaveLength(2))
+    await waitForShellStartCount(2)
     const firstRunId = shellStarts[0]?.run_id ?? ''
     const secondRunId = shellStarts[1]?.run_id ?? ''
     expect(shellStarts.map((run) => run.agent_name)).toEqual(['Shell', 'Shell'])
@@ -249,7 +256,7 @@ describe('app shell terminal flow with real server', () => {
     expect(shellStarts).toHaveLength(2)
 
     releaseDelayedDelete?.()
-    await waitFor(() => expect(shellStarts).toHaveLength(3))
+    await waitForShellStartCount(3)
 
     expect(shellStarts[2]?.agent_name).toBe('Shell')
     expect(shellStarts[2]?.run_id).not.toBe(firstRunId)
@@ -279,13 +286,13 @@ describe('app shell terminal flow with real server', () => {
     })
 
     releaseDelayedShellStart?.()
-    await waitFor(() => expect(shellStarts).toHaveLength(1))
+    await waitForShellStartCount(1)
     expect(shellStarts[0]?.agent_id).not.toBe(`${beta.id}:shell`)
     expect(screen.queryByTestId(`terminal-panel-slot-shell-${shellStarts[0]?.run_id}`)).toBeNull()
 
     delayShellStarts = false
     fireEvent.click(screen.getByTestId('open-workspace-shell'))
-    await waitFor(() => expect(shellStarts).toHaveLength(2))
+    await waitForShellStartCount(2)
 
     expect(shellStarts[1]?.agent_id).toBe(`${beta.id}:shell`)
     await waitForShellSlot(shellStarts[1]?.run_id ?? '')

@@ -1,6 +1,8 @@
+import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
+import type { DispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import { BadRequestError, ConflictError, HttpError, PtyInactiveError } from './http-errors.js'
 import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
@@ -28,6 +30,7 @@ export interface TeamOperationsInput {
     toAgentId: string
     workspaceId: string
   }) => DispatchRecord
+  createDispatchActivation: DispatchSkillActivationStore['insert']
   deleteDispatch: (dispatchId: string) => void
   deleteMessage: (handle: MessageLogHandle) => void
   findOpenDispatch: (
@@ -38,6 +41,7 @@ export interface TeamOperationsInput {
   findOpenDispatchById: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   /** Required for the review-feedback path; optional for lightweight callers. */
   getDispatchById?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  getDispatchActivation: DispatchSkillActivationStore['get']
   listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
   insertMessage: (record: MessageLogRecord) => MessageLogHandle
   markDispatchCancelled: (input: {
@@ -56,6 +60,11 @@ export interface TeamOperationsInput {
   /** Optional for lightweight callers that do not persist delivery failures. */
   markDispatchDeliveryFailed?: (dispatchId: string, error: string) => void
   reportOutbox?: ReportOutboxStore
+  resolveDispatchActivation: (
+    workspaceId: string,
+    agentId: string,
+    skillName: string
+  ) => Promise<ResolvedSkillActivation>
   /** Required for the review-feedback path; optional for lightweight callers. */
   reopenReportedDispatch?: (workspaceId: string, dispatchId: string) => boolean
   runDataMutation?: (mutation: () => void) => void
@@ -67,6 +76,7 @@ export interface TeamOperationsInput {
 export interface DispatchTaskInput {
   fromAgentId?: string
   hivePort?: string
+  skillName?: string
 }
 
 export interface ReportTaskInput {
@@ -104,11 +114,13 @@ export const createTeamOperations = ({
   agentRuntime,
   captureBaseHeadSha,
   createDispatch,
+  createDispatchActivation,
   deleteDispatch,
   deleteMessage,
   findOpenDispatch,
   findOpenDispatchById,
   getDispatchById,
+  getDispatchActivation,
   listOpenWorkspaceDispatches = () => [],
   insertMessage,
   markDispatchCancelled,
@@ -116,6 +128,7 @@ export const createTeamOperations = ({
   markDispatchSubmitted,
   markDispatchDeliveryFailed,
   reportOutbox,
+  resolveDispatchActivation,
   reopenReportedDispatch,
   runDataMutation,
   setDispatchBaseHeadSha,
@@ -284,7 +297,8 @@ export const createTeamOperations = ({
           sender?.name ?? 'Hive',
           worker.description,
           dispatch.text,
-          language
+          language,
+          getDispatchActivation(dispatch.id) ?? undefined
         )
         markDispatchSubmitted(dispatch.id)
         replayed += 1
@@ -311,11 +325,16 @@ export const createTeamOperations = ({
     if (text.trim().length === 0) {
       throw new BadRequestError('Task text cannot be empty')
     }
-    // Kick off the review-baseline capture immediately so the HEAD it reads
-    // predates any worker edit, but only await it after all synchronous state
-    // mutations — dispatchTask historically commits the dispatch row and the
-    // worker's working status before its first await, and callers rely on
-    // that. The hook is documented as never throwing.
+    let skillActivation: ResolvedSkillActivation | undefined
+    if (input.skillName) {
+      if (!runDataMutation) {
+        throw new ConflictError('Skill dispatch requires transactional persistence')
+      }
+      skillActivation = await resolveDispatchActivation(workspaceId, workerId, input.skillName)
+    }
+    // Start baseline capture after any requested Skill has been validated but
+    // before the dispatch can cause worker edits. For ordinary dispatches this
+    // preserves the historical pre-await synchronous persistence path.
     const baseHeadCapture = captureBaseHeadSha ? captureBaseHeadSha(workspaceId) : null
     const message = createSendMessage(workspaceId, workerId, text, input.fromAgentId)
     const messageHandle = insertMessage(message)
@@ -334,7 +353,14 @@ export const createTeamOperations = ({
         workspaceId,
       }
       if (input.fromAgentId) dispatchInput.fromAgentId = input.fromAgentId
-      dispatch = createDispatch(dispatchInput)
+      let createdDispatch: DispatchRecord | undefined
+      runMutation(() => {
+        const candidate = createDispatch(dispatchInput)
+        if (skillActivation) createDispatchActivation(candidate.id, skillActivation)
+        createdDispatch = candidate
+      })
+      if (!createdDispatch) throw new Error('Dispatch persistence failed')
+      dispatch = createdDispatch
 
       if (input.fromAgentId) {
         const sender = workspaceStore.getAgent(workspaceId, input.fromAgentId)
@@ -355,7 +381,8 @@ export const createTeamOperations = ({
               sender.name,
               worker.description,
               text,
-              language
+              language,
+              skillActivation
             )
           }
         }
@@ -381,6 +408,13 @@ export const createTeamOperations = ({
       // queued object created above.
       return findOpenDispatch(workspaceId, workerId, dispatch.id) ?? dispatch
     } catch (error) {
+      if (baseHeadCapture) {
+        try {
+          await baseHeadCapture
+        } catch (captureError) {
+          console.error('[hive] swallowed:dispatchTask.failedBaseHeadCapture', captureError)
+        }
+      }
       if (dispatch && markDispatchDeliveryFailed) {
         markDispatchDeliveryFailed(
           dispatch.id,

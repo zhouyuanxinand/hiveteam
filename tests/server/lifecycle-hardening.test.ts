@@ -12,6 +12,7 @@ import { createApp } from '../../src/server/app.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { createWorkspaceStore } from '../../src/server/workspace-store.js'
+import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const sessionStore = {
   clearLastSessionId: () => {},
@@ -269,6 +270,7 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
       agentRunStore,
       sessionStore,
       () => undefined,
+      readyTeamSkillRuntime,
       onAgentExitSpy
     )
     const workspace = workspaceStore.createWorkspace(workspacePath, 'Alpha')

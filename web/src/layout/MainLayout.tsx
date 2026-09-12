@@ -14,6 +14,7 @@ type MainLayoutProps = {
   onToggleTaskGraph?: (() => void) | undefined
   onToggleActivity?: (() => void) | undefined
   onToggleMemory?: (() => void) | undefined
+  onToggleSkills?: (() => void) | undefined
   onToggleGit?: (() => void) | undefined
   onToggleWorkflows?: (() => void) | undefined
   openTaskCount?: number
@@ -21,6 +22,7 @@ type MainLayoutProps = {
   taskGraphOpen?: boolean
   activityOpen?: boolean
   memoryOpen?: boolean
+  skillsOpen?: boolean
   gitOpen?: boolean
   workflowsOpen?: boolean
   topbarActions?: ReactNode
@@ -32,6 +34,7 @@ export const MainLayout = ({
   onToggleTaskGraph,
   onToggleActivity,
   onToggleMemory,
+  onToggleSkills,
   onToggleGit,
   onToggleWorkflows,
   openTaskCount = 0,
@@ -39,6 +42,7 @@ export const MainLayout = ({
   taskGraphOpen = false,
   activityOpen = false,
   memoryOpen = false,
+  skillsOpen = false,
   gitOpen = false,
   workflowsOpen = false,
   topbarActions,
@@ -57,12 +61,14 @@ export const MainLayout = ({
         onToggleTaskGraph={onToggleTaskGraph}
         onToggleActivity={onToggleActivity}
         onToggleMemory={onToggleMemory}
+        onToggleSkills={onToggleSkills}
         onToggleGit={onToggleGit}
         onToggleWorkflows={onToggleWorkflows}
         openTaskCount={openTaskCount}
         taskGraphOpen={taskGraphOpen}
         activityOpen={activityOpen}
         memoryOpen={memoryOpen}
+        skillsOpen={skillsOpen}
         gitOpen={gitOpen}
         workflowsOpen={workflowsOpen}
       />

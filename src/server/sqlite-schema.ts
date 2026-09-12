@@ -28,8 +28,12 @@ import { applySchemaVersion30 } from './sqlite-schema-v30.js'
 import { applySchemaVersion31 } from './sqlite-schema-v31.js'
 import { applySchemaVersion32 } from './sqlite-schema-v32.js'
 import { applySchemaVersion33 } from './sqlite-schema-v33.js'
+import { applySchemaVersion34 } from './sqlite-schema-v34.js'
+import { applySchemaVersion35 } from './sqlite-schema-v35.js'
+import { applySchemaVersion36 } from './sqlite-schema-v36.js'
+import { applySchemaVersion37 } from './sqlite-schema-v37.js'
 
-export const CURRENT_SCHEMA_VERSION = 33
+export const CURRENT_SCHEMA_VERSION = 37
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -417,5 +421,33 @@ export const initializeRuntimeDatabase = (db: Database) => {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(33, Date.now())
   } else {
     applySchemaVersion33(db)
+  }
+
+  if (!appliedVersions.has(34)) {
+    applySchemaVersion34(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(34, Date.now())
+  } else {
+    applySchemaVersion34(db)
+  }
+
+  if (!appliedVersions.has(35)) {
+    applySchemaVersion35(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(35, Date.now())
+  } else {
+    applySchemaVersion35(db)
+  }
+
+  if (!appliedVersions.has(36)) {
+    applySchemaVersion36(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(36, Date.now())
+  } else {
+    applySchemaVersion36(db)
+  }
+
+  if (!appliedVersions.has(37)) {
+    applySchemaVersion37(db)
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(37, Date.now())
+  } else {
+    applySchemaVersion37(db)
   }
 }

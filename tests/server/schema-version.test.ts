@@ -137,6 +137,29 @@ describe('schema version', () => {
         (column) => column.name
       )
     )
+    const skillTables = new Set(
+      (
+        db
+          .prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name IN (
+               'skill_snapshots', 'skill_pack_releases', 'skill_change_plans',
+               'skill_change_attempts', 'skill_placements', 'dispatch_skill_activations'
+             )`
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name)
+    )
+    const activationColumns = new Set(
+      (
+        db.prepare('PRAGMA table_info(dispatch_skill_activations)').all() as Array<{ name: string }>
+      ).map((column) => column.name)
+    )
+    const releaseColumns = new Set(
+      (db.prepare('PRAGMA table_info(skill_pack_releases)').all() as Array<{ name: string }>).map(
+        (column) => column.name
+      )
+    )
 
     expect(workerColumns.has('last_session_id')).toBe(true)
     expect(workerColumns.has('avatar')).toBe(true)
@@ -247,6 +270,30 @@ describe('schema version', () => {
         'created_at',
       ])
     )
+    expect(skillTables).toEqual(
+      new Set([
+        'dispatch_skill_activations',
+        'skill_change_attempts',
+        'skill_change_plans',
+        'skill_pack_releases',
+        'skill_placements',
+        'skill_snapshots',
+      ])
+    )
+    expect(activationColumns).toEqual(
+      new Set([
+        'dispatch_id',
+        'release_id',
+        'pack_name',
+        'skill_name',
+        'skill_digest',
+        'instruction_snapshot',
+        'payload_digest',
+        'delivery_mode',
+        'created_at',
+      ])
+    )
+    expect(releaseColumns.has('source_json')).toBe(true)
     expectDispatchSchema(db)
 
     const presetCount = db
@@ -281,6 +328,14 @@ describe('schema version', () => {
     })
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
       version: 33,
+    })
+    for (const version of [34, 35, 36, 37]) {
+      expect(
+        db.prepare('SELECT version FROM schema_version WHERE version = ?').get(version)
+      ).toEqual({ version })
+    }
+    expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
+      version: 37,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

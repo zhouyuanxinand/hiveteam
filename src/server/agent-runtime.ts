@@ -17,12 +17,14 @@ import type { CommandPresetRecord } from './command-preset-store.js'
 import { createLiveRunRegistry } from './live-run-registry.js'
 import { createNoopRestartPolicy, type RestartPolicy } from './restart-policy.js'
 import type { TeamMemoryDigestProvider } from './team-memory-digest.js'
+import type { TeamSkillRuntime } from './team-skill-runtime.js'
 
 export const createAgentRuntime = (
   agentManager: AgentManager | undefined,
   agentRunStore: AgentRunStorePort,
   sessionStore: AgentSessionStorePort,
   getCommandPreset: (id: string) => CommandPresetRecord | undefined,
+  teamSkillRuntime: Pick<TeamSkillRuntime, 'assertLaunchReady'>,
   onAgentExit: (workspaceId: string, agentId: string) => void,
   restartPolicy: RestartPolicy = createNoopRestartPolicy(),
   getAgent?: (workspaceId: string, agentId: string) => AgentSummary | undefined,
@@ -61,6 +63,7 @@ export const createAgentRuntime = (
     getCommandPreset,
     getAgent,
     ...(memoryDigestProvider ? { getStartupMemoryDigest: memoryDigestProvider.forStartup } : {}),
+    assertSkillLaunchReady: teamSkillRuntime.assertLaunchReady,
     restartPolicy,
   })
 
@@ -162,7 +165,8 @@ export const createAgentRuntime = (
       fromAgentName,
       workerDescription,
       text,
-      language
+      language,
+      skillActivation
     ) {
       stdinDispatcher.writeSendPrompt(
         workspaceId,
@@ -171,7 +175,8 @@ export const createAgentRuntime = (
         fromAgentName,
         workerDescription,
         text,
-        language
+        language,
+        skillActivation
       )
     },
     writeCancelPrompt(workspaceId, workerId, dispatchId, reason, input = {}) {

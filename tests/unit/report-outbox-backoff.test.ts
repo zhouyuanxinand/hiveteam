@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 
 import type { ReportOutboxEntry } from '../../src/server/report-outbox-store.js'
 import { createTeamOperations } from '../../src/server/team-operations.js'
+import { rejectUnexpectedTeamSkillOperations } from '../helpers/team-skill-stubs.js'
 
 const makeEntry = (
   id: number,
@@ -28,6 +29,7 @@ const createHarness = (entries: ReportOutboxEntry[]) => {
     markDeliveryFailed: vi.fn(),
   }
   const ops = createTeamOperations({
+    ...rejectUnexpectedTeamSkillOperations,
     agentRuntime: {
       deliverSystemMessageToAgent,
       getActiveRunByAgentId: vi.fn(() => ({ runId: 'run-1' })),
@@ -91,6 +93,7 @@ describe('report outbox delivery backoff', () => {
   test('does nothing while the orchestrator has no active run', () => {
     const { reportOutbox } = createHarness([makeEntry(1)])
     const opsWithoutRun = createTeamOperations({
+      ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         deliverSystemMessageToAgent: vi.fn(),
         getActiveRunByAgentId: vi.fn(() => undefined),

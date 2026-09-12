@@ -31,6 +31,11 @@ const ActivityCenterDrawer = lazy(() =>
     default: module.ActivityCenterDrawer,
   }))
 )
+const WorkspaceSkillPackDrawer = lazy(() =>
+  import('./WorkspaceSkillPackDrawer.js').then((module) => ({
+    default: module.WorkspaceSkillPackDrawer,
+  }))
+)
 
 type AppOverlaysProps = {
   addDialogTrigger: number
@@ -40,12 +45,14 @@ type AppOverlaysProps = {
   onCloseKnowledge: () => void
   onCloseGit: () => void
   onCloseActivity: () => void
+  onCloseSkills: () => void
   onCreateWorkspace: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
   onTryDemo: () => void
   taskGraphOpen: boolean
   knowledgeTab: KnowledgeTab | null
   gitOpen: boolean
   activityOpen: boolean
+  skillsOpen: boolean
   tasksFile: TasksFileApi
   wizardOpen: boolean
   workspacePath: string | null
@@ -66,12 +73,14 @@ export const AppOverlays = ({
   onCloseKnowledge,
   onCloseGit,
   onCloseActivity,
+  onCloseSkills,
   onCreateWorkspace,
   onTryDemo,
   taskGraphOpen,
   knowledgeTab,
   gitOpen,
   activityOpen,
+  skillsOpen,
   tasksFile,
   wizardOpen,
   workspacePath,
@@ -113,6 +122,11 @@ export const AppOverlays = ({
     {workspaceId && activityOpen ? (
       <Suspense fallback={null}>
         <ActivityCenterDrawer onClose={onCloseActivity} open workspaceId={workspaceId} />
+      </Suspense>
+    ) : null}
+    {workspaceId && skillsOpen ? (
+      <Suspense fallback={null}>
+        <WorkspaceSkillPackDrawer onClose={onCloseSkills} open workspaceId={workspaceId} />
       </Suspense>
     ) : null}
     {addDialogTrigger > 0 ? (
