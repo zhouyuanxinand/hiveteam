@@ -14,6 +14,33 @@ interface PackResult {
   version: string
 }
 
+const isPackResult = (value: unknown): value is PackResult => {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<PackResult>
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.version === 'string' &&
+    Array.isArray(candidate.files) &&
+    candidate.files.every(
+      (file) => Boolean(file) && typeof file === 'object' && typeof file.path === 'string'
+    )
+  )
+}
+
+const parseSinglePackResult = (output: string): PackResult => {
+  const parsed: unknown = JSON.parse(output)
+  const results = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object'
+      ? Object.values(parsed)
+      : []
+  const [result] = results
+  if (results.length !== 1 || !isPackResult(result)) {
+    throw new Error('npm pack --dry-run returned invalid package metadata')
+  }
+  return result
+}
+
 // Match the pack-smoke install budget plus startup and cleanup time. npm may
 // need to populate a cold cache while resolving the packaged native runtime.
 const PACK_DRY_RUN_TIMEOUT_MS = 30_000
@@ -107,8 +134,7 @@ describe('npm package tarball', () => {
       expect(existsSync(join(process.cwd(), 'web', 'dist', 'index.html'))).toBe(true)
 
       const output = runNpm(['pack', '--dry-run', '--json'])
-      const [result] = JSON.parse(output) as PackResult[]
-      if (!result) throw new Error('npm pack --dry-run returned no package metadata')
+      const result = parseSinglePackResult(output)
       const paths = result.files.map((file) => file.path)
 
       expect(result.name).toBe('hiveteam')

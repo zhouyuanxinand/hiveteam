@@ -37,6 +37,20 @@ const runNpm = (args, options = {}) => {
     : execFileSync('npm', args, withActiveNodeOptions(options))
 }
 
+const parseSinglePackResult = (packJson) => {
+  const parsed = JSON.parse(packJson)
+  const results = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object'
+      ? Object.values(parsed)
+      : []
+  const [result] = results
+  if (results.length !== 1 || !result || typeof result.filename !== 'string') {
+    throw new Error('npm pack --json returned invalid package metadata')
+  }
+  return result
+}
+
 const logPhase = (phase) => {
   process.stdout.write(`[pack-smoke] ${phase}\n`)
 }
@@ -93,7 +107,7 @@ try {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
   })
-  const [packResult] = JSON.parse(packJson)
+  const packResult = parseSinglePackResult(packJson)
   packedFile = resolve(root, packResult.filename)
 
   logPhase('installing packaged runtime')
