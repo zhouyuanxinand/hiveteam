@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { FsBrowseResponse, FsProbeResponse, PickFolderResponse } from '../../web/src/api.js'
@@ -98,6 +99,38 @@ afterEach(() => {
 })
 
 describe('AddWorkspaceDialog — native folder picker default flow', () => {
+  test('StrictMode first mount starts exactly one native picker request', async () => {
+    const calls = stubFetch(() => ({
+      canceled: false,
+      error: null,
+      path: PICKED,
+      probe: sandboxProbe,
+      supported: true,
+    }))
+
+    const view = render(
+      <StrictMode>
+        <AddWorkspaceDialog trigger={1} onClose={() => {}} onCreate={() => undefined} />
+      </StrictMode>
+    )
+
+    await screen.findByTestId('confirm-workspace-dialog')
+    expect(
+      calls.filter(({ method, url }) => method === 'POST' && url === '/api/fs/pick-folder')
+    ).toHaveLength(1)
+
+    view.rerender(
+      <StrictMode>
+        <AddWorkspaceDialog trigger={2} onClose={() => {}} onCreate={() => undefined} />
+      </StrictMode>
+    )
+    await waitFor(() => {
+      expect(
+        calls.filter(({ method, url }) => method === 'POST' && url === '/api/fs/pick-folder')
+      ).toHaveLength(2)
+    })
+  })
+
   test('native picker loading surface is centered in the viewport while the request is pending', async () => {
     let resolvePick!: (value: PickFolderResponse) => void
     vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {

@@ -47,6 +47,13 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
   const [commandPresets, setCommandPresets] = useState<CommandPreset[]>([])
   const [commandPresetId, setCommandPresetId] = useState(DEFAULT_COMMAND_PRESET_ID)
   const [commandPresetError, setCommandPresetError] = useState<string | null>(null)
+  // StrictMode replays mount effects in development. Reuse external work for
+  // one trigger so the replay subscribes again without opening a second OS dialog.
+  const flowRequestRef = useRef<{
+    commandPresets: ReturnType<typeof listCommandPresets>
+    pickedFolder: ReturnType<typeof pickFolder>
+    trigger: number
+  } | null>(null)
   const commandPresetSnapshotRef = useRef<{
     error: string | null
     id: string
@@ -64,8 +71,17 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
   useEffect(() => {
     if (trigger === 0) return
     let cancelled = false
+    let flowRequest = flowRequestRef.current
+    if (!flowRequest || flowRequest.trigger !== trigger) {
+      flowRequest = {
+        commandPresets: listCommandPresets(),
+        pickedFolder: pickFolder(),
+        trigger,
+      }
+      flowRequestRef.current = flowRequest
+    }
     setCommandPresetError(null)
-    void listCommandPresets()
+    void flowRequest.commandPresets
       .then((presets) => {
         if (cancelled) return
         const nextId = presets.some(
@@ -90,7 +106,7 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
         setCommandPresetError(errorMessage)
       })
     setStage({ kind: 'picking' })
-    pickFolder()
+    flowRequest.pickedFolder
       .then(async (result) => {
         if (cancelled) return
         // User canceled the native dialog — dismiss silently without showing
