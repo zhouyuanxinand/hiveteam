@@ -106,6 +106,9 @@ describe('pickFolder — platform dispatch', () => {
     expect(calls[0]?.args).toContain('-STA')
     expect(calls[0]?.args.join(' ')).toContain('FolderBrowserDialog')
     expect(calls[0]?.args.join(' ')).toContain(
+      '$dialog.RootFolder = [System.Environment+SpecialFolder]::MyComputer'
+    )
+    expect(calls[0]?.args.join(' ')).toContain(
       'Documents inside it are detected after you click OK'
     )
     expect(calls[0]?.args.join(' ')).toContain('ToBase64String')

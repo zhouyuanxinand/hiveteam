@@ -149,6 +149,7 @@ const windowsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => 
   const script = [
     'Add-Type -AssemblyName System.Windows.Forms',
     '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+    '$dialog.RootFolder = [System.Environment+SpecialFolder]::MyComputer',
     '$dialog.Description = "Select Hive workspace folder. Documents inside it are detected after you click OK."',
     '$dialog.ShowNewFolderButton = $false',
     '$result = $dialog.ShowDialog()',
