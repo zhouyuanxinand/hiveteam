@@ -41,7 +41,7 @@ export const SkillPackPacksTab = ({
   workspaceId,
 }: SkillPackPacksTabProps) => {
   const { t } = useI18n()
-  const [editorOpen, setEditorOpen] = useState(inspection.configuration.packs.length === 0)
+  const [editorOpen, setEditorOpen] = useState(false)
   const [action, setAction] = useState<SkillPackEditorAction>('bind')
   const [draft, setDraft] = useState(createDefaultSkillPackSourceDraft)
   const [release, setRelease] = useState<SkillPackRelease | null>(null)
@@ -173,20 +173,22 @@ export const SkillPackPacksTab = ({
           <strong>{t('skills.boundPacks')}</strong>
           <p>{t('skills.boundPacksHint')}</p>
         </div>
-        <button
-          type="button"
-          className="skill-action-button skill-action-button--primary"
-          onClick={() => {
-            setAction('bind')
-            setEditorOpen(true)
-            setRelease(null)
-            setPlan(null)
-            setNotice(null)
-          }}
-        >
-          <PackagePlus size={14} aria-hidden />
-          {t('skills.addPack')}
-        </button>
+        {!editorOpen ? (
+          <button
+            type="button"
+            className="skill-action-button skill-action-button--primary"
+            onClick={() => {
+              setAction('bind')
+              setEditorOpen(true)
+              setRelease(null)
+              setPlan(null)
+              setNotice(null)
+            }}
+          >
+            <PackagePlus size={14} aria-hidden />
+            {t('skills.addPack')}
+          </button>
+        ) : null}
       </div>
 
       <SkillPackBoundList

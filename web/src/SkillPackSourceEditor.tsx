@@ -1,4 +1,5 @@
 import { ChevronRight, LoaderCircle } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import type { SkillPackSource } from '../../src/shared/skill-packs.js'
 import { useI18n } from './i18n.js'
@@ -24,14 +25,20 @@ export const SkillPackSourceEditor = ({
   onResolve,
 }: SkillPackSourceEditorProps) => {
   const { t } = useI18n()
+  const packNameInputRef = useRef<HTMLInputElement>(null)
   const disabled = action === 'update' || busy !== null
   const update = (change: Partial<SkillPackSourceDraft>) => onChange({ ...draft, ...change })
+
+  useEffect(() => {
+    if (action === 'bind') packNameInputRef.current?.focus()
+  }, [action])
 
   return (
     <div className="skill-source-form">
       <label>
         <span>{t('skills.packName')}</span>
         <input
+          ref={packNameInputRef}
           value={draft.packName}
           disabled={disabled}
           onChange={(event) => update({ packName: event.target.value })}

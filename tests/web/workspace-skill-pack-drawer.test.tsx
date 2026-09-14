@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { WorkspaceSkillPackDrawer } from '../../web/src/WorkspaceSkillPackDrawer.js'
@@ -253,6 +253,31 @@ describe('Workspace Skill Pack drawer', () => {
     expect(screen.getByText('matt@aaaaaaaaaaaa')).toBeInTheDocument()
   })
 
+  test('opens and focuses the Pack editor when Add Pack is clicked', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(inspectionPayload))
+    )
+
+    render(
+      <WorkspaceSkillPackDrawer
+        initialTab="packs"
+        onClose={vi.fn()}
+        open
+        workspaceId="workspace-1"
+      />
+    )
+
+    await screen.findByText('No Skill Pack is bound to this Workspace')
+    expect(screen.queryByRole('region', { name: 'Skill Pack editor' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Pack' }))
+
+    const editor = screen.getByRole('region', { name: 'Skill Pack editor' })
+    expect(screen.queryByRole('button', { name: 'Add Pack' })).not.toBeInTheDocument()
+    expect(within(editor).getByRole('textbox', { name: 'Pack name' })).toHaveFocus()
+  })
+
   test('resolves, plans, applies, and undoes a shared Skill Pack', async () => {
     let applied = false
     let undone = false
@@ -305,6 +330,7 @@ describe('Workspace Skill Pack drawer', () => {
     )
 
     await screen.findByText('No Skill Pack is bound to this Workspace')
+    fireEvent.click(screen.getByRole('button', { name: 'Add Pack' }))
     fireEvent.click(screen.getByRole('button', { name: 'Resolve release' }))
 
     expect(await screen.findByText('Resolved release')).toBeInTheDocument()
