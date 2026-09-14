@@ -36,6 +36,7 @@
     "desktop/README.md",
     "desktop/acceptance.mjs",
     "desktop/app.mjs",
+    "desktop/launch-mode.mjs",
     "desktop/main.mjs",
     "desktop/package.json",
     "desktop/pnpm-lock.yaml",

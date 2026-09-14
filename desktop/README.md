@@ -11,6 +11,15 @@ pnpm desktop:install
 pnpm desktop:dev
 ```
 
+Before starting local services, HiveTeam asks whether to open the Electron
+desktop client or the Web interface. Only the selected interface is opened.
+Web mode runs from the system tray after the browser closes; use the tray menu
+to reopen or exit HiveTeam. Desktop mode confirms before it stops the local
+services and closes.
+
+For unattended development or automation, skip the chooser with
+`HIVE_DESKTOP_LAUNCH_MODE=desktop` or `HIVE_DESKTOP_LAUNCH_MODE=web`.
+
 Drag exactly one folder from Explorer, Finder, or a Linux file manager anywhere
 onto the HiveTeam window. The existing Workspace confirmation dialog opens with
 the folder's absolute path.

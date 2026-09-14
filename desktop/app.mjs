@@ -323,6 +323,22 @@ const createDesktopWindow = ({ appOrigin, show }) => {
   return window
 }
 
+export const launchHiveWebHost = async ({ dataDir, randomPorts = false } = {}) => {
+  const services = await launchLocalServices({ dataDir, randomPorts })
+  let closed = false
+
+  return {
+    appOrigin: services.appOrigin,
+    runtimeOrigin: services.runtimeOrigin,
+    onUnexpectedExit: services.onUnexpectedExit,
+    close: async () => {
+      if (closed) return
+      closed = true
+      await services.stop()
+    },
+  }
+}
+
 export const launchHiveDesktop = async ({ dataDir, randomPorts = false, show = true } = {}) => {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false)

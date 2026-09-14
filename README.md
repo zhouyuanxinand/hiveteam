@@ -486,6 +486,10 @@ pnpm desktop:install
 pnpm desktop:dev
 ```
 
+The launcher asks whether to use the Electron client or the default Web
+browser, and opens only that interface. Web mode remains manageable from the
+system tray; Desktop mode adds native close confirmation and folder handling.
+
 Drop one folder anywhere on the HiveTeam window. The normal Workspace
 confirmation dialog opens with its exact path, including non-ASCII characters
 and spaces. Browser-only startup remains unchanged.

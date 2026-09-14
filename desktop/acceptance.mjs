@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
-import { launchHiveDesktop } from './app.mjs'
+import { launchHiveDesktop, launchHiveWebHost } from './app.mjs'
+import { bindDesktopCloseConfirmation } from './launch-mode.mjs'
 
 const requestedFolder = process.argv[2]
 const resultPath = process.env.HIVE_DESKTOP_ACCEPTANCE_RESULT_PATH
@@ -37,6 +38,15 @@ const waitForRendererValue = async (webContents, expression, timeoutMs = 10_000)
   return null
 }
 
+const waitForCondition = async (condition, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (condition()) return true
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50))
+  }
+  return false
+}
+
 const capture = async (webContents, name) => {
   if (!screenshotDir) return
   mkdirSync(screenshotDir, { recursive: true })
@@ -53,8 +63,22 @@ const waitForCommittedPaint = async (webContents) => {
 const runAcceptance = async () => {
   console.log('[desktop acceptance] Electron ready; starting HiveTeam services')
   let desktop
+  let webHost
   let failureMessage = null
   try {
+    webHost = await launchHiveWebHost({
+      dataDir: join(acceptanceRoot, 'hive-web-data'),
+      randomPorts: true,
+    })
+    if (BrowserWindow.getAllWindows().length !== 0) {
+      throw new Error('Web mode created an Electron window')
+    }
+    const webResponse = await fetch(webHost.appOrigin)
+    if (!webResponse.ok) throw new Error(`Web mode returned HTTP ${webResponse.status}`)
+    console.log('[desktop acceptance] Web mode ready without an Electron window')
+    await webHost.close()
+    webHost = null
+
     desktop = await launchHiveDesktop({
       dataDir: join(acceptanceRoot, 'hive-data'),
       randomPorts: true,
@@ -132,10 +156,38 @@ const runAcceptance = async () => {
     await waitForCommittedPaint(webContents)
     await capture(webContents, 'confirm-960x640.png')
     console.log(`[desktop acceptance] exact folder path confirmed: ${selectedPath}`)
+
+    if (webContents.debugger.isAttached()) webContents.debugger.detach()
+    let closeError = null
+    let closePromise = Promise.resolve()
+    let closeRequested = false
+    const desktopToClose = desktop
+    bindDesktopCloseConfirmation({
+      window: desktopToClose.window,
+      confirm: async () => true,
+      close: () => {
+        closeRequested = true
+        closePromise = desktopToClose.close()
+        return closePromise
+      },
+      onError: (error) => {
+        closeError = error
+      },
+    })
+    desktopToClose.window.close()
+    const windowClosed = await waitForCondition(() => desktopToClose.window.isDestroyed())
+    await closePromise
+    if (closeError) throw closeError
+    if (!closeRequested || !windowClosed) {
+      throw new Error('Desktop close confirmation did not close the Electron window')
+    }
+    console.log('[desktop acceptance] confirmed window close stopped the desktop host')
+    desktop = null
   } catch (error) {
     failureMessage = error instanceof Error ? error.message : String(error)
     console.error('[desktop acceptance] failed:', error)
   } finally {
+    await webHost?.close()
     if (desktop?.window.webContents.debugger.isAttached()) {
       desktop.window.webContents.debugger.detach()
     }
