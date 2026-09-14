@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { TerminalView } from '../../web/src/terminal/TerminalView.js'
@@ -32,6 +32,7 @@ class MockWebSocket {
   readonly OPEN = 1
   onmessage: ((event: { data: string }) => void) | null = null
   onopen: (() => void) | null = null
+  onclose: (() => void) | null = null
   readyState = 0
   sent: Array<string | Uint8Array> = []
 
@@ -233,6 +234,80 @@ const binaryInput = (chunk: string) =>
   Uint8Array.from(chunk, (character) => character.charCodeAt(0) & 0xff)
 
 describe('TerminalView', () => {
+  test('offers session recovery without keyboard focus and shows an unsuccessful retry', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    addPortalSlot('run-recovery')
+    render(<TerminalView runId="run-recovery" title="Orchestrator" />)
+    await waitFor(() => expect(MockWebSocket.instances[1]?.readyState).toBe(1))
+    const io = MockWebSocket.instances[0]
+    const control = MockWebSocket.instances[1]
+    const sendControl = (message: object) =>
+      act(() => control?.onmessage?.({ data: JSON.stringify(message) }))
+    sendControl({ type: 'restore', snapshot: 'original history' })
+    sendControl({
+      type: 'session_recovery',
+      recovery: { kind: 'codex_session_in_use', thread_id: 'original-session' },
+    })
+    expect(await screen.findByText('Original conversation is in use')).toBeTruthy()
+    expect(screen.getByText('original-session')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Released — retry original conversation' }))
+    expect(screen.getByRole('button', { name: 'Retrying original conversation…' })).toBeDisabled()
+    const request = control?.sent
+      .map((payload) => JSON.parse(String(payload)))
+      .find((message) => message.type === 'retry_session')
+    expect(request).toMatchObject({ type: 'retry_session', request_id: expect.any(String) })
+    expect(io?.sent).toEqual([])
+    sendControl({ type: 'session_retry', request_id: request?.request_id, status: 'still_locked' })
+    expect(
+      await screen.findByText('Still in use. Release this task in the other client, then retry.')
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Released — retry original conversation' })
+    ).toBeEnabled()
+    sendControl({ type: 'session_recovery', recovery: null })
+    expect(screen.queryByText('Original conversation is in use')).toBeNull()
+  })
+
+  test('reconnects disconnected terminal sockets to the same run without restarting the agent', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    addPortalSlot('run-reconnect')
+    render(<TerminalView runId="run-reconnect" title="Orchestrator" />)
+    await waitFor(() => expect(MockWebSocket.instances[1]?.readyState).toBe(1))
+    await act(async () =>
+      MockWebSocket.instances[1]?.onmessage?.({
+        data: JSON.stringify({ type: 'restore', snapshot: 'original history' }),
+      })
+    )
+    act(() => {
+      const io = MockWebSocket.instances[0]
+      if (io) {
+        io.readyState = 3
+        io.onclose?.()
+      }
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconnect terminal' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(4))
+    expect(MockWebSocket.instances.slice(2).map((socket) => new URL(socket.url).pathname)).toEqual([
+      '/ws/terminal/run-reconnect/io',
+      '/ws/terminal/run-reconnect/control',
+    ])
+    await act(async () =>
+      MockWebSocket.instances[3]?.onmessage?.({
+        data: JSON.stringify({ type: 'restore', snapshot: 'original history' }),
+      })
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Reconnect terminal' })).toBeNull()
+    )
+    expect(terminalWrites.filter((chunk) => chunk === 'original history')).toHaveLength(2)
+    expect(
+      MockWebSocket.instances
+        .flatMap((socket) => socket.sent)
+        .map(String)
+        .join('')
+    ).not.toContain('"type":"stop"')
+  })
+
   test('opens io and control sockets for the provided run id', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket as never)
     addPortalSlot('run-123')

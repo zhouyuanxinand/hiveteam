@@ -758,6 +758,24 @@ const enMessages = {
   'layout.sidebarResizeAria': 'Resize Workspace sidebar',
   'terminal.statusConnecting': 'Connecting',
   'terminal.statusRunning': 'Running',
+  'terminal.disconnected': 'Terminal disconnected. Reconnect to the same running session.',
+  'terminal.reconnect': 'Reconnect terminal',
+  'terminal.recovery.title': 'Original conversation is in use',
+  'terminal.recovery.description':
+    'Another Codex client holds this task. Hive has kept the original session and history; restarting Hive will not release the other client.',
+  'terminal.recovery.retry': 'Released — retry original conversation',
+  'terminal.recovery.retrying': 'Retrying original conversation…',
+  'terminal.recovery.session': 'Original session:',
+  'terminal.recovery.help': 'How to release the task',
+  'terminal.recovery.release':
+    'Stop work on this task in the other client first. In Codex desktop, leaving its page may keep the task loaded. You can archive and then unarchive that same task before retrying here. Archiving may also affect its child tasks; confirm none are running. Alternatively, fully quit the occupying client after saving its other work.',
+  'terminal.recovery.preserve':
+    'Retry only targets this terminal and keeps the same conversation. Hive will not delete lock files, close other clients, create a new conversation, or submit a prompt.',
+  'terminal.recovery.stillLocked':
+    'Still in use. Release this task in the other client, then retry.',
+  'terminal.recovery.unavailable':
+    'This terminal is no longer available. Start the agent again to resume the saved conversation.',
+  'terminal.recovery.failed': 'Retry could not be confirmed.',
   'terminalPanel.closePanel': 'Close terminal panel',
   'terminalPanel.closeTab': 'Close {name}',
   'terminalPanel.maximize': 'Maximize terminal panel',
@@ -1501,6 +1519,22 @@ const zhMessages: Record<TranslationKey, string> = {
   'layout.sidebarResizeAria': '调整 Workspace 侧栏宽度',
   'terminal.statusConnecting': '连接中',
   'terminal.statusRunning': '运行中',
+  'terminal.disconnected': '终端连接已断开，重新连接将接回同一个运行会话。',
+  'terminal.reconnect': '重新连接终端',
+  'terminal.recovery.title': '原会话正在被其他客户端占用',
+  'terminal.recovery.description':
+    '另一个 Codex 客户端仍持有这条任务。Hive 已保留原会话和历史；重启 Hive 不会释放对方的占用。',
+  'terminal.recovery.retry': '已释放，重试原会话',
+  'terminal.recovery.retrying': '正在重试原会话…',
+  'terminal.recovery.session': '原会话：',
+  'terminal.recovery.help': '如何释放占用',
+  'terminal.recovery.release':
+    '先停止另一个客户端中这条任务的执行。Codex 桌面端仅离开任务页面可能仍保留占用，可将同一条任务归档后再取消归档，再回到这里重试。归档也可能影响关联子任务，请先确认它们没有运行。也可以在保存其他工作后，完全退出占用会话的客户端。',
+  'terminal.recovery.preserve':
+    '重试仅作用于这个终端，并保留同一段对话。Hive 不会删除锁文件、关闭其他客户端、新建对话或提交提示词。',
+  'terminal.recovery.stillLocked': '仍被占用。请先在另一个客户端释放这条任务，再重试。',
+  'terminal.recovery.unavailable': '此终端已不可用，请重新启动该成员以恢复已保存的会话。',
+  'terminal.recovery.failed': '未能确认重试结果。',
   'terminalPanel.closePanel': '关闭终端面板',
   'terminalPanel.closeTab': '关闭 {name}',
   'terminalPanel.maximize': '最大化终端面板',

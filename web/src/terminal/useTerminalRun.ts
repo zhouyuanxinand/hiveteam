@@ -1,10 +1,14 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { IDecoration, Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type {
+  TerminalSessionRecovery,
+  TerminalSessionRetryStatus,
+} from '../../../src/shared/terminal-recovery.js'
 
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
-import { createTerminalClient } from './terminal-client.js'
+import { createTerminalClient, type TerminalConnectionStatus } from './terminal-client.js'
 import { utf8ByteLength } from './utf8.js'
 import {
   attachAlternateScreenWheelFallback,
@@ -62,6 +66,10 @@ export const useTerminalRun = (
   const containerRef = useRef<HTMLDivElement | null>(null)
   const refreshRef = useRef<(() => void) | null>(null)
   const focusRef = useRef<(() => void) | null>(null)
+  const retryRef = useRef<(() => Promise<TerminalSessionRetryStatus>) | null>(null)
+  const [recovery, setRecovery] = useState<TerminalSessionRecovery | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<TerminalConnectionStatus>('connecting')
+  const [connectionVersion, setConnectionVersion] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'connecting' | 'running' | 'stopped'>('connecting')
 
@@ -71,9 +79,19 @@ export const useTerminalRun = (
   const focus = useCallback(() => {
     focusRef.current?.()
   }, [])
+  const reconnect = useCallback(() => setConnectionVersion((version) => version + 1), [])
+  const retrySession = useCallback(
+    () => retryRef.current?.() ?? Promise.resolve('unavailable' as const),
+    []
+  )
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit reconnect recreates the socket and xterm lifecycle without changing the run.
   useEffect(() => {
     if (!containerRef.current) return
+    setError(null)
+    setRecovery(null)
+    setStatus('connecting')
+    setConnectionStatus('connecting')
 
     let disposed = false
     let onWindowResize: (() => void) | undefined
@@ -360,11 +378,17 @@ export const useTerminalRun = (
           ...getContainerPixels(),
         },
         onError(message) {
-          setError(message)
+          if (!disposed) setError(message)
         },
         onExit() {
           terminalExited = true
-          setStatus('stopped')
+          if (!disposed) setStatus('stopped')
+        },
+        onRecovery(next) {
+          if (!disposed) setRecovery(next)
+        },
+        onConnectionChange(next) {
+          if (!disposed) setConnectionStatus(next)
         },
         onOutput(chunk, acknowledge) {
           nextTerminal.write(highlightUserInputOutput(chunk), () => {
@@ -387,6 +411,7 @@ export const useTerminalRun = (
         },
         runId,
       })
+      retryRef.current = () => client?.retrySession() ?? Promise.resolve('unavailable')
       inputSubscription = nextTerminal.onData((chunk) => {
         if (isComposingRef.current) return
         client?.sendInput(chunk)
@@ -412,6 +437,7 @@ export const useTerminalRun = (
       disposed = true
       refreshRef.current = null
       focusRef.current = null
+      retryRef.current = null
       if (onWindowResize) window.removeEventListener('resize', onWindowResize)
       if (onThemeChange) window.removeEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       resizeObserver?.disconnect()
@@ -441,7 +467,17 @@ export const useTerminalRun = (
       terminal?.dispose()
       fitAddon?.dispose()
     }
-  }, [runId, inputProfile])
+  }, [runId, inputProfile, connectionVersion])
 
-  return { containerRef, error, focus, refresh, status }
+  return {
+    containerRef,
+    error,
+    focus,
+    refresh,
+    status,
+    recovery,
+    retrySession,
+    connectionStatus,
+    reconnect,
+  }
 }

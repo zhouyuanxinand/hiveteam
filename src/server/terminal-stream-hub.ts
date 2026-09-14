@@ -8,6 +8,7 @@ import {
   serializeTerminalExit,
   serializeTerminalRestore,
 } from './terminal-protocol.js'
+import { createTerminalSessionRecovery } from './terminal-session-recovery.js'
 import { type TerminalMirrorSize, TerminalStateMirror } from './terminal-state-mirror.js'
 
 interface ViewerState {
@@ -25,6 +26,7 @@ interface RunState {
   mirror: TerminalStateMirror
   outputUnsubscribe: (() => void) | null
   viewers: Map<string, ViewerState>
+  recovery: ReturnType<typeof createTerminalSessionRecovery> | null
 }
 
 const normalizeTerminalInput = (
@@ -68,6 +70,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     if (!state?.exited || state.viewers.size > 0) return
     state.outputUnsubscribe?.()
     state.exitUnsubscribe?.()
+    state.recovery?.close()
     state.mirror.dispose()
     runStates.delete(runId)
   }
@@ -93,13 +96,26 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         mirror: new TerminalStateMirror(initialSize),
         outputUnsubscribe: null,
         viewers: new Map(),
+        recovery: null,
       }
       runStates.set(runId, state)
       const liveRun = store.getLiveRun(runId)
       if (liveRun.output.length > 0) state.mirror.write(liveRun.output)
       const nextState = state
+      nextState.recovery = createTerminalSessionRecovery({
+        store,
+        runId,
+        mirror: nextState.mirror,
+        broadcast(payload) {
+          for (const viewer of nextState.viewers.values()) {
+            const socket = viewer.controlSocket
+            if (socket && socket.readyState === socket.OPEN) socket.send(payload)
+          }
+        },
+      })
       nextState.outputUnsubscribe = store.getPtyOutputBus().subscribe(runId, (chunk) => {
         nextState.mirror.write(chunk)
+        nextState.recovery?.observe()
         for (const viewer of nextState.viewers.values()) viewer.flowState?.enqueue(chunk)
       })
       nextState.exitUnsubscribe = store.getPtyOutputBus().subscribeExit(runId, () => {
@@ -113,6 +129,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       if (liveRun.status === 'exited' || liveRun.status === 'error') {
         nextState.exited = true
         nextState.exitCode = liveRun.exitCode
+        nextState.recovery.close()
       }
     } else if (initialSize) {
       state.mirror.resize(initialSize.cols, initialSize.rows)
@@ -143,6 +160,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       // code-less exit instead of leaving their terminals spinning.
     }
     state.exited = true
+    state.recovery?.close()
     state.exitCode = exitCode
     state.outputUnsubscribe?.()
     state.outputUnsubscribe = null
@@ -168,11 +186,17 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       }
       void state.mirror
         .getSnapshot()
-        .then((snapshot) => {
+        .then(async (snapshot) => {
           if (socket.readyState === socket.OPEN) socket.send(serializeTerminalRestore(snapshot))
+          await state.recovery?.sendCurrent(socket)
         })
-        .catch(() => {
-          if (socket.readyState === socket.OPEN) socket.send(serializeTerminalRestore(''))
+        .catch((error: unknown) => {
+          if (socket.readyState === socket.OPEN)
+            socket.send(
+              serializeTerminalError(
+                error instanceof Error ? error.message : 'Unable to restore terminal'
+              )
+            )
         })
       socket.on('message', (raw) => {
         try {
@@ -184,6 +208,16 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
           }
           if (message.type === 'stop') store.stopAgentRun(runId)
           if (message.type === 'restore_complete') return
+          if (message.type === 'retry_session') {
+            void state.recovery?.retry(socket, message.request_id).catch((error: unknown) => {
+              if (socket.readyState === socket.OPEN)
+                socket.send(
+                  serializeTerminalError(
+                    error instanceof Error ? error.message : 'Session retry failed'
+                  )
+                )
+            })
+          }
         } catch (error) {
           socket.send(
             serializeTerminalError(
@@ -240,6 +274,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       for (const [runId, state] of runStates) {
         state.outputUnsubscribe?.()
         state.exitUnsubscribe?.()
+        state.recovery?.close()
         state.mirror.dispose()
         for (const viewer of state.viewers.values()) {
           viewer.flowState?.close()

@@ -1,13 +1,21 @@
+import type {
+  TerminalSessionRecovery,
+  TerminalSessionRetryStatus,
+} from '../shared/terminal-recovery.js'
+
 type TerminalControlClientMessage =
   | { type: 'output_ack'; bytes: number }
   | { type: 'resize'; cols: number; rows: number; pixelWidth?: number; pixelHeight?: number }
   | { type: 'restore_complete' }
   | { type: 'stop' }
+  | { type: 'retry_session'; request_id: string }
 
 type TerminalControlServerMessage =
   | { type: 'error'; message: string }
   | { type: 'exit'; code: number | null }
   | { type: 'restore'; snapshot: string }
+  | { type: 'session_recovery'; recovery: TerminalSessionRecovery | null }
+  | { type: 'session_retry'; request_id: string; status: TerminalSessionRetryStatus }
 
 const asInteger = (value: unknown): number | undefined => {
   return typeof value === 'number' && Number.isInteger(value) ? value : undefined
@@ -18,6 +26,13 @@ export const parseTerminalControlMessage = (raw: Buffer | string): TerminalContr
   const { bytes, cols, rows, pixelHeight, pixelWidth } = parsed
   if (parsed.type === 'stop') return { type: 'stop' }
   if (parsed.type === 'restore_complete') return { type: 'restore_complete' }
+  if (
+    parsed.type === 'retry_session' &&
+    typeof parsed.request_id === 'string' &&
+    /^[a-f0-9-]{36}$/i.test(parsed.request_id)
+  ) {
+    return { type: 'retry_session', request_id: parsed.request_id }
+  }
   const ackBytes = asInteger(bytes)
   if (parsed.type === 'output_ack' && ackBytes !== undefined && ackBytes >= 0) {
     return { type: 'output_ack', bytes: ackBytes }

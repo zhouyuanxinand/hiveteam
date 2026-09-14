@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
+import { SessionRecoveryBanner } from './SessionRecoveryBanner.js'
 import { useTerminalRun } from './useTerminalRun.js'
 import type { TerminalWheelInputProfile } from './wheelFallback.js'
 
@@ -238,8 +239,26 @@ export const TerminalView = ({ inputProfile = 'default', runId, title }: Termina
 
 const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: TerminalPtyViewProps) => {
   const { t } = useI18n()
-  const { containerRef, error, focus, refresh, status } = useTerminalRun(runId, inputProfile)
+  const {
+    containerRef,
+    error,
+    focus,
+    refresh,
+    status,
+    recovery,
+    retrySession,
+    connectionStatus,
+    reconnect,
+  } = useTerminalRun(runId, inputProfile)
   const statusKey = STATUS_KEYS[status]
+  const retryOriginalSession = useCallback(async () => {
+    const result = await retrySession()
+    if (result === 'prompt_cleared' || result === 'not_locked') {
+      refresh()
+      focus()
+    }
+    return result
+  }, [focus, refresh, retrySession])
 
   useEffect(() => {
     if (!visible || status !== 'running') return
@@ -278,6 +297,24 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: Termin
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
+      {connectionStatus === 'disconnected' && status !== 'stopped' ? (
+        <div
+          role="status"
+          className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-2)] px-4 py-3 text-sm text-pri"
+        >
+          <p>{t('terminal.disconnected')}</p>
+          <button type="button" className="icon-btn" onClick={reconnect}>
+            {t('terminal.reconnect')}
+          </button>
+        </div>
+      ) : null}
+      {recovery && status !== 'stopped' ? (
+        <SessionRecoveryBanner
+          recovery={recovery}
+          retry={retryOriginalSession}
+          connected={connectionStatus === 'connected'}
+        />
+      ) : null}
       {error ? (
         <p
           role="alert"

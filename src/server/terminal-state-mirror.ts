@@ -99,6 +99,19 @@ export class TerminalStateMirror {
     return this.serializeAddon.serialize() + mouseEncodingSuffix(this.mouseEncoding)
   }
 
+  async getScreenText(): Promise<string> {
+    await this.operationQueue
+    const buffer = this.terminal.buffer.active
+    const lines: string[] = []
+    for (let row = buffer.baseY; row < buffer.baseY + this.terminal.rows; row += 1) {
+      const line = buffer.getLine(row)
+      const text = line?.translateToString(true) ?? ''
+      if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text
+      else lines.push(text)
+    }
+    return lines.join('\n')
+  }
+
   /**
    * Returns the most recent non-empty scrollback line (trimmed, ANSI-stripped,
    * truncated to `maxLen`). Returns `null` when scrollback has no printable

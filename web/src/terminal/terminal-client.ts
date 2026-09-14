@@ -1,7 +1,16 @@
+import type {
+  TerminalSessionRecovery,
+  TerminalSessionRetryStatus,
+} from '../../../src/shared/terminal-recovery.js'
+
 type TerminalControlServerMessage =
   | { type: 'error'; message: string }
   | { type: 'exit'; code: number | null }
   | { type: 'restore'; snapshot: string }
+  | { type: 'session_recovery'; recovery: TerminalSessionRecovery | null }
+  | { type: 'session_retry'; request_id: string; status: TerminalSessionRetryStatus }
+
+export type TerminalConnectionStatus = 'connecting' | 'connected' | 'disconnected'
 
 interface TerminalClientOptions {
   initialSize?: {
@@ -18,6 +27,8 @@ interface TerminalClientOptions {
    * promise lets the renderer wait for xterm's asynchronous write queue.
    */
   onRestore: (snapshot: string) => void | Promise<void>
+  onRecovery?: (recovery: TerminalSessionRecovery | null) => void
+  onConnectionChange?: (status: TerminalConnectionStatus) => void
   runId: string
 }
 
@@ -26,6 +37,7 @@ export interface TerminalClient {
   resize: (cols: number, rows: number, pixelWidth?: number, pixelHeight?: number) => void
   sendBinaryInput: (chunk: string) => void
   sendInput: (chunk: string) => void
+  retrySession: () => Promise<TerminalSessionRetryStatus>
 }
 
 const toWebSocketUrl = (path: string, params: Record<string, number | string | undefined> = {}) => {
@@ -43,6 +55,8 @@ export const createTerminalClient = ({
   onExit,
   onOutput,
   onRestore,
+  onRecovery,
+  onConnectionChange,
   runId,
 }: TerminalClientOptions): TerminalClient => {
   const clientId = crypto.randomUUID()
@@ -54,6 +68,45 @@ export const createTerminalClient = ({
   let disposed = false
   let restored = false
   let restoring = false
+  let exited = false
+  let pendingRetry:
+    | {
+        requestId: string
+        resolve: (status: TerminalSessionRetryStatus) => void
+        reject: (error: Error) => void
+        timer: ReturnType<typeof setTimeout>
+      }
+    | undefined
+  const rejectRetry = (message: string) => {
+    if (!pendingRetry) return
+    clearTimeout(pendingRetry.timer)
+    pendingRetry.reject(new Error(message))
+    pendingRetry = undefined
+  }
+  const updateConnection = () => {
+    if (disposed || exited) return
+    const disconnected = ioSocket.readyState >= 2 || controlSocket.readyState >= 2
+    onConnectionChange?.(
+      disconnected
+        ? 'disconnected'
+        : restored &&
+            ioSocket.readyState === ioSocket.OPEN &&
+            controlSocket.readyState === controlSocket.OPEN
+          ? 'connected'
+          : 'connecting'
+    )
+    if (disconnected) rejectRetry('Terminal connection closed. Reconnect and retry.')
+  }
+  const connectionFailed = () => {
+    if (disposed || exited) return
+    onConnectionChange?.('disconnected')
+    rejectRetry('Terminal connection failed. Reconnect and retry.')
+  }
+  ioSocket.onopen = updateConnection
+  ioSocket.onclose = updateConnection
+  controlSocket.onclose = updateConnection
+  ioSocket.onerror = connectionFailed
+  controlSocket.onerror = connectionFailed
   const pendingOutput: Array<{ chunk: string; acknowledge: (bytes: number) => void }> = []
   let pendingResize: {
     cols: number
@@ -82,11 +135,13 @@ export const createTerminalClient = ({
   }
   controlSocket.onopen = () => {
     sendResize()
+    updateConnection()
   }
   const completeRestore = () => {
     if (disposed) return
     restored = true
     restoring = false
+    updateConnection()
     if (controlSocket.readyState === controlSocket.OPEN) {
       controlSocket.send(JSON.stringify({ type: 'restore_complete' }))
     }
@@ -97,8 +152,23 @@ export const createTerminalClient = ({
 
   controlSocket.onmessage = (event) => {
     const message = JSON.parse(String(event.data)) as TerminalControlServerMessage
-    if (message.type === 'exit') onExit(message.code)
-    if (message.type === 'error') onError(message.message)
+    if (message.type === 'exit') {
+      exited = true
+      rejectRetry('The terminal has stopped.')
+      onRecovery?.(null)
+      onExit(message.code)
+    }
+    if (message.type === 'error') {
+      rejectRetry(message.message)
+      onError(message.message)
+      if (!restored) onConnectionChange?.('disconnected')
+    }
+    if (message.type === 'session_recovery' && !exited) onRecovery?.(message.recovery)
+    if (message.type === 'session_retry' && pendingRetry?.requestId === message.request_id) {
+      clearTimeout(pendingRetry.timer)
+      pendingRetry.resolve(message.status)
+      pendingRetry = undefined
+    }
     if (message.type === 'restore') {
       if (restored || restoring) return
       restoring = true
@@ -124,6 +194,7 @@ export const createTerminalClient = ({
   return {
     dispose() {
       disposed = true
+      rejectRetry('Terminal disconnected.')
       ioSocket.close()
       controlSocket.close()
     },
@@ -144,6 +215,30 @@ export const createTerminalClient = ({
     sendInput(chunk) {
       if (ioSocket.readyState !== ioSocket.OPEN) return
       ioSocket.send(chunk)
+    },
+    retrySession() {
+      if (pendingRetry) return Promise.resolve('retry_pending')
+      if (
+        disposed ||
+        exited ||
+        !restored ||
+        ioSocket.readyState !== ioSocket.OPEN ||
+        controlSocket.readyState !== controlSocket.OPEN
+      ) {
+        return Promise.reject(new Error('Terminal is not connected. Reconnect and retry.'))
+      }
+      return new Promise<TerminalSessionRetryStatus>((resolve, reject) => {
+        const requestId = crypto.randomUUID()
+        const timer = setTimeout(
+          () =>
+            rejectRetry(
+              'No retry response received. Reconnect the terminal to check its current state.'
+            ),
+          8000
+        )
+        pendingRetry = { requestId, resolve, reject, timer }
+        controlSocket.send(JSON.stringify({ type: 'retry_session', request_id: requestId }))
+      })
     },
   }
 }
