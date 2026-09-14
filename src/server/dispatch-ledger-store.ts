@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
 import type { Database, Statement } from 'better-sqlite3'
+import type { DispatchResult, ReportOutcome } from '../shared/dispatch-result.js'
+import { ConflictError } from './http-errors.js'
 
 export type DispatchStatus = 'queued' | 'submitted' | 'failed' | 'reported' | 'cancelled'
 
-export interface DispatchRecord {
+export interface DispatchRecord extends DispatchResult {
   artifacts: string[]
   /**
    * Git HEAD of the workspace captured when the dispatch was created. Serves
@@ -43,6 +45,9 @@ export interface DispatchRecord {
 }
 
 interface DispatchRow {
+  report_outcome: ReportOutcome | null
+  report_revision: number
+  accepted_at: number | null
   artifacts: string | null
   base_head_sha?: string | null
   created_at: number
@@ -77,6 +82,7 @@ interface CreateDispatchInput {
 }
 
 interface ReportDispatchInput {
+  outcome?: ReportOutcome
   artifacts: string[]
   dispatchId?: string
   reportText: string
@@ -110,6 +116,9 @@ const parseArtifacts = (value: string | null) => {
 
 const toRecord = (row: DispatchRow): DispatchRecord => {
   const record: DispatchRecord = {
+    reportOutcome: row.report_outcome ?? null,
+    reportRevision: row.report_revision ?? 0,
+    acceptedAt: row.accepted_at ?? null,
     artifacts: parseArtifacts(row.artifacts),
     baseHeadSha: row.base_head_sha ?? null,
     createdAt: row.created_at,
@@ -223,7 +232,10 @@ export const createDispatchLedgerStore = (db: Database) => {
      SET status = ?,
          reported_at = ?,
          report_text = ?,
-         artifacts = ?
+         artifacts = ?,
+         report_outcome = ?,
+         report_revision = report_revision + 1,
+         accepted_at = NULL
      WHERE id = ?`
   )
   const markCancelledStmt = db.prepare(
@@ -281,6 +293,9 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const createDispatch = (input: CreateDispatchInput) => {
     const record: DispatchRecord = {
+      reportOutcome: null,
+      reportRevision: 0,
+      acceptedAt: null,
       artifacts: [],
       baseHeadSha: input.baseHeadSha ?? null,
       createdAt: Date.now(),
@@ -352,6 +367,8 @@ export const createDispatchLedgerStore = (db: Database) => {
          SET status = 'submitted',
              reported_at = NULL,
              report_text = NULL,
+             report_outcome = NULL,
+             accepted_at = NULL,
              artifacts = '[]'
          WHERE id = ? AND workspace_id = ? AND status = 'reported'`
       )
@@ -404,6 +421,7 @@ export const createDispatchLedgerStore = (db: Database) => {
       reportedAt,
       input.reportText,
       JSON.stringify(input.artifacts),
+      input.outcome ?? null,
       dispatch.id
     )
     deleteFailureStmt.run(dispatch.id)
@@ -413,6 +431,9 @@ export const createDispatchLedgerStore = (db: Database) => {
       artifacts: input.artifacts,
       reportedAt,
       reportText: input.reportText,
+      reportOutcome: input.outcome ?? null,
+      reportRevision: dispatch.reportRevision + 1,
+      acceptedAt: null,
       status: 'reported' as const,
     }
   }
@@ -486,6 +507,24 @@ export const createDispatchLedgerStore = (db: Database) => {
   }
 
   return {
+    acceptReport(workspaceId: string, dispatchId: string, reportRevision: number) {
+      const current = getDispatchById(workspaceId, dispatchId)
+      if (!current) throw new ConflictError('Dispatch not found')
+      const acceptedAt = current.acceptedAt ?? Date.now()
+      const result = db
+        .prepare(
+          `UPDATE dispatches SET accepted_at = COALESCE(accepted_at, ?)
+         WHERE workspace_id = ? AND id = ? AND status = 'reported'
+           AND report_revision = ? AND (report_outcome IS NULL OR report_outcome = 'success')`
+        )
+        .run(acceptedAt, workspaceId, dispatchId, reportRevision)
+      if (result.changes === 0) {
+        throw new ConflictError(
+          'The report changed or has an unresolved outcome. Refresh and review the latest report.'
+        )
+      }
+      return { ...current, acceptedAt }
+    },
     countPendingByWorker,
     createDispatch,
     deleteDispatch,

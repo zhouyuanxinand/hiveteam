@@ -1,3 +1,4 @@
+import { isReportOutcome } from '../shared/dispatch-result.js'
 import { BadRequestError } from './http-errors.js'
 import { readJsonBody, route, sendJson } from './route-helpers.js'
 import type {
@@ -209,7 +210,11 @@ export const teamRoutes: RouteDefinition[] = [
       workspaceId: projectId,
     })
     requireCommandForRole(agent, 'report')
+    if (body.outcome !== undefined && !isReportOutcome(body.outcome)) {
+      throw new BadRequestError('outcome must be success, failed, blocked, or partial')
+    }
     const reportInput = {
+      ...(isReportOutcome(body.outcome) ? { outcome: body.outcome } : {}),
       artifacts: getArtifacts(body.artifacts),
       ...(typeof body.dispatch_id === 'string' ? { dispatchId: body.dispatch_id } : {}),
       requireActiveRun: true,

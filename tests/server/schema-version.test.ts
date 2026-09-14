@@ -220,6 +220,9 @@ describe('schema version', () => {
         'reported_at',
         'report_text',
         'base_head_sha',
+        'report_outcome',
+        'report_revision',
+        'accepted_at',
         'artifacts',
       ])
     )
@@ -329,13 +332,13 @@ describe('schema version', () => {
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
       version: 33,
     })
-    for (const version of [34, 35, 36, 37]) {
+    for (const version of [34, 35, 36, 37, 38]) {
       expect(
         db.prepare('SELECT version FROM schema_version WHERE version = ?').get(version)
       ).toEqual({ version })
     }
     expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
-      version: 37,
+      version: 38,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

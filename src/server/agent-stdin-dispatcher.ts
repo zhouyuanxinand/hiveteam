@@ -1,3 +1,4 @@
+import type { ReportOutcome } from '../shared/dispatch-result.js'
 import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { WorkspaceLanguage } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
@@ -34,13 +35,19 @@ export const buildOrchestratorReportPayload = (
   workerName: string,
   text: string,
   artifacts: string[],
-  language?: WorkspaceLanguage
+  language?: WorkspaceLanguage,
+  outcome?: ReportOutcome
 ): string => {
   const english = language === 'en'
   const lines: string[] = [
     english
       ? `[Hive system message: report from @${sanitizePromptData(workerName, 200)}]`
       : `[Hive 系统消息：来自 @${sanitizePromptData(workerName, 200)} 的汇报]`,
+    ...(outcome
+      ? [
+          `Worker-declared outcome: ${outcome}. This is not independent verification or human acceptance.`,
+        ]
+      : []),
     wrapUntrustedPromptData('report', text),
   ]
   for (const artifact of artifacts) lines.push(`artifact: ${sanitizePromptData(artifact, 1_000)}`)
@@ -102,6 +109,9 @@ export const buildWorkerDispatchPayload = (
     english
       ? `- After completing, failing, blocking, or partially completing the task, run \`team report "<result>" --dispatch ${dispatchId}\``
       : `- 完成、失败、阻塞或部分完成后，执行 \`team report "<result>" --dispatch ${dispatchId}\``,
+    english
+      ? '- Add --outcome success|failed|blocked|partial to declare the result. Include checks performed and remaining risks; success does not imply independent verification.'
+      : '- 使用 --outcome success|failed|blocked|partial 声明结果；正文写明已执行的验证和剩余风险。成功汇报不代表已独立验收。',
     english ? '- Do not do unrelated work; report when done' : '- 不要做无关的事，做完就 report',
     '',
     `dispatch_id: ${dispatchId}`,
@@ -253,7 +263,7 @@ export const createAgentStdinDispatcher = ({
       workerName: string,
       text: string,
       artifacts: string[],
-      input: { requireActiveRun?: boolean } = {}
+      input: { requireActiveRun?: boolean; outcome?: ReportOutcome } = {}
     ) {
       writeToActiveAgentRun(
         workspaceId,
@@ -262,7 +272,8 @@ export const createAgentStdinDispatcher = ({
           workerName,
           text,
           artifacts,
-          getWorkspaceLanguage?.(workspaceId)
+          getWorkspaceLanguage?.(workspaceId),
+          input.outcome
         ),
         input
       )

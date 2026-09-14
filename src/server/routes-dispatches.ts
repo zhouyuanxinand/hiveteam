@@ -1,6 +1,6 @@
 import { serializeDispatchRecord } from './dispatch-ledger-serializer.js'
 import type { DispatchStatus } from './dispatch-ledger-store.js'
-import { ConflictError, HttpError } from './http-errors.js'
+import { BadRequestError, ConflictError, HttpError } from './http-errors.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
@@ -40,6 +40,38 @@ const isDispatchStatus = (value: string): value is DispatchStatus =>
   DISPATCH_STATUSES.has(value as DispatchStatus)
 
 export const dispatchRoutes: RouteDefinition[] = [
+  route(
+    'POST',
+    '/api/ui/workspaces/:workspaceId/dispatches/:dispatchId/accept',
+    async ({ params, request, response, store }) => {
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const workspaceId = getRequiredParam(
+        response,
+        params,
+        'workspaceId',
+        'Workspace id is required'
+      )
+      const dispatchId = getRequiredParam(response, params, 'dispatchId', 'Dispatch id is required')
+      if (!workspaceId || !dispatchId) return
+      if (!store.getDispatch(workspaceId, dispatchId))
+        throw new HttpError(404, 'Dispatch not found')
+      const body = await readJsonBody<{ report_revision?: unknown }>(request)
+      if (
+        typeof body.report_revision !== 'number' ||
+        !Number.isSafeInteger(body.report_revision) ||
+        body.report_revision < 1
+      ) {
+        throw new BadRequestError('report_revision must be a positive integer')
+      }
+      sendJson(
+        response,
+        200,
+        serializeDispatchRecord(
+          store.acceptDispatchReport(workspaceId, dispatchId, body.report_revision)
+        )
+      )
+    }
+  ),
   route(
     'GET',
     '/api/ui/workspaces/:workspaceId/dispatches',

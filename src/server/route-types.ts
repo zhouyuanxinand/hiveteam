@@ -37,6 +37,7 @@ export interface ReadSkillBody {
 }
 
 export interface ReportTaskBody {
+  outcome?: unknown
   dispatch_id?: string
   project_id: string
   from_agent_id: string

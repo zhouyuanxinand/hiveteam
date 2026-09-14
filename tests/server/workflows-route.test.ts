@@ -135,6 +135,7 @@ describe('workspace workflows route', () => {
     server.store.reportTask(workspace.id, builder.id, {
       dispatchId: buildDispatchId,
       text: 'Build completed successfully.',
+      outcome: 'success',
     })
 
     await waitFor(() => {
@@ -156,6 +157,7 @@ describe('workspace workflows route', () => {
     server.store.reportTask(workspace.id, reviewer.id, {
       dispatchId: reviewDispatchId,
       text: 'Review completed with no blockers.',
+      outcome: 'success',
     })
 
     expect(server.store.workflows.get(workspace.id, started.id)).toMatchObject({

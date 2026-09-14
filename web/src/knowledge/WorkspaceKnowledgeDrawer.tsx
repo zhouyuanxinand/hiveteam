@@ -683,6 +683,21 @@ export const WorkspaceKnowledgeDrawer = ({
                               })}
                             </span>
                             {latestRun.error ? <span>{latestRun.error}</span> : null}
+                            {latestRun.steps
+                              .filter(
+                                (step) =>
+                                  step.status === 'blocked' || step.status === 'awaiting_review'
+                              )
+                              .map((step) => (
+                                <span key={step.id}>
+                                  {step.worker}:{' '}
+                                  {t(
+                                    step.status === 'blocked'
+                                      ? 'delivery.step.blocked'
+                                      : 'delivery.step.awaiting_review'
+                                  )}
+                                </span>
+                              ))}
                             {latestRun.status === 'running' ? (
                               <button
                                 type="button"

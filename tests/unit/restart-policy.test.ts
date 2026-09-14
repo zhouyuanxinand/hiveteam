@@ -23,6 +23,10 @@ const snapshot = {
 }
 
 const dispatch = (status: DispatchRecord['status'], text: string): DispatchRecord => ({
+  baseHeadSha: null,
+  reportOutcome: null,
+  reportRevision: 0,
+  acceptedAt: null,
   artifacts: [],
   createdAt: Date.now(),
   deliveredAt: null,

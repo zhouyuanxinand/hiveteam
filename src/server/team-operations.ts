@@ -1,3 +1,4 @@
+import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
 import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
@@ -50,6 +51,7 @@ export interface TeamOperationsInput {
     workspaceId: string
   }) => DispatchRecord | undefined
   markDispatchReportedByWorker: (input: {
+    outcome?: ReportOutcome
     artifacts: string[]
     dispatchId?: string
     reportText: string
@@ -80,6 +82,7 @@ export interface DispatchTaskInput {
 }
 
 export interface ReportTaskInput {
+  outcome?: ReportOutcome
   artifacts?: string[]
   dispatchId?: string
   requireActiveRun?: boolean
@@ -555,6 +558,9 @@ export const createTeamOperations = ({
       }
     },
     reportTask(workspaceId: string, workerId: string, input: ReportTaskInput = {}) {
+      if (input.outcome !== undefined && !isReportOutcome(input.outcome)) {
+        throw new BadRequestError('outcome must be success, failed, blocked, or partial')
+      }
       const text = input.text ?? ''
       const status = input.status
       const artifacts = input.artifacts ?? []
@@ -569,7 +575,13 @@ export const createTeamOperations = ({
       const orchestratorId = `${workspaceId}:orchestrator`
       const shouldQueueForOrchestrator =
         input.requireActiveRun === true && reportOutbox !== undefined
-      const payload = buildOrchestratorReportPayload(worker.name, text, artifacts)
+      const payload = buildOrchestratorReportPayload(
+        worker.name,
+        text,
+        artifacts,
+        undefined,
+        input.outcome
+      )
       let messageHandle: MessageLogHandle | undefined
       let dispatch: DispatchRecord | undefined
       let reportQueuedBeforeCommit = false
@@ -597,6 +609,7 @@ export const createTeamOperations = ({
           }
           const nextDispatch = markDispatchReportedByWorker({
             artifacts,
+            ...(input.outcome ? { outcome: input.outcome } : {}),
             ...(input.dispatchId ? { dispatchId: input.dispatchId } : {}),
             reportText: text,
             toAgentId: workerId,
@@ -647,6 +660,7 @@ export const createTeamOperations = ({
           try {
             agentRuntime.writeReportPrompt(workspaceId, worker.name, workerId, text, artifacts, {
               requireActiveRun: input.requireActiveRun,
+              ...(input.outcome ? { outcome: input.outcome } : {}),
             })
             forwarded = true
           } catch (error) {

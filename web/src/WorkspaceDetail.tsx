@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
+import { WorkspaceDeliveryPanel } from './activity/WorkspaceDeliveryPanel.js'
 import {
   getWorkspaceRecoverySettings,
   isWorkspaceShellRun,
@@ -315,6 +316,7 @@ export const WorkspaceDetail = ({
       style={{ background: 'var(--bg-2)' }}
     >
       <WorkspaceNotifications terminalRuns={terminalRuns} workers={workers} workspace={workspace} />
+      <WorkspaceDeliveryPanel key={workspace.id} workspaceId={workspace.id} workers={workers} />
       <div ref={split.containerRef} className="workspace-pane-split relative flex min-h-0 flex-1">
         <div
           className="orchestrator-pane-shell flex min-w-[480px] shrink-0 flex-col"

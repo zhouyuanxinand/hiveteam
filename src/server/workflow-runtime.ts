@@ -245,6 +245,19 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
         .all(workspaceId, Math.max(1, Math.min(50, Math.floor(limit)))) as WorkflowRunRow[]
     ).map(fromRow)
 
+  const findRunForDispatch = (workspaceId: string, dispatchId: string) => {
+    const row = db
+      .prepare(
+        `SELECT * FROM workflow_runs
+       WHERE workspace_id = ? AND status IN ('running', 'completed')
+         AND EXISTS (SELECT 1 FROM json_each(steps_json) step
+                     WHERE json_extract(step.value, '$.dispatchId') = ?)
+       LIMIT 1`
+      )
+      .get(workspaceId, dispatchId) as WorkflowRunRow | undefined
+    return row ? fromRow(row) : undefined
+  }
+
   const saveRun = (
     run: WorkflowRun,
     patch: { error?: string | null; status?: WorkflowRun['status']; endedAt?: number | null } = {}
@@ -295,7 +308,10 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
     current = get(run.workspaceId, run.id) ?? current
     if (current.status !== 'running') return current
     const nextSteps = current.steps.map((step) =>
-      step.status === 'queued' || step.status === 'running'
+      step.status === 'queued' ||
+      step.status === 'running' ||
+      step.status === 'blocked' ||
+      step.status === 'awaiting_review'
         ? { ...step, status: 'failed' as const, error: message }
         : step
     )
@@ -323,6 +339,7 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       `[Hive Workflow: ${sanitizePromptData(run.name, 100)}]`,
       `Workflow step: ${sanitizePromptData(step.id, 100)}`,
       'Complete only this step and report through the normal Hive team protocol.',
+      'Declare --outcome success|failed|blocked|partial when reporting. Only success or human acceptance can release dependent steps. A success report is not proof that code has been verified.',
       'Task:',
       wrapUntrustedPromptData('workflow', step.task, MAX_TASK_LENGTH),
     ]
@@ -527,8 +544,9 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       }
       const orchestratorId = `${workspaceId}:orchestrator`
       const nextSteps = current.steps.map((step) => {
-        if (step.status !== 'running' && step.status !== 'queued') return step
-        if (step.dispatchId) {
+        if (step.status === 'completed' || step.status === 'failed' || step.status === 'stopped')
+          return step
+        if (step.dispatchId && step.status === 'running') {
           try {
             teamOps.cancelTask(workspaceId, step.dispatchId, {
               fromAgentId: orchestratorId,
@@ -549,23 +567,28 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       return get(workspaceId, runId) ?? next
     },
     recordDispatchReport(workspaceId: string, dispatch: DispatchRecord) {
-      const runs = listRuns(workspaceId, 50)
-      const run = runs.find(
-        (candidate) =>
-          candidate.status === 'running' &&
-          candidate.steps.some((step) => step.dispatchId === dispatch.id)
-      )
-      if (!run || dispatch.status !== 'reported') return false
+      const run = findRunForDispatch(workspaceId, dispatch.id)
+      if (!run || run.status !== 'running' || dispatch.status !== 'reported') return false
       const step = run.steps.find((candidate) => candidate.dispatchId === dispatch.id)
-      if (!step || step.status !== 'running') return false
+      if (!step || !['running', 'blocked', 'awaiting_review'].includes(step.status)) return false
+      const canAdvance = dispatch.reportOutcome === 'success' || dispatch.acceptedAt != null
+      const status = canAdvance
+        ? 'completed'
+        : dispatch.reportOutcome
+          ? 'blocked'
+          : 'awaiting_review'
       const completed = updateStep(run, step.id, {
         artifacts: dispatch.artifacts,
-        error: null,
+        error:
+          status === 'blocked'
+            ? `Worker reported ${dispatch.reportOutcome}. Review the report and send feedback to continue.`
+            : null,
         reportText: dispatch.reportText
           ? sanitizePromptData(dispatch.reportText, MAX_REPORT_LENGTH)
           : '',
-        status: 'completed',
+        status,
       })
+      if (!canAdvance) return true
       if (completed.steps.every((candidate) => candidate.status === 'completed')) {
         saveRun(completed, { status: 'completed', endedAt: Date.now() })
       } else {
@@ -576,6 +599,24 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
         })
       }
       return true
+    },
+    recordDispatchReopened(workspaceId: string, dispatchId: string) {
+      const run = findRunForDispatch(workspaceId, dispatchId)
+      if (!run) return
+      const step = run.steps.find((candidate) => candidate.dispatchId === dispatchId)
+      if (!step) return
+      if (step.status === 'completed') {
+        // Downstream work may already depend on the old report. Invalidate the
+        // run instead of silently preserving its completed result.
+        const active = { ...run, status: 'running' as const }
+        saveRun(active, { status: 'running', endedAt: null })
+        failRun(
+          active,
+          'Feedback reopened a completed step. Start a new workflow run after the revision is ready.'
+        )
+        return
+      }
+      updateStep(run, step.id, { status: 'running', reportText: null, artifacts: [], error: null })
     },
     deleteWorkspace(workspaceId: string) {
       db.prepare('DELETE FROM workflow_runs WHERE workspace_id = ?').run(workspaceId)

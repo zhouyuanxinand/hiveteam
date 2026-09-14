@@ -92,6 +92,11 @@ interface RuntimeStore {
   cancelTask: (workspaceId: string, dispatchId: string, input: CancelTaskInput) => ReportTaskResult
   listDispatches: (workspaceId: string, options?: ListDispatchesOptions) => DispatchRecord[]
   getDispatch: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  acceptDispatchReport: (
+    workspaceId: string,
+    dispatchId: string,
+    reportRevision: number
+  ) => DispatchRecord
   sendDispatchFeedback: (workspaceId: string, dispatchId: string, text: string) => DispatchRecord
   listWorkers: (workspaceId: string) => TeamListItem[]
   getLastPtyLineForAgent: (workspaceId: string, agentId: string) => string | null
@@ -540,7 +545,26 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     statusTask: services.teamOps.statusTask,
     listDispatches: services.dispatchLedgerStore.listWorkspaceDispatches,
     getDispatch: services.dispatchLedgerStore.getDispatchById,
-    sendDispatchFeedback: services.teamOps.sendDispatchFeedback,
+    acceptDispatchReport: (workspaceId, dispatchId, reportRevision) => {
+      const dispatch = services.dispatchLedgerStore.acceptReport(
+        workspaceId,
+        dispatchId,
+        reportRevision
+      )
+      services.workflowRuntime.recordDispatchReport(workspaceId, dispatch)
+      return dispatch
+    },
+    sendDispatchFeedback: (workspaceId, dispatchId, text) => {
+      const previous = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+      try {
+        return services.teamOps.sendDispatchFeedback(workspaceId, dispatchId, text)
+      } finally {
+        const current = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+        if (previous?.status === 'reported' && current && current.status !== 'reported') {
+          services.workflowRuntime.recordDispatchReopened(workspaceId, dispatchId)
+        }
+      }
+    },
     listWorkers: (workspaceId) => {
       // `team list` is the Orchestrator's normal first call after a restart.
       // Use it as the durable report replay trigger.

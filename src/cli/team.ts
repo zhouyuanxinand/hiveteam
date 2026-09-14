@@ -1,12 +1,12 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
 import {
   buildProtocolGuide,
   isProtocolGuideTopic,
   PROTOCOL_GUIDE_TOPICS,
 } from '../server/hive-team-guidance.js'
+import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
 import { fetchLocalRuntime, type LocalHttpResponse } from './local-http.js'
 
 const REQUIRED_ENV_KEYS = [
@@ -36,8 +36,8 @@ const TEAM_USAGE = [
   '  team cancel --dispatch <dispatch-id> "<reason>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed "<body>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed --stdin',
-  '  team report "<result>" [--dispatch <dispatch-id>] [--artifact <path>]',
-  '  team report --stdin [--dispatch <dispatch-id>] [--artifact <path>]',
+  '  team report "<result>" [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
+  '  team report --stdin [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
   '  team status "<current status>" [--artifact <path>]',
   '  team status --stdin [--artifact <path>]',
   '',
@@ -144,7 +144,7 @@ export interface ParsedSendArgs {
 }
 
 const REPORT_USAGE =
-  'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--artifact <path>]'
+  'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]'
 const STATUS_USAGE = 'Usage: team status (<current status> | --stdin) [--artifact <path>]'
 const CANCEL_USAGE = 'Usage: team cancel --dispatch <dispatch-id> <reason>'
 const GUIDE_USAGE = `Usage: team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`
@@ -180,6 +180,7 @@ const readGeneratedProtocolGuide = (topic: string) => {
 }
 
 export interface ParsedReportArgs {
+  outcome?: ReportOutcome
   artifacts: string[]
   dispatchId: string | undefined
   result: string | null
@@ -199,10 +200,26 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
   const artifacts: string[] = []
   let dispatchId: string | undefined
   let useStdin = false
+  let outcome: ReportOutcome | undefined
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === undefined) continue
+
+    if (arg === '--outcome') {
+      if (command !== 'report')
+        throw new Error(withUsage('--outcome is only supported by team report', command))
+      if (outcome !== undefined)
+        throw new Error(withUsage('--outcome may only be specified once', command))
+      const value = args[index + 1]
+      if (!isReportOutcome(value))
+        throw new Error(
+          withUsage('--outcome must be success, failed, blocked, or partial', command)
+        )
+      outcome = value
+      index += 1
+      continue
+    }
 
     // Backward-compatible no-op: reports are interpreted from their text.
     if (arg === '--success' || arg === '--failed') continue
@@ -272,7 +289,13 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
     )
   }
 
-  return { result: useStdin ? null : (positionals[0] ?? null), artifacts, dispatchId, useStdin }
+  return {
+    result: useStdin ? null : (positionals[0] ?? null),
+    artifacts,
+    dispatchId,
+    useStdin,
+    ...(outcome ? { outcome } : {}),
+  }
 }
 
 export const parseCancelArgs = (args: string[]): ParsedCancelArgs => {
@@ -623,6 +646,7 @@ export const runTeamCommand = async (argv: string[]) => {
     const env = getHiveEnv()
     const baseUrl = getBaseUrl(env)
     const response = await postJson(baseUrl, '/api/team/report', {
+      ...(report.outcome ? { outcome: report.outcome } : {}),
       ...(report.dispatchId ? { dispatch_id: report.dispatchId } : {}),
       project_id: env.HIVE_PROJECT_ID,
       from_agent_id: env.HIVE_AGENT_ID,

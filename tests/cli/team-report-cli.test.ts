@@ -202,7 +202,11 @@ describe('team report cli', () => {
     }
   })
 
-  test('team report writes through to orchestrator stdin and records message', async () => {
+  test.each([
+    undefined,
+    'blocked',
+    'success',
+  ])('team report with outcome %s reaches the real runtime and orchestrator', async (outcome) => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-team-report-cli-'))
     const workspacePath = join(dataDir, 'workspace')
     mkdirSync(workspacePath, { recursive: true })
@@ -297,7 +301,18 @@ describe('team report cli', () => {
         HIVE_PORT: String(hive.port),
         HIVE_PROJECT_ID: workspace.id,
       }
-      await runTeamCommand(['report', 'Done via CLI', '--artifact', 'src/auth.ts'])
+      await runTeamCommand([
+        'report',
+        'Done via CLI',
+        '--artifact',
+        'src/auth.ts',
+        ...(outcome ? ['--outcome', outcome] : []),
+      ])
+      expect(hive.store.listDispatches(workspace.id)[0]).toMatchObject({
+        reportOutcome: outcome ?? null,
+        reportRevision: 1,
+        acceptedAt: null,
+      })
 
       await waitFor(async () => {
         const runResponse = await fetch(`${baseUrl}/api/runtime/runs/${run.runId}`, {
@@ -307,7 +322,8 @@ describe('team report cli', () => {
         expect(body.output).toContain('Done via CLI')
         expect(body.output).toContain('src/auth.ts')
         expect(body.output).not.toContain('状态:')
-        expect(body.output).not.toContain('success')
+        if (outcome) expect(body.output).toContain(`Worker-declared outcome: ${outcome}`)
+        else expect(body.output).not.toContain('success')
       })
     } finally {
       delete process.env.HIVE_DATA_DIR

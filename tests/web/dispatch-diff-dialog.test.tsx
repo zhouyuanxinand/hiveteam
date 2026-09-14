@@ -14,6 +14,9 @@ vi.mock('../../web/src/api.js', () => ({
 }))
 
 const dispatch: DispatchSummary = {
+  reportOutcome: null,
+  reportRevision: 0,
+  acceptedAt: null,
   artifacts: [],
   baseHeadSha: 'abc1234def56789000000000000000000000cafe',
   createdAt: 1_700_000_000_000,

@@ -55,7 +55,10 @@ export interface AgentRuntime {
     workerId: string,
     text: string,
     artifacts: string[],
-    input?: { requireActiveRun?: boolean }
+    input?: {
+      requireActiveRun?: boolean
+      outcome?: import('../shared/dispatch-result.js').ReportOutcome
+    }
   ) => void
   writeStatusPrompt: (
     workspaceId: string,

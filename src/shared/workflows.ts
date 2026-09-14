@@ -1,6 +1,14 @@
 export const workflowRunStatuses = ['running', 'completed', 'failed', 'stopped'] as const
 
-export const workflowStepStatuses = ['queued', 'running', 'completed', 'failed', 'stopped'] as const
+export const workflowStepStatuses = [
+  'queued',
+  'running',
+  'awaiting_review',
+  'blocked',
+  'completed',
+  'failed',
+  'stopped',
+] as const
 
 export type WorkflowRunStatus = (typeof workflowRunStatuses)[number]
 export type WorkflowStepStatus = (typeof workflowStepStatuses)[number]

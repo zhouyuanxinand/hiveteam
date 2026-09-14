@@ -1,6 +1,9 @@
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 
 export const serializeDispatchRecord = (record: DispatchRecord) => ({
+  report_outcome: record.reportOutcome,
+  report_revision: record.reportRevision,
+  accepted_at: record.acceptedAt,
   artifacts: record.artifacts,
   base_head_sha: record.baseHeadSha,
   created_at: record.createdAt,

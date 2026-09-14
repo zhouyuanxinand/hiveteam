@@ -24,6 +24,10 @@ const createDispatchRecord = ({
   toAgentId,
   workspaceId,
 }: DispatchFixtureInput): DispatchRecord => ({
+  baseHeadSha: null,
+  reportOutcome: null,
+  reportRevision: 0,
+  acceptedAt: null,
   artifacts: [],
   createdAt: Date.now(),
   deliveredAt: null,

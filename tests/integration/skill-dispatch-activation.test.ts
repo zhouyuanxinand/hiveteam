@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
@@ -137,7 +138,9 @@ describe('dispatch Skill activation', () => {
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
     await waitFor(() => {
       expect(store.getDispatch(workspace.id, dispatch.id)).toMatchObject({ status: 'submitted' })
-      const output = store.getActiveRunByAgentId(workspace.id, worker.id)?.output ?? ''
+      const output = normalizePtyText(
+        store.getActiveRunByAgentId(workspace.id, worker.id)?.output ?? ''
+      )
       expect(output).toContain('V1 PINNED SKILL INSTRUCTIONS')
       expect(output).not.toContain('V2 PINNED SKILL INSTRUCTIONS')
       expect(output).toContain('[Hive control marker removed]')

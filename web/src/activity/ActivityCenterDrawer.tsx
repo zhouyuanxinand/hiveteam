@@ -17,6 +17,7 @@ import { type DispatchSummary, getWorkspaceActivity, type WorkspaceActivityBundl
 import { useI18n } from '../i18n.js'
 
 import { DispatchDiffDialog } from './DispatchDiffDialog.js'
+import { DispatchReport } from './DispatchReport.js'
 
 interface ActivityCenterDrawerProps {
   onClose: () => void
@@ -288,6 +289,11 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
                               {formatAgentId(dispatch.toAgentId, workspaceId, bundle.workers)}
                             </div>
                             <p title={dispatch.text}>{dispatch.text}</p>
+                            <DispatchReport
+                              key={`${dispatch.id}-${dispatch.reportRevision}`}
+                              dispatch={dispatch}
+                              onChanged={() => void load()}
+                            />
                             {dispatch.baseHeadSha ? (
                               <button
                                 type="button"

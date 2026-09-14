@@ -15,6 +15,10 @@ describe('report outbox delivery', () => {
     const workerId = 'worker-1'
     const orchestratorId = `${workspaceId}:orchestrator`
     const dispatch = {
+      baseHeadSha: null,
+      reportOutcome: null,
+      reportRevision: 0,
+      acceptedAt: null,
       artifacts: [],
       createdAt: 1,
       deliveredAt: null,
@@ -110,6 +114,10 @@ describe('report outbox delivery', () => {
     const workerId = 'worker-2'
     const orchestratorId = `${workspaceId}:orchestrator`
     const dispatch = {
+      baseHeadSha: null,
+      reportOutcome: null,
+      reportRevision: 0,
+      acceptedAt: null,
       artifacts: [],
       createdAt: 1,
       deliveredAt: null,

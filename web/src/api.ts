@@ -1,3 +1,4 @@
+import type { DispatchResult, ReportOutcome } from '../../src/shared/dispatch-result.js'
 import type {
   GitCommitPage,
   GitCommitSummary,
@@ -845,7 +846,7 @@ export const listWorkersForWorkspaces = async (
   )
 }
 
-export interface DispatchSummary {
+export interface DispatchSummary extends DispatchResult {
   artifacts: string[]
   attemptCount?: number
   /**
@@ -875,6 +876,9 @@ export interface DispatchSummary {
 }
 
 interface DispatchSummaryPayload {
+  report_outcome?: ReportOutcome | null
+  report_revision?: number
+  accepted_at?: number | null
   artifacts: string[]
   attempt_count?: number
   base_head_sha?: string | null
@@ -900,6 +904,9 @@ interface DispatchSummaryPayload {
 }
 
 const fromDispatchPayload = (payload: DispatchSummaryPayload): DispatchSummary => ({
+  reportOutcome: payload.report_outcome ?? null,
+  reportRevision: payload.report_revision ?? 0,
+  acceptedAt: payload.accepted_at ?? null,
   artifacts: payload.artifacts,
   ...(payload.attempt_count !== undefined ? { attemptCount: payload.attempt_count } : {}),
   baseHeadSha: payload.base_head_sha ?? null,
@@ -996,6 +1003,23 @@ export const sendDispatchFeedback = async (
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, 'Failed to send feedback'))
   }
+  return fromDispatchPayload((await response.json()) as DispatchSummaryPayload)
+}
+
+export const acceptDispatchReport = async (
+  workspaceId: string,
+  dispatchId: string,
+  reportRevision: number
+): Promise<DispatchSummary> => {
+  const response = await apiFetch(
+    `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/dispatches/${encodeURIComponent(dispatchId)}/accept`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ report_revision: reportRevision }),
+    }
+  )
+  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to accept report'))
   return fromDispatchPayload((await response.json()) as DispatchSummaryPayload)
 }
 
@@ -1548,7 +1572,7 @@ export interface WorkflowRunStep {
   id: string
   needs: string[]
   reportText: string | null
-  status: 'completed' | 'failed' | 'queued' | 'running' | 'stopped'
+  status: 'completed' | 'failed' | 'queued' | 'running' | 'stopped' | 'awaiting_review' | 'blocked'
   task: string
   worker: string
 }
