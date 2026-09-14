@@ -253,7 +253,7 @@ describe('Workspace Skill Pack drawer', () => {
     expect(screen.getByText('matt@aaaaaaaaaaaa')).toBeInTheDocument()
   })
 
-  test('opens and focuses the Pack editor when Add Pack is clicked', async () => {
+  test('opens a blank, focused Pack editor when Add Pack is clicked', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => jsonResponse(inspectionPayload))
@@ -274,8 +274,24 @@ describe('Workspace Skill Pack drawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add Pack' }))
 
     const editor = screen.getByRole('region', { name: 'Skill Pack editor' })
+    const packNameInput = within(editor).getByRole('textbox', { name: 'Pack name' })
     expect(screen.queryByRole('button', { name: 'Add Pack' })).not.toBeInTheDocument()
-    expect(within(editor).getByRole('textbox', { name: 'Pack name' })).toHaveFocus()
+    expect(packNameInput).toHaveFocus()
+    expect(packNameInput).toHaveValue('')
+    expect(within(editor).getByRole('textbox', { name: 'Repository' })).toHaveValue('')
+    expect(within(editor).getByRole('textbox', { name: 'Git ref' })).toHaveValue('main')
+    expect(within(editor).getByRole('button', { name: 'Resolve release' })).toBeDisabled()
+
+    fireEvent.change(packNameInput, { target: { value: 'stale-pack' } })
+    fireEvent.change(within(editor).getByRole('textbox', { name: 'Repository' }), {
+      target: { value: 'owner/stale-pack' },
+    })
+    fireEvent.click(within(editor).getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Pack' }))
+
+    const reopenedEditor = screen.getByRole('region', { name: 'Skill Pack editor' })
+    expect(within(reopenedEditor).getByRole('textbox', { name: 'Pack name' })).toHaveValue('')
+    expect(within(reopenedEditor).getByRole('textbox', { name: 'Repository' })).toHaveValue('')
   })
 
   test('resolves, plans, applies, and undoes a shared Skill Pack', async () => {
@@ -331,6 +347,13 @@ describe('Workspace Skill Pack drawer', () => {
 
     await screen.findByText('No Skill Pack is bound to this Workspace')
     fireEvent.click(screen.getByRole('button', { name: 'Add Pack' }))
+    const editor = screen.getByRole('region', { name: 'Skill Pack editor' })
+    fireEvent.change(within(editor).getByRole('textbox', { name: 'Pack name' }), {
+      target: { value: 'matt' },
+    })
+    fireEvent.change(within(editor).getByRole('textbox', { name: 'Repository' }), {
+      target: { value: 'tt-a1i/matt-skills-with-to-goal' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Resolve release' }))
 
     expect(await screen.findByText('Resolved release')).toBeInTheDocument()

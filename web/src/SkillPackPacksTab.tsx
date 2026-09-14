@@ -179,9 +179,11 @@ export const SkillPackPacksTab = ({
             className="skill-action-button skill-action-button--primary"
             onClick={() => {
               setAction('bind')
+              setDraft(createDefaultSkillPackSourceDraft())
               setEditorOpen(true)
               setRelease(null)
               setPlan(null)
+              setError(null)
               setNotice(null)
             }}
           >

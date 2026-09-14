@@ -41,10 +41,10 @@ const recommendedProfiles: Record<SkillProfileName, Set<string>> = {
 const nativeDefaults = new Set(['to-goal', 'to-spec', 'to-tickets'])
 
 export const createDefaultSkillPackSourceDraft = (): SkillPackSourceDraft => ({
-  packName: 'matt',
+  packName: '',
   sourceRef: 'main',
   sourceType: 'github',
-  sourceValue: 'tt-a1i/matt-skills-with-to-goal',
+  sourceValue: '',
 })
 
 export const createEmptySkillPackSelection = (): SkillPackSelection => ({
