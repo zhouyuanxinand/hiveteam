@@ -341,6 +341,23 @@ pnpm dev
 
 开发模式下 runtime 跑在 `127.0.0.1:4010`，Vite 跑在 `127.0.0.1:5180`，把 API 和 WebSocket 代理到 runtime。
 
+### 可选桌面入口
+
+普通浏览器无法读取任意拖入文件夹的系统绝对路径。如需原生文件夹拖放，请安装并启动隔离的 Electron 桌面入口：
+
+```bash
+pnpm desktop:install
+pnpm desktop:dev
+```
+
+把一个文件夹拖到 HiveTeam 窗口任意位置，现有的 Workspace 确认窗口会直接显示其准确路径；中文和空格都会原样保留。浏览器启动方式不受影响。
+
+可用一个已存在的文件夹执行真实桌面拖放验收：
+
+```powershell
+pnpm desktop:acceptance -- "D:\桌面\AI test"
+```
+
 常用命令：
 
 ```bash

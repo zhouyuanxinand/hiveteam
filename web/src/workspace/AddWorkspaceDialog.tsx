@@ -14,6 +14,7 @@ type AddWorkspaceDialogProps = {
    * open a new flow, we should fire the native picker on mount.
    */
   trigger: number
+  droppedProbe?: FsProbeResponse | null
   onClose: () => void
   onCreate: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
 }
@@ -34,7 +35,12 @@ const chooseDefaultCommandPresetId = (presets: CommandPreset[]) =>
       presets[0]?.id ??
       DEFAULT_COMMAND_PRESET_ID)
 
-export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceDialogProps) => {
+export const AddWorkspaceDialog = ({
+  trigger,
+  droppedProbe = null,
+  onClose,
+  onCreate,
+}: AddWorkspaceDialogProps) => {
   const { t } = useI18n()
   // Effect-stable view of `t`: writing to a ref lets the trigger-driven
   // useEffect read the current translator without re-running each render
@@ -67,15 +73,28 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+  const droppedProbeRef = useRef(droppedProbe)
+  useEffect(() => {
+    droppedProbeRef.current = droppedProbe
+  }, [droppedProbe])
 
   useEffect(() => {
     if (trigger === 0) return
     let cancelled = false
     let flowRequest = flowRequestRef.current
     if (!flowRequest || flowRequest.trigger !== trigger) {
+      const probe = droppedProbeRef.current
       flowRequest = {
         commandPresets: listCommandPresets(),
-        pickedFolder: pickFolder(),
+        pickedFolder: probe
+          ? Promise.resolve({
+              canceled: false,
+              error: null,
+              path: probe.path,
+              probe,
+              supported: true,
+            })
+          : pickFolder(),
         trigger,
       }
       flowRequestRef.current = flowRequest
@@ -105,7 +124,11 @@ export const AddWorkspaceDialog = ({ trigger, onClose, onCreate }: AddWorkspaceD
         setCommandPresetId(DEFAULT_COMMAND_PRESET_ID)
         setCommandPresetError(errorMessage)
       })
-    setStage({ kind: 'picking' })
+    setStage(
+      droppedProbeRef.current
+        ? { kind: 'confirm', probe: droppedProbeRef.current, pasteDefault: false }
+        : { kind: 'picking' }
+    )
     flowRequest.pickedFolder
       .then(async (result) => {
         if (cancelled) return

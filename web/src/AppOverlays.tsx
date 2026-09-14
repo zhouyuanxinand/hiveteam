@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 
 import type { TeamListItem } from '../../src/shared/types.js'
+import type { FsProbeResponse } from './api.js'
 import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import type { useTasksFile } from './tasks/useTasksFile.js'
 import { WorkspaceTaskDrawer } from './tasks/WorkspaceTaskDrawer.js'
@@ -39,6 +40,7 @@ const WorkspaceSkillPackDrawer = lazy(() =>
 
 type AppOverlaysProps = {
   addDialogTrigger: number
+  droppedWorkspaceProbe: FsProbeResponse | null
   onAddWorkspace: () => void
   onCloseTaskGraph: () => void
   onCloseWizard: (shouldMarkSeen?: boolean) => void
@@ -67,6 +69,7 @@ type AppOverlaysProps = {
 
 export const AppOverlays = ({
   addDialogTrigger,
+  droppedWorkspaceProbe,
   onAddWorkspace,
   onCloseTaskGraph,
   onCloseWizard,
@@ -132,6 +135,7 @@ export const AppOverlays = ({
     {addDialogTrigger > 0 ? (
       <Suspense fallback={null}>
         <AddWorkspaceDialog
+          droppedProbe={droppedWorkspaceProbe}
           onClose={() => {}}
           onCreate={onCreateWorkspace}
           trigger={addDialogTrigger}

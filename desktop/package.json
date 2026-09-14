@@ -1,0 +1,20 @@
+{
+  "name": "@hiveteam/desktop",
+  "version": "2.1.19",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "postinstall": "install-electron --no",
+    "start": "electron .",
+    "test:acceptance": "node run-acceptance.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.3.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  }
+}

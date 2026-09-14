@@ -67,6 +67,10 @@ export interface CreateWorkspaceBody {
   startup_command?: string | null
 }
 
+export interface DesktopFolderProbeBody {
+  path?: unknown
+}
+
 export interface CreateWorkerBody {
   autostart?: boolean
   avatar?: string | null

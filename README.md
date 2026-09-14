@@ -476,6 +476,26 @@ pnpm dev
 Development mode runs the runtime on `127.0.0.1:4010`; Vite runs on
 `127.0.0.1:5180` and proxies API and WebSocket traffic to the runtime.
 
+### Optional desktop shell
+
+The browser cannot reveal an arbitrary dropped folder's absolute OS path. For
+native folder drag and drop, install and start the isolated Electron shell:
+
+```bash
+pnpm desktop:install
+pnpm desktop:dev
+```
+
+Drop one folder anywhere on the HiveTeam window. The normal Workspace
+confirmation dialog opens with its exact path, including non-ASCII characters
+and spaces. Browser-only startup remains unchanged.
+
+To run the real desktop drag acceptance against a known folder:
+
+```bash
+pnpm desktop:acceptance -- "/absolute/path/with spaces"
+```
+
 Useful checks:
 
 ```bash

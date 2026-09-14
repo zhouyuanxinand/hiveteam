@@ -99,6 +99,35 @@ afterEach(() => {
 })
 
 describe('AddWorkspaceDialog — native folder picker default flow', () => {
+  test('a desktop drop opens confirmation without launching the native picker', async () => {
+    const droppedProbe: FsProbeResponse = {
+      ...sandboxProbe,
+      current_branch: null,
+      is_git_repository: false,
+      path: 'D:\\桌面\\AI test',
+      suggested_name: 'AI test',
+    }
+    const calls = stubFetch(() => ({
+      canceled: true,
+      error: null,
+      path: null,
+      probe: null,
+      supported: true,
+    }))
+
+    render(
+      <AddWorkspaceDialog
+        droppedProbe={droppedProbe}
+        trigger={1}
+        onClose={() => {}}
+        onCreate={() => undefined}
+      />
+    )
+
+    expect(await screen.findByTestId('confirm-workspace-path')).toHaveValue('D:\\桌面\\AI test')
+    expect(calls.filter(({ url }) => url === '/api/fs/pick-folder')).toHaveLength(0)
+  })
+
   test('StrictMode first mount starts exactly one native picker request', async () => {
     const calls = stubFetch(() => ({
       canceled: false,

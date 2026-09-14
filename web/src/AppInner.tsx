@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../src/shared/types.js'
 import { AppOverlays } from './AppOverlays.js'
 import { AppWorkspaceContent } from './AppWorkspaceContent.js'
+import type { FsProbeResponse } from './api.js'
 import { useDemoMode } from './demo/useDemoMode.js'
 import { useDemoReplay } from './demo/useDemoReplay.js'
 import { useEffectiveWorkspaceState } from './demo/useEffectiveWorkspaceState.js'
+import { DesktopFolderDropTarget } from './desktop/DesktopFolderDropTarget.js'
 import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import { MainLayout } from './layout/MainLayout.js'
 import { RuntimeOfflinePage } from './pwa/RuntimeOfflinePage.js'
@@ -37,6 +39,7 @@ export const AppInner = () => {
   const localPollIds = demoMode || !workspaces ? [] : workspaces.map(({ id }) => id)
   const [workersByWorkspaceId, setWorkersByWorkspaceId] = useWorkspaceWorkers(localPollIds)
   const [addDialogTrigger, setAddDialogTrigger] = useState(0)
+  const [droppedWorkspaceProbe, setDroppedWorkspaceProbe] = useState<FsProbeResponse | null>(null)
   const [taskGraphOpen, setTaskGraphOpen] = useState(false)
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab | null>(null)
   const [gitOpen, setGitOpen] = useState(false)
@@ -52,7 +55,27 @@ export const AppInner = () => {
   }, [demoMode])
   const toast = useToast()
   const { wizardOpen, closeWizard } = useFirstRunWizard(workspaces)
-  const triggerAddDialog = useCallback(() => setAddDialogTrigger((v) => v + 1), [])
+  const triggerAddDialog = useCallback(() => {
+    setDroppedWorkspaceProbe(null)
+    setAddDialogTrigger((value) => value + 1)
+  }, [])
+  const handleDroppedWorkspace = useCallback(
+    (probe: FsProbeResponse) => {
+      closeWizard(false)
+      setTaskGraphOpen(false)
+      setKnowledgeTab(null)
+      setGitOpen(false)
+      setActivityOpen(false)
+      setSkillsOpen(false)
+      setDroppedWorkspaceProbe(probe)
+      setAddDialogTrigger((value) => value + 1)
+    },
+    [closeWizard]
+  )
+  const handleDesktopDropError = useCallback(
+    (message: string) => toast.show({ kind: 'error', message }),
+    [toast]
+  )
   const [bootstrapError, setBootstrapError] = useState<string | null>(null)
   const onBootstrapError = useCallback(
     (message: string) => {
@@ -237,6 +260,7 @@ export const AppInner = () => {
         )}
         <AppOverlays
           addDialogTrigger={addDialogTrigger}
+          droppedWorkspaceProbe={droppedWorkspaceProbe}
           wizardOpen={wizardOpen}
           onAddWorkspace={triggerAddDialog}
           onCloseTaskGraph={() => setTaskGraphOpen(false)}
@@ -259,6 +283,7 @@ export const AppInner = () => {
           onSelectOwner={handleSelectOwner}
         />
       </MainLayout>
+      <DesktopFolderDropTarget onError={handleDesktopDropError} onFolder={handleDroppedWorkspace} />
       <UpdateAvailableToast terminalRuns={terms.terminalRuns} />
     </>
   )

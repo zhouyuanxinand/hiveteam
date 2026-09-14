@@ -158,7 +158,10 @@ export const probeDirectory = async (
   options: ProbeDirectoryOptions = {}
 ): Promise<FsProbeResponse> => {
   const rootPath = getFsBrowseRoot()
-  const candidate = resolve(rootPath, requestedPath.trim())
+  const candidate = resolve(
+    rootPath,
+    options.allowOutsideRoot ? requestedPath : requestedPath.trim()
+  )
   const base = {
     current_branch: null,
     documents: [] as WorkspaceDocumentSummary[],

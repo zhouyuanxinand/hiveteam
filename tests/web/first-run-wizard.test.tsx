@@ -14,7 +14,7 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-
+import type { FsProbeResponse } from '../../web/src/api.js'
 import { App } from '../../web/src/app.js'
 import { FirstRunWizard } from '../../web/src/wizard/FirstRunWizard.js'
 import { useFirstRunFlag } from '../../web/src/wizard/useFirstRunFlag.js'
@@ -119,6 +119,7 @@ afterEach(async () => {
   await cleanupServer?.()
   cleanupServer = undefined
   delete process.env.HIVE_FS_BROWSE_ROOT
+  Reflect.deleteProperty(window, 'hiveDesktop')
   for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
 })
 
@@ -142,4 +143,33 @@ test('clicking Skip persists the flag and closes the wizard', async () => {
   fireEvent.click(screen.getByRole('button', { name: /^skip$/i }))
   expect(window.localStorage.getItem('hive.first-run-seen')).toBe('1')
   await waitFor(() => expect(screen.queryByRole('dialog', { name: /welcome to hive/i })).toBeNull())
+})
+
+test('desktop folder drop replaces the first-run wizard with Workspace confirmation', async () => {
+  window.localStorage.clear()
+  const path = join(sandboxRoot, 'placeholder')
+  const probe: FsProbeResponse = {
+    current_branch: null,
+    documents: [],
+    exists: true,
+    is_dir: true,
+    is_git_repository: false,
+    ok: true,
+    path,
+    suggested_name: 'placeholder',
+  }
+  Object.defineProperty(window, 'hiveDesktop', {
+    configurable: true,
+    value: { probeDroppedFolder: vi.fn(async () => ({ ok: true as const, probe })) },
+  })
+  const folder = new File([], 'placeholder')
+  const dataTransfer = { files: [folder], items: [{ kind: 'file' }], types: ['Files'] }
+
+  render(<App />)
+  expect(await screen.findByRole('dialog', { name: /welcome to hive/i })).toBeInTheDocument()
+  fireEvent.dragEnter(window, { dataTransfer })
+  fireEvent.drop(window, { dataTransfer })
+
+  expect(await screen.findByTestId('confirm-workspace-path')).toHaveValue(path)
+  expect(screen.queryByRole('dialog', { name: /welcome to hive/i })).not.toBeInTheDocument()
 })
