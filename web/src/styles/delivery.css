@@ -42,6 +42,26 @@
 .dispatch-report > label { margin-top: 8px; }
 .workspace-delivery button:focus-visible, .workspace-delivery summary:focus-visible, .dispatch-report textarea:focus-visible, .dispatch-report button:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
 .workspace-delivery summary:hover, .workspace-delivery-toggle:hover { color: var(--text-primary); background: var(--bg-2); }
+.dispatch-verification-dialog { pointer-events: auto; display: flex; flex-direction: column; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: hidden; border: 1px solid var(--border-bright); border-radius: 8px; background: var(--bg-elevated); color: var(--text-primary); }
+.dispatch-verification-dialog .dispatch-diff-header { align-items: flex-start; }
+.dispatch-verification-dialog .dispatch-diff-header > div { min-width: 0; }
+.dispatch-verification-dialog .dispatch-diff-header > button { flex-shrink: 0; }
+.dispatch-verification-body { min-height: 0; padding: 16px 20px 20px; font-size: 12px; line-height: 1.6; }
+.dispatch-verification-task { margin: 0 0 16px; overflow-wrap: anywhere; }
+.dispatch-verification-version { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.dispatch-verification-version code { color: var(--text-secondary); }
+.dispatch-verification-body > label { display: block; margin-top: 16px; margin-bottom: 6px; font-weight: 600; }
+.dispatch-verification-body > textarea { width: 100%; padding: 10px; border: 1px solid var(--border-bright); border-radius: 6px; background: var(--bg-2); color: var(--text-primary); font: inherit; resize: vertical; }
+.dispatch-verification-body > textarea::placeholder { color: var(--text-secondary); }
+.dispatch-verification-dialog .icon-btn { min-height: 34px; height: auto; white-space: normal; padding: 6px 10px; gap: 6px; }
+.dispatch-verification-result { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-bright); }
+.dispatch-verification-command { display: block; overflow-wrap: anywhere; margin-bottom: 8px; }
+.dispatch-verification-output { max-height: 260px; overflow: auto; margin: 8px 0 12px; padding: 12px; background: var(--bg-0); color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.65; }
+.dispatch-verification-accepted { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.dispatch-verification-history { margin-top: 20px; border-top: 1px solid var(--border-bright); padding-top: 12px; }
+.dispatch-verification-history summary { cursor: pointer; overflow-wrap: anywhere; padding: 6px 0; }
+.dispatch-verification-history > details { margin-top: 8px; }
+.dispatch-verification-dialog button:focus-visible, .dispatch-verification-dialog textarea:focus-visible, .dispatch-verification-dialog summary:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: 3px; }
 @media (max-width: 640px) {
   .main-layout-body:has(.workspace-delivery) .workspace-sidebar { width: 64px !important; }
   .main-layout-body:has(.workspace-delivery) .workspace-sidebar-resizer { display: none; }

@@ -25,6 +25,7 @@ import { teamRoutes } from './routes-team.js'
 import { teamGoalRoutes } from './routes-team-goals.js'
 import { teamScenarioRoutes } from './routes-team-scenarios.js'
 import { uiRoutes } from './routes-ui.js'
+import { verificationRoutes } from './routes-verifications.js'
 import { versionRoutes } from './routes-version.js'
 import { workflowRoutes } from './routes-workflows.js'
 import { workspaceMemoryRoutes } from './routes-workspace-memory.js'
@@ -38,6 +39,7 @@ const routes: RouteDefinition[] = [
   ...workflowRoutes,
   ...openWorkspaceRoutes,
   ...dispatchRoutes,
+  ...verificationRoutes,
   ...versionRoutes,
   ...uiRoutes,
   ...settingsRoutes,

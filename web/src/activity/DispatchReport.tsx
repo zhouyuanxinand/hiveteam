@@ -1,8 +1,14 @@
-import { Check, Send } from 'lucide-react'
-import { useId, useState } from 'react'
+import { Check, FlaskConical, Send } from 'lucide-react'
+import { lazy, Suspense, useId, useState } from 'react'
 
 import { acceptDispatchReport, type DispatchSummary, sendDispatchFeedback } from '../api.js'
 import { useI18n } from '../i18n.js'
+
+const DispatchVerificationDialog = lazy(() =>
+  import('./DispatchVerificationDialog.js').then((module) => ({
+    default: module.DispatchVerificationDialog,
+  }))
+)
 
 export const DispatchReport = ({
   dispatch,
@@ -16,6 +22,7 @@ export const DispatchReport = ({
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [verificationOpen, setVerificationOpen] = useState(false)
   if (dispatch.state !== 'reported') return null
 
   const canAccept =
@@ -56,6 +63,23 @@ export const DispatchReport = ({
         </ul>
       ) : null}
       <p className="dispatch-report-note">{t('delivery.acceptanceHint')}</p>
+      <button
+        type="button"
+        onClick={() => setVerificationOpen(true)}
+        className="activity-center-diff-button"
+      >
+        <FlaskConical size={14} aria-hidden />
+        {t('verification.open')}
+      </button>
+      {verificationOpen ? (
+        <Suspense fallback={<p>{t('delivery.loading')}</p>}>
+          <DispatchVerificationDialog
+            dispatch={dispatch}
+            onClose={() => setVerificationOpen(false)}
+            onChanged={onChanged}
+          />
+        </Suspense>
+      ) : null}
       {error ? (
         <p className="dispatch-report-error" role="alert">
           {error}

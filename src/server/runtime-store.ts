@@ -49,6 +49,7 @@ import type {
   StatusTaskInput,
 } from './team-operations.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
+import { createVerificationRuntime, type VerificationRuntime } from './verification-runtime.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
 import {
   createWorkspaceSkillManager,
@@ -65,6 +66,7 @@ export interface LocalRetentionDiagnostics {
 }
 
 interface RuntimeStore {
+  verifications: VerificationRuntime
   close: () => Promise<void>
   git: GitWorkspaceService
   createWorkspace: (path: string, name: string, language?: WorkspaceLanguage) => WorkspaceSummary
@@ -204,6 +206,16 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const verifications = createVerificationRuntime({
+    db: services.db,
+    dataDir: services.dataDir,
+    getWorkspacePath: (id) => services.workspaceStore.getWorkspaceSnapshot(id).summary.path,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
+    acceptReport: services.dispatchLedgerStore.acceptReport,
+    onAccepted: (id, dispatch) => {
+      services.workflowRuntime.recordDispatchReport(id, dispatch)
+    },
+  })
   const skillPackResolver = services.skillPackResolver
   const skills = createWorkspaceSkillManager({
     getCommandPresetId: (workspaceId, agentId) => {
@@ -302,6 +314,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       // before that promise settles used to make the failure-recovery write run
       // against a closed database.
       const closeTeamOperations = services.teamOps.close()
+      const closeVerifications = verifications.close()
       // Workspace binding performs Git detection in the background so the API
       // remains fast. Await those processes before closing the database and
       // deleting test/workspace directories; otherwise Windows can keep the
@@ -310,6 +323,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         await Promise.all(Array.from(pendingGitScans))
       }
       await closeTeamOperations
+      await closeVerifications
       await memoryDreamScheduler?.close()
       await lifecycle.close()
     })()
@@ -467,6 +481,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   let remoteTunnel: RemoteTunnel | null = null
   return {
     close,
+    verifications,
     git: services.git,
     createWorkspace: (path, name, language) => {
       const workspace = services.workspaceStore.createWorkspace(path, name, language)
@@ -491,6 +506,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     listWorkspaces: () => services.workspaceStore.listWorkspaces(),
     deleteWorkspace: async (workspaceId) => {
       const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
+      await verifications.deleteWorkspace(workspaceId)
       await lifecycle.deleteWorkspaceShell(workspaceId)
       for (const agent of workspace.agents) {
         const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, agent.id)
@@ -523,6 +539,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     setWorkerAvatar: (workspaceId, workerId, avatar) =>
       services.workspaceStore.setWorkerAvatar(workspaceId, workerId, avatar),
     deleteWorker: (workspaceId, workerId) => {
+      verifications.assertWorkerIdle(workspaceId, workerId)
       const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, workerId)
       if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
       services.agentRuntime.deleteAgentLaunchConfig(workspaceId, workerId)
