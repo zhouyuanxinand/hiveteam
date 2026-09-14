@@ -41,6 +41,7 @@
     "desktop/pnpm-lock.yaml",
     "desktop/preload.cjs",
     "desktop/run-acceptance.mjs",
+    "desktop/service-environment.mjs",
     "CHANGELOG.md",
     "LICENSE",
     "LICENSE.BSL",

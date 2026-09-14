@@ -8,6 +8,8 @@ import { promisify } from 'node:util'
 
 import { BrowserWindow, ipcMain, session } from 'electron'
 
+import { createDesktopServiceEnvironment } from './service-environment.mjs'
+
 const PROBE_DROPPED_FOLDER_CHANNEL = 'hive-desktop:probe-dropped-folder'
 const FOLDER_PROBE_TIMEOUT_MS = 10_000
 const STARTUP_TIMEOUT_MS = 45_000
@@ -177,13 +179,12 @@ const launchLocalServices = async ({ dataDir, randomPorts = false } = {}) => {
   const bridgeToken = randomBytes(32).toString('hex')
   const nodeExecutable =
     process.env.HIVE_NODE_EXECUTABLE?.trim() || process.env.npm_node_execpath?.trim() || 'node'
-  const environment = {
-    ...process.env,
+  const environment = createDesktopServiceEnvironment(process.env, {
     ...(dataDir ? { HIVE_DATA_DIR: dataDir } : {}),
     HIVE_DESKTOP_BRIDGE_TOKEN: bridgeToken,
     HIVE_RUNTIME_PORT: String(runtimePort),
     HIVE_WEB_PORT: String(webPort),
-  }
+  })
   const runtimeProcess = spawnNode(
     nodeExecutable,
     sourceCheckout
