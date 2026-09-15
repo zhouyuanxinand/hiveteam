@@ -126,23 +126,17 @@ pnpm build
 pnpm test --no-file-parallelism --maxWorkers=1 --testTimeout=60000 --hookTimeout=60000
 ```
 
-Final check and production build both passed. The full test run reported 1,084
-passed, 2 failed, and 5 existing skips across 214 files. The failures were a
-preparation error remaining in `preparing` and the first lazy Add Worker dialog
-exceeding the test's interaction wait during cold module compilation.
+Final check and production build both passed. A complete regression run on
+2026-09-15, with all final corrections committed, passed 1,086 tests with zero
+failures and 5 existing skips. Across 214 test files, 212 passed and 2 were skipped.
+The full run completed in 533 seconds.
 
-Preparation now records errors from every post-insert setup step. The UI fixture
-loads the real dialog module in `beforeAll`, retaining the same interaction waits,
-real HTTP calls, and PTY behavior. After both corrections, this fresh-process
-rerun passed all 15 tests, including actual process termination and directory cleanup:
-
-```text
-pnpm exec vitest run tests/server/worker-worktrees.test.ts tests/web/worker-flow.test.tsx --no-file-parallelism --maxWorkers=1 --testTimeout=60000 --hookTimeout=60000
-```
-
-The full suite was not repeated after those final corrections; the complete
-affected files were rerun. The integration panel's two UI tests passed in the
-full run, as did the existing report acceptance and version verification suites.
+This includes all eight isolated-worktree tests, all seven worker-flow tests,
+the integration panel's two UI tests, and the existing report acceptance,
+version verification, native session recovery, and package installation suites.
+Preparation failures persist their error immediately, PTYs terminate before
+directory cleanup, and the real lazy dialog loads during test setup without
+relaxing interaction waits or replacing HTTP/PTY behavior.
 
 The additional whole-repository `pnpm exec tsc --noEmit` check still reports
 the same seven existing test typing errors documented in stages 1 and 2. They
