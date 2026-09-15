@@ -66,6 +66,110 @@ afterEach(async () => {
 })
 
 describe('workspace flow with real server', () => {
+  test.each([
+    'native',
+    'browse',
+  ] as const)('repeated clicks during a slow creation response persist only one workspace (%s)', async (mode) => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New Workspace' }))
+    let confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
+    fireEvent.click(within(confirm).getByTestId('workspace-command-preset'))
+    fireEvent.click(within(confirm).getByTestId(`workspace-command-preset-option-${dummyPresetId}`))
+    if (mode === 'browse') {
+      fireEvent.click(within(confirm).getByTestId('confirm-workspace-browse-toggle'))
+      confirm = await screen.findByTestId('add-workspace-dialog')
+      fireEvent.click(await screen.findByTestId('fs-entry-alpha-project'))
+    }
+
+    const connectedFetch = globalThis.fetch
+    const requests: Promise<Response>[] = []
+    let releaseResponse!: () => void
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve
+    })
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = connectedFetch(input, init)
+      if (String(input) === '/api/workspaces' && init?.method === 'POST') {
+        requests.push(response)
+        return response.then(async (result) => {
+          await responseGate
+          return result
+        })
+      }
+      return response
+    })
+    const create = within(confirm).getByTestId(
+      mode === 'native' ? 'confirm-workspace-create' : 'add-workspace-create'
+    )
+    await waitFor(() => expect(create).toBeEnabled())
+    try {
+      for (let click = 0; click < 4; click += 1) fireEvent.click(create)
+      await Promise.all(requests)
+      expect(serverContext?.store.listWorkspaces()).toHaveLength(1)
+      expect(create).toBeDisabled()
+      expect(create).toHaveTextContent('Creating…')
+      fireEvent.keyDown(confirm, { key: 'Escape' })
+      expect(confirm).toBeInTheDocument()
+    } finally {
+      releaseResponse()
+    }
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId('confirm-workspace-dialog')).toBeNull()
+        expect(screen.queryByTestId('add-workspace-dialog')).toBeNull()
+        expect(
+          screen
+            .getAllByRole('button', { name: 'alpha-project' })
+            .filter((button) => button.classList.contains('ws-row'))
+        ).toHaveLength(1)
+      },
+      { timeout: WORKSPACE_CREATE_TIMEOUT_MS }
+    )
+  }, 45_000)
+
+  test('a rejected creation unlocks the flow so the user can correct the path and retry', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New Workspace' }))
+    const confirm = await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
+    fireEvent.click(within(confirm).getByTestId('workspace-command-preset'))
+    fireEvent.click(within(confirm).getByTestId(`workspace-command-preset-option-${dummyPresetId}`))
+    fireEvent.click(within(confirm).getByTestId('confirm-workspace-paste-toggle'))
+    fireEvent.change(within(confirm).getByTestId('confirm-workspace-paste-path'), {
+      target: { value: join(sandboxRoot, 'missing-project') },
+    })
+    fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
+    const failure = await screen.findByTestId('add-workspace-error')
+    expect(failure).toHaveTextContent('Workspace path does not exist')
+    expect(serverContext?.store.listWorkspaces()).toHaveLength(0)
+    fireEvent.click(within(failure).getByRole('button', { name: 'Paste path instead' }))
+    const retry = await screen.findByTestId('confirm-workspace-dialog')
+    fireEvent.change(within(retry).getByTestId('confirm-workspace-name'), {
+      target: { value: 'Recovered' },
+    })
+    fireEvent.change(within(retry).getByTestId('confirm-workspace-paste-path'), {
+      target: { value: join(sandboxRoot, 'alpha-project') },
+    })
+    const create = within(retry).getByTestId('confirm-workspace-create')
+    expect(create).toBeEnabled()
+    fireEvent.click(create)
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId('confirm-workspace-dialog')).toBeNull()
+        expect(
+          screen
+            .getAllByRole('button', { name: 'Recovered' })
+            .find((button) => button.classList.contains('ws-row'))
+        ).toHaveAttribute('aria-current', 'true')
+      },
+      { timeout: WORKSPACE_CREATE_TIMEOUT_MS }
+    )
+    expect(serverContext?.store.listWorkspaces()).toHaveLength(1)
+  }, 45_000)
+
   test('Add Workspace native-picker flow: compact confirm → create → sidebar + sub-header', async () => {
     render(<App />)
 

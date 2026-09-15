@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { ArrowUp, ChevronDown, ChevronRight, Folder, X } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, Folder, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import type { CommandPreset } from '../api.js'
@@ -12,6 +12,7 @@ import { WorkspaceCommandPresetSelect } from './WorkspaceCommandPresetSelect.js'
 import type { WorkspaceCreateInput } from './workspace-create-input.js'
 
 type ServerBrowseDialogProps = {
+  creating?: boolean
   commandPresetError: string | null
   commandPresetId: string
   commandPresets: CommandPreset[]
@@ -29,6 +30,7 @@ type ServerBrowseDialogProps = {
  * runtime scenarios where no OS dialog is available.
  */
 export const ServerBrowseDialog = ({
+  creating = false,
   commandPresetError,
   commandPresetId,
   commandPresets,
@@ -73,6 +75,7 @@ export const ServerBrowseDialog = ({
       ? t('workspace.preset.notInstalled', { name: selectedPreset.displayName })
       : null
   const canCreate =
+    !creating &&
     name.trim().length > 0 &&
     (probe?.is_dir === true || (advanced && manualPath.trim().length > 0)) &&
     !presetsLoading &&
@@ -80,6 +83,7 @@ export const ServerBrowseDialog = ({
     !selectedPresetUnavailable
 
   const handleCreate = () => {
+    if (!canCreate) return
     const path = advanced && manualPath.trim().length > 0 ? manualPath.trim() : (probe?.path ?? '')
     if (!path) return
     onCreate({
@@ -91,7 +95,7 @@ export const ServerBrowseDialog = ({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+    <Dialog.Root open onOpenChange={(next) => !next && !creating && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay
           data-testid="server-browse-overlay"
@@ -103,6 +107,7 @@ export const ServerBrowseDialog = ({
         {/* containing-block. Mirrors ConfirmWorkspaceDialog. */}
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
           <Dialog.Content
+            aria-busy={creating}
             data-testid="add-workspace-dialog"
             className="dialog-scale-pop elev-2 pointer-events-auto flex w-[760px] max-w-[calc(100vw-32px)] flex-col rounded-lg border"
             style={{
@@ -140,6 +145,7 @@ export const ServerBrowseDialog = ({
               <Dialog.Close asChild>
                 <button
                   type="button"
+                  disabled={creating}
                   aria-label={t('common.closeDialog')}
                   className="flex h-7 w-7 items-center justify-center rounded text-sec hover:bg-3 hover:text-pri"
                 >
@@ -148,132 +154,138 @@ export const ServerBrowseDialog = ({
               </Dialog.Close>
             </div>
 
-            <nav
-              className="flex shrink-0 items-center gap-1 border-b px-4 py-2 text-xs"
-              style={{ borderColor: 'var(--border)' }}
-              aria-label={t('workspace.browse.breadcrumb')}
-              data-testid="fs-breadcrumb"
-            >
-              <button
-                type="button"
-                onClick={() => (browse.parent_path ? navigate(browse.parent_path) : null)}
-                disabled={!browse.parent_path}
-                aria-label={t('workspace.browse.parentAria')}
-                className="flex items-center gap-1 rounded px-2 py-0.5 text-sec hover:bg-3 hover:text-pri disabled:opacity-40"
-              >
-                <ArrowUp size={12} aria-hidden /> {t('workspace.browse.up')}
-              </button>
-              <div className="mx-2 h-4 w-px" style={{ background: 'var(--border)' }} />
-              {breadcrumbs.map((segment, index) => {
-                const isLast = index === breadcrumbs.length - 1
-                return (
-                  <span key={segment.path} className="flex items-center gap-0.5">
-                    {index > 0 ? <span className="text-ter">/</span> : null}
-                    {isLast ? (
-                      <span className="px-1 py-0.5 font-medium text-pri">{segment.label}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => navigate(segment.path)}
-                        className="rounded px-1 py-0.5 text-sec hover:bg-3 hover:text-pri"
-                      >
-                        {segment.label}
-                      </button>
-                    )}
-                  </span>
-                )
-              })}
-            </nav>
-
-            <div className="flex min-h-0 flex-1">
-              <div className="flex min-h-0 flex-1 flex-col">
-                <FsEntryList
-                  entries={browse.entries}
-                  error={browse.ok ? null : browse.error}
-                  loading={loading}
-                  onNavigate={navigate}
-                  onSelect={selectEntry}
-                  selected={selected}
-                />
-              </div>
-              <div
-                className="flex w-[280px] shrink-0 flex-col gap-3 border-l p-4"
+            <fieldset disabled={creating} className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <nav
+                className="flex shrink-0 items-center gap-1 border-b px-4 py-2 text-xs"
                 style={{ borderColor: 'var(--border)' }}
+                aria-label={t('workspace.browse.breadcrumb')}
+                data-testid="fs-breadcrumb"
               >
-                <FsSelectionPreview
-                  onSuggestedNameChange={setName}
-                  probe={probe}
-                  suggestedName={name}
-                />
-                <WorkspaceCommandPresetSelect
-                  error={commandPresetError ?? presetAvailabilityError}
-                  onChange={onCommandPresetChange}
-                  onStartupCommandChange={setStartupCommand}
-                  presets={commandPresets}
-                  startupCommand={startupCommand}
-                  value={commandPresetId}
-                />
                 <button
                   type="button"
-                  onClick={() => setStartupExpanded((v) => !v)}
-                  className="flex items-center gap-1.5 text-left text-xs uppercase tracking-wider text-ter hover:text-sec"
+                  onClick={() => (browse.parent_path ? navigate(browse.parent_path) : null)}
+                  disabled={!browse.parent_path}
+                  aria-label={t('workspace.browse.parentAria')}
+                  className="flex items-center gap-1 rounded px-2 py-0.5 text-sec hover:bg-3 hover:text-pri disabled:opacity-40"
                 >
-                  {startupExpanded ? (
-                    <ChevronDown size={12} aria-hidden />
-                  ) : (
-                    <ChevronRight size={12} aria-hidden />
-                  )}
-                  {t('workspace.advanced.startup')}
+                  <ArrowUp size={12} aria-hidden /> {t('workspace.browse.up')}
                 </button>
-                {startupExpanded ? (
-                  <label className="flex flex-col gap-2 text-xs uppercase tracking-wider text-ter">
-                    {t('workspace.field.startup')}
-                    <input
-                      type="text"
-                      value={startupCommand}
-                      onChange={(event) => setStartupCommand(event.target.value)}
-                      placeholder={t('workspace.field.startupPlaceholder')}
-                      className="input mono"
-                      data-testid="fs-startup-command"
-                    />
-                    <span className="text-xs normal-case tracking-normal text-ter">
-                      {t('workspace.startup.hintShort')}
+                <div className="mx-2 h-4 w-px" style={{ background: 'var(--border)' }} />
+                {breadcrumbs.map((segment, index) => {
+                  const isLast = index === breadcrumbs.length - 1
+                  return (
+                    <span key={segment.path} className="flex items-center gap-0.5">
+                      {index > 0 ? <span className="text-ter">/</span> : null}
+                      {isLast ? (
+                        <span className="px-1 py-0.5 font-medium text-pri">{segment.label}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => navigate(segment.path)}
+                          className="rounded px-1 py-0.5 text-sec hover:bg-3 hover:text-pri"
+                        >
+                          {segment.label}
+                        </button>
+                      )}
                     </span>
-                  </label>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setAdvanced((v) => !v)}
-                  className="flex items-center gap-1.5 text-left text-xs uppercase tracking-wider text-ter hover:text-sec"
-                >
-                  {advanced ? (
-                    <ChevronDown size={12} aria-hidden />
-                  ) : (
-                    <ChevronRight size={12} aria-hidden />
-                  )}
-                  {t('workspace.advanced.pastePath')}
-                </button>
-                {advanced ? (
-                  <label className="flex flex-col gap-2 text-xs uppercase tracking-wider text-ter">
-                    {t('workspace.field.absolutePath')}
-                    <input
-                      type="text"
-                      value={manualPath}
-                      onChange={(event) => setManualPath(event.target.value)}
-                      placeholder={t('workspace.field.absolutePathPlaceholder')}
-                      className="input mono"
-                      data-testid="fs-manual-path"
-                    />
-                  </label>
-                ) : null}
-              </div>
-            </div>
+                  )
+                })}
+              </nav>
 
+              <div className="flex min-h-0 flex-1">
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <FsEntryList
+                    entries={browse.entries}
+                    error={browse.ok ? null : browse.error}
+                    loading={loading}
+                    onNavigate={navigate}
+                    onSelect={selectEntry}
+                    selected={selected}
+                  />
+                </div>
+                <div
+                  className="flex w-[280px] shrink-0 flex-col gap-3 border-l p-4"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <FsSelectionPreview
+                    onSuggestedNameChange={setName}
+                    probe={probe}
+                    suggestedName={name}
+                  />
+                  <WorkspaceCommandPresetSelect
+                    error={commandPresetError ?? presetAvailabilityError}
+                    onChange={onCommandPresetChange}
+                    onStartupCommandChange={setStartupCommand}
+                    presets={commandPresets}
+                    startupCommand={startupCommand}
+                    value={commandPresetId}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setStartupExpanded((v) => !v)}
+                    className="flex items-center gap-1.5 text-left text-xs uppercase tracking-wider text-ter hover:text-sec"
+                  >
+                    {startupExpanded ? (
+                      <ChevronDown size={12} aria-hidden />
+                    ) : (
+                      <ChevronRight size={12} aria-hidden />
+                    )}
+                    {t('workspace.advanced.startup')}
+                  </button>
+                  {startupExpanded ? (
+                    <label className="flex flex-col gap-2 text-xs uppercase tracking-wider text-ter">
+                      {t('workspace.field.startup')}
+                      <input
+                        type="text"
+                        value={startupCommand}
+                        onChange={(event) => setStartupCommand(event.target.value)}
+                        placeholder={t('workspace.field.startupPlaceholder')}
+                        className="input mono"
+                        data-testid="fs-startup-command"
+                      />
+                      <span className="text-xs normal-case tracking-normal text-ter">
+                        {t('workspace.startup.hintShort')}
+                      </span>
+                    </label>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setAdvanced((v) => !v)}
+                    className="flex items-center gap-1.5 text-left text-xs uppercase tracking-wider text-ter hover:text-sec"
+                  >
+                    {advanced ? (
+                      <ChevronDown size={12} aria-hidden />
+                    ) : (
+                      <ChevronRight size={12} aria-hidden />
+                    )}
+                    {t('workspace.advanced.pastePath')}
+                  </button>
+                  {advanced ? (
+                    <label className="flex flex-col gap-2 text-xs uppercase tracking-wider text-ter">
+                      {t('workspace.field.absolutePath')}
+                      <input
+                        type="text"
+                        value={manualPath}
+                        onChange={(event) => setManualPath(event.target.value)}
+                        placeholder={t('workspace.field.absolutePathPlaceholder')}
+                        className="input mono"
+                        data-testid="fs-manual-path"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+            </fieldset>
             <div
               className="flex shrink-0 items-center justify-end gap-2 border-t px-5 py-3"
               style={{ borderColor: 'var(--border)' }}
             >
-              <button type="button" onClick={onClose} className="icon-btn">
+              {creating ? (
+                <span role="status" className="mr-auto text-xs text-ter">
+                  {t('workspace.confirm.preparing')}
+                </span>
+              ) : null}
+              <button type="button" onClick={onClose} disabled={creating} className="icon-btn">
                 {t('common.cancel')}
               </button>
               <button
@@ -283,7 +295,8 @@ export const ServerBrowseDialog = ({
                 data-testid="add-workspace-create"
                 className="icon-btn icon-btn--primary"
               >
-                {t('workspace.confirm.create')}
+                {creating ? <LoaderCircle size={14} aria-hidden className="animate-spin" /> : null}
+                {t(creating ? 'workspace.confirm.creating' : 'workspace.confirm.create')}
               </button>
             </div>
           </Dialog.Content>

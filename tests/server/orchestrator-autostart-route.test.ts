@@ -99,6 +99,61 @@ beforeEach(() => {
 })
 
 describe('POST /api/workspaces autostart_orchestrator', () => {
+  test('coalesces identical creation requests while the orchestrator is starting', async () => {
+    const { store, baseUrl } = await startServer()
+    const cookie = await getUiCookie(baseUrl)
+    const path = makeWorkspacePath('concurrent')
+    const responses = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        fetch(`${baseUrl}/api/workspaces`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ path, name: 'Concurrent' }),
+        })
+      )
+    )
+    const results = await Promise.all(responses.map((response) => response.json()))
+    expect(responses.map((response) => response.status)).toEqual([201, 201, 201, 201])
+    expect(store.listWorkspaces()).toHaveLength(1)
+    expect(results).toEqual(Array.from({ length: 4 }, () => results[0]))
+    const workspace = store.listWorkspaces()[0]
+    if (!workspace) throw new Error('Expected created workspace')
+    expect(store.listTerminalRuns(workspace.id)).toHaveLength(1)
+    expect(results[0].orchestrator_start).toMatchObject({ ok: true, error: null })
+    await store.deleteWorkspace(workspace.id)
+    const recreated = await fetch(`${baseUrl}/api/workspaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ path, name: 'Concurrent' }),
+    })
+    expect(recreated.status).toBe(201)
+    expect((await recreated.json()).id).not.toBe(workspace.id)
+    expect(store.listWorkspaces()).toHaveLength(1)
+  }, 30_000)
+
+  test('keeps distinct creation requests separate while starting orchestrators', async () => {
+    const { store, baseUrl } = await startServer()
+    const cookie = await getUiCookie(baseUrl)
+    const path = makeWorkspacePath('distinct')
+    const responses = await Promise.all(
+      ['First', 'Second'].map((name) =>
+        fetch(`${baseUrl}/api/workspaces`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie },
+          body: JSON.stringify({ path, name }),
+        })
+      )
+    )
+    const results = await Promise.all(responses.map((response) => response.json()))
+    expect(responses.map((response) => response.status)).toEqual([201, 201])
+    expect(results.map((result) => result.name)).toEqual(['First', 'Second'])
+    expect(new Set(results.map((result) => result.id)).size).toBe(2)
+    expect(store.listWorkspaces()).toHaveLength(2)
+    for (const workspace of store.listWorkspaces()) {
+      expect(store.listTerminalRuns(workspace.id)).toHaveLength(1)
+    }
+  }, 30_000)
+
   test('rejects missing workspace paths before creating a workspace', async () => {
     const { store, baseUrl } = await startServer()
     const cookie = await getUiCookie(baseUrl)

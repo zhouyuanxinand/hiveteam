@@ -1,13 +1,12 @@
 import type { IncomingMessage } from 'node:http'
 
-import { isWorkspaceLanguage } from '../shared/types.js'
 import { normalizeWorkerAvatar } from '../shared/worker-avatar.js'
 import {
   resolveCommandPresetLaunchConfig,
   resolveStartupCommandLaunchConfig,
 } from './agent-launch-resolver.js'
 import { BadRequestError } from './http-errors.js'
-import { autostartAgent, autostartOrchestrator } from './orchestrator-autostart.js'
+import { autostartAgent } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type {
@@ -22,7 +21,7 @@ import { enrichTeamList } from './team-list-enrichment.js'
 import { serializeTeamListItem } from './team-list-serializer.js'
 import { TeamSkillRuntimeError } from './team-skill-runtime.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
-import { validateWorkspacePath } from './workspace-path-validation.js'
+import { createWorkspaceWithOrchestrator } from './workspace-creation.js'
 import { getOrchestratorId } from './workspace-store-support.js'
 
 const readWorkerAvatar = (value: unknown) => {
@@ -94,37 +93,8 @@ export const workspaceRoutes: RouteDefinition[] = [
   route('POST', '/api/workspaces', async ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     const body = await readJsonBody<CreateWorkspaceBody>(request)
-    const startupCommand = typeof body.startup_command === 'string' ? body.startup_command : null
-    const workspacePath = validateWorkspacePath(body.path)
-    const language = isWorkspaceLanguage(body.language) ? body.language : 'zh'
-    const workspace = store.createWorkspace(workspacePath, body.name, language)
-    seedOrchestratorLaunchConfig(
-      store,
-      store.settings,
-      workspace.id,
-      body.command_preset_id ?? null,
-      startupCommand
-    )
-
-    const autostart = body.autostart_orchestrator !== false
-    if (!autostart) {
-      sendJson(response, 201, {
-        ...workspace,
-        orchestrator_start: { ok: false, error: null, run_id: null },
-      })
-      return
-    }
-
-    // Spawn failure must NOT block workspace creation — see AGENTS.md §1
-    // (no try/catch fallbacks in production code, but `autostartOrchestrator`
-    // captures the failure as a structured result instead of throwing).
-    const orchestratorStart = await autostartOrchestrator(
-      store,
-      workspace.id,
-      getOrchestratorId(workspace.id),
-      getRuntimePort(request)
-    )
-    sendJson(response, 201, { ...workspace, orchestrator_start: orchestratorStart })
+    const workspace = await createWorkspaceWithOrchestrator(store, body, getRuntimePort(request))
+    sendJson(response, 201, workspace)
   }),
   route('DELETE', '/api/workspaces/:workspaceId', async ({ params, request, response, store }) => {
     const workspaceId = getRequiredParam(

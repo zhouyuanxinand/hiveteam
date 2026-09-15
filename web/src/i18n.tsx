@@ -789,6 +789,8 @@ const enMessages = {
   'workspace.browse.title': 'Browse server filesystem',
   'workspace.browse.up': 'up',
   'workspace.confirm.create': 'Create Workspace',
+  'workspace.confirm.creating': 'Creating…',
+  'workspace.confirm.preparing': 'Preparing workspace, please wait.',
   'workspace.confirm.description':
     'HiveTeam will load .hive/tasks.md and start the Orchestrator here.',
   'workspace.confirm.title': 'Add Workspace',
@@ -1633,6 +1635,8 @@ const zhMessages: Record<TranslationKey, string> = {
   'workspace.browse.title': '浏览服务器文件系统',
   'workspace.browse.up': '上级',
   'workspace.confirm.create': '创建 Workspace',
+  'workspace.confirm.creating': '创建中…',
+  'workspace.confirm.preparing': '正在准备工作区，请稍候。',
   'workspace.confirm.description': 'HiveTeam 会在此加载 .hive/tasks.md 并启动 Orchestrator。',
   'workspace.confirm.title': '添加 Workspace',
   'workspace.error.createFailed': '创建 Workspace 失败',

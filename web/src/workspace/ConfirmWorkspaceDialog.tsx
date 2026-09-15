@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { ChevronDown, ChevronRight, FileText, Folder, GitBranch } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder, GitBranch, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import type { CommandPreset, FsProbeResponse } from '../api.js'
@@ -8,6 +8,7 @@ import { WorkspaceCommandPresetSelect } from './WorkspaceCommandPresetSelect.js'
 import type { WorkspaceCreateInput } from './workspace-create-input.js'
 
 type ConfirmWorkspaceDialogProps = {
+  creating?: boolean
   /** Probe result for the picked folder, or null when user chose the paste-path fallback. */
   probe: FsProbeResponse | null
   /** When true, the paste-path fallback section is expanded by default (unsupported platform). */
@@ -28,6 +29,7 @@ const FieldLabel = ({ children }: { children: React.ReactNode }) => (
 )
 
 export const ConfirmWorkspaceDialog = ({
+  creating = false,
   probe,
   pasteFallbackDefault = false,
   commandPresetError,
@@ -65,6 +67,7 @@ export const ConfirmWorkspaceDialog = ({
       ? t('workspace.preset.notInstalled', { name: selectedPreset.displayName })
       : null
   const canCreate =
+    !creating &&
     name.trim().length > 0 &&
     resolvedPath.length > 0 &&
     !presetsLoading &&
@@ -82,7 +85,7 @@ export const ConfirmWorkspaceDialog = ({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onCancel()}>
+    <Dialog.Root open onOpenChange={(open) => !open && !creating && onCancel()}>
       <Dialog.Portal>
         <Dialog.Overlay
           data-testid="confirm-workspace-overlay"
@@ -90,6 +93,7 @@ export const ConfirmWorkspaceDialog = ({
         />
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
           <Dialog.Content
+            aria-busy={creating}
             data-testid="confirm-workspace-dialog"
             className="dialog-scale-pop elev-2 pointer-events-auto flex w-[480px] max-w-full flex-col rounded-lg border"
             style={{
@@ -120,7 +124,7 @@ export const ConfirmWorkspaceDialog = ({
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 px-5 py-4">
+            <fieldset disabled={creating} className="flex min-w-0 flex-col gap-4 px-5 py-4">
               <label className="flex flex-col gap-2">
                 <FieldLabel>{t('workspace.field.path')}</FieldLabel>
                 <input
@@ -273,13 +277,18 @@ export const ConfirmWorkspaceDialog = ({
                 <ChevronRight size={12} aria-hidden />
                 {t('workspace.advanced.browse')}
               </button>
-            </div>
+            </fieldset>
 
             <div
               className="flex items-center justify-end gap-2 border-t px-5 py-3"
               style={{ borderColor: 'var(--border)' }}
             >
-              <button type="button" onClick={onCancel} className="icon-btn">
+              {creating ? (
+                <span role="status" className="mr-auto text-xs text-ter">
+                  {t('workspace.confirm.preparing')}
+                </span>
+              ) : null}
+              <button type="button" onClick={onCancel} disabled={creating} className="icon-btn">
                 {t('common.cancel')}
               </button>
               <button
@@ -289,7 +298,8 @@ export const ConfirmWorkspaceDialog = ({
                 data-testid="confirm-workspace-create"
                 className="icon-btn icon-btn--primary"
               >
-                {t('workspace.confirm.create')}
+                {creating ? <LoaderCircle size={14} aria-hidden className="animate-spin" /> : null}
+                {t(creating ? 'workspace.confirm.creating' : 'workspace.confirm.create')}
               </button>
             </div>
           </Dialog.Content>

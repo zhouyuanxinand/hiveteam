@@ -50,6 +50,8 @@ export const AddWorkspaceDialog = ({
     tRef.current = t
   }, [t])
   const [stage, setStage] = useState<Stage>({ kind: 'idle' })
+  const [creating, setCreating] = useState(false)
+  const creatingRef = useRef(false)
   const [commandPresets, setCommandPresets] = useState<CommandPreset[]>([])
   const [commandPresetId, setCommandPresetId] = useState(DEFAULT_COMMAND_PRESET_ID)
   const [commandPresetError, setCommandPresetError] = useState<string | null>(null)
@@ -79,7 +81,7 @@ export const AddWorkspaceDialog = ({
   }, [droppedProbe])
 
   useEffect(() => {
-    if (trigger === 0) return
+    if (trigger === 0 || creatingRef.current) return
     let cancelled = false
     let flowRequest = flowRequestRef.current
     if (!flowRequest || flowRequest.trigger !== trigger) {
@@ -170,17 +172,26 @@ export const AddWorkspaceDialog = ({
   }, [trigger])
 
   const handleCancel = () => {
+    if (creatingRef.current) return
     setStage({ kind: 'idle' })
     onClose()
   }
 
-  const handleCreate = (input: WorkspaceCreateInput) => {
-    void Promise.resolve(onCreate(input))
-      .then(() => setStage({ kind: 'idle' }))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : t('workspace.error.createFailed')
-        setStage({ kind: 'error', title: t('workspace.error.createTitle'), message })
-      })
+  const handleCreate = async (input: WorkspaceCreateInput) => {
+    // Lock synchronously: several clicks can arrive before React renders disabled controls.
+    if (creatingRef.current) return
+    creatingRef.current = true
+    setCreating(true)
+    try {
+      await onCreate(input)
+      setStage({ kind: 'idle' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('workspace.error.createFailed')
+      setStage({ kind: 'error', title: t('workspace.error.createTitle'), message })
+    } finally {
+      creatingRef.current = false
+      setCreating(false)
+    }
   }
 
   const handleCommandPresetChange = (value: string) => {
@@ -293,6 +304,7 @@ export const AddWorkspaceDialog = ({
   if (stage.kind === 'browse') {
     return (
       <ServerBrowseDialog
+        creating={creating}
         commandPresetError={renderedCommandPresetError}
         commandPresetId={renderedCommandPresetId}
         commandPresets={renderedCommandPresets}
@@ -305,6 +317,7 @@ export const AddWorkspaceDialog = ({
   }
   return (
     <ConfirmWorkspaceDialog
+      creating={creating}
       commandPresetError={renderedCommandPresetError}
       commandPresetId={renderedCommandPresetId}
       commandPresets={renderedCommandPresets}
