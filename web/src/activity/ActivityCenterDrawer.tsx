@@ -15,14 +15,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { type DispatchSummary, getWorkspaceActivity, type WorkspaceActivityBundle } from '../api.js'
 import { useI18n } from '../i18n.js'
-
+import { DeliveryQueuePanel } from './DeliveryQueuePanel.js'
 import { DispatchDiffDialog } from './DispatchDiffDialog.js'
 import { DispatchReport } from './DispatchReport.js'
+import { WorktreeResourcesPanel } from './WorktreeResourcesPanel.js'
 
 interface ActivityCenterDrawerProps {
   onClose: () => void
   open: boolean
   workspaceId: string
+  onSelectWorkspace?: (id: string) => void
 }
 
 const isOpenDispatch = (dispatch: DispatchSummary) =>
@@ -81,13 +83,21 @@ const messagePresentation = (type: string) => {
   }
 }
 
-export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCenterDrawerProps) => {
+export const ActivityCenterDrawer = ({
+  onClose,
+  open,
+  workspaceId,
+  onSelectWorkspace,
+}: ActivityCenterDrawerProps) => {
   const { language, t } = useI18n()
   const [bundle, setBundle] = useState<WorkspaceActivityBundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'report' | 'diagnostics' | null>(null)
   const [reviewDispatchId, setReviewDispatchId] = useState<string | null>(null)
+  const [surface, setSurface] = useState<'workspace' | 'queue' | 'resources'>(
+    workspaceId ? 'workspace' : 'queue'
+  )
 
   const dateFormatter = useMemo(
     () =>
@@ -99,6 +109,7 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
   )
 
   const load = useCallback(async () => {
+    if (!workspaceId) return
     setLoading(true)
     setError(null)
     try {
@@ -177,20 +188,22 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="activity-center-icon-button"
-                  onClick={() => void load()}
-                  disabled={loading}
-                  aria-label={t('activity.refresh')}
-                  title={t('activity.refresh')}
-                >
-                  <RefreshCw
-                    size={15}
-                    className={loading ? 'animate-spin' : undefined}
-                    aria-hidden
-                  />
-                </button>
+                {surface === 'workspace' ? (
+                  <button
+                    type="button"
+                    className="activity-center-icon-button"
+                    onClick={() => void load()}
+                    disabled={loading}
+                    aria-label={t('activity.refresh')}
+                    title={t('activity.refresh')}
+                  >
+                    <RefreshCw
+                      size={15}
+                      className={loading ? 'animate-spin' : undefined}
+                      aria-hidden
+                    />
+                  </button>
+                ) : null}
                 <Dialog.Close asChild>
                   <button
                     type="button"
@@ -203,37 +216,79 @@ export const ActivityCenterDrawer = ({ onClose, open, workspaceId }: ActivityCen
               </div>
             </header>
 
-            <div className="activity-center-actions">
+            <nav className="activity-center-actions" aria-label={t('activity.title')}>
               <button
                 type="button"
-                className="icon-btn icon-btn--primary"
-                disabled={!bundle || loading}
-                onClick={() => void copyText('report')}
-                data-testid="activity-copy-report"
+                className="icon-btn"
+                aria-pressed={surface === 'workspace'}
+                disabled={!workspaceId}
+                onClick={() => setSurface('workspace')}
               >
-                <Copy size={14} aria-hidden />
-                {copied === 'report' ? t('activity.copied') : t('activity.copyReport')}
+                {t('queue.workspaceActivity')}
               </button>
               <button
                 type="button"
                 className="icon-btn"
-                disabled={!bundle || loading}
-                onClick={() => void copyText('diagnostics')}
-                data-testid="activity-copy-diagnostics"
+                aria-pressed={surface === 'queue'}
+                onClick={() => setSurface('queue')}
               >
-                <Copy size={14} aria-hidden />
-                {copied === 'diagnostics' ? t('activity.copied') : t('activity.copyDiagnostics')}
+                {t('queue.title')}
               </button>
-            </div>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-pressed={surface === 'resources'}
+                onClick={() => setSurface('resources')}
+              >
+                {t('resources.title')}
+              </button>
+            </nav>
+            {surface === 'workspace' ? (
+              <div className="activity-center-actions">
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--primary"
+                  disabled={!bundle || loading}
+                  onClick={() => void copyText('report')}
+                  data-testid="activity-copy-report"
+                >
+                  <Copy size={14} aria-hidden />
+                  {copied === 'report' ? t('activity.copied') : t('activity.copyReport')}
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={!bundle || loading}
+                  onClick={() => void copyText('diagnostics')}
+                  data-testid="activity-copy-diagnostics"
+                >
+                  <Copy size={14} aria-hidden />
+                  {copied === 'diagnostics' ? t('activity.copied') : t('activity.copyDiagnostics')}
+                </button>
+              </div>
+            ) : null}
 
-            {error ? (
+            {error && surface === 'workspace' ? (
               <div className="activity-center-message activity-center-message--error" role="alert">
                 <AlertTriangle size={14} aria-hidden /> {error}
               </div>
             ) : null}
 
             <div className="activity-center-body scroll-y">
-              {loading && !bundle ? (
+              {surface === 'resources' ? (
+                <WorktreeResourcesPanel />
+              ) : surface === 'queue' ? (
+                <DeliveryQueuePanel
+                  {...(onSelectWorkspace
+                    ? {
+                        onSelectWorkspace: (id: string) => {
+                          onSelectWorkspace(id)
+                          onClose()
+                        },
+                      }
+                    : {})}
+                />
+              ) : loading && !bundle ? (
                 <div className="activity-center-empty">
                   <RefreshCw size={20} className="animate-spin" aria-hidden />
                   {t('activity.loading')}

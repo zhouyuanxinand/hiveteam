@@ -259,6 +259,7 @@ export const AppInner = () => {
           />
         )}
         <AppOverlays
+          onSelectWorkspace={selectWorkspace}
           addDialogTrigger={addDialogTrigger}
           droppedWorkspaceProbe={droppedWorkspaceProbe}
           wizardOpen={wizardOpen}

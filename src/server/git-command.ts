@@ -37,7 +37,7 @@ const readExitCode = (error: unknown): number | null => {
 export const runGit = async (
   cwd: string,
   args: string[],
-  options: { timeout?: number; maxBuffer?: number } = {}
+  options: { timeout?: number; maxBuffer?: number; env?: NodeJS.ProcessEnv } = {}
 ): Promise<string> => {
   try {
     const result = await execFileP('git', args, {
@@ -46,6 +46,7 @@ export const runGit = async (
       maxBuffer: options.maxBuffer ?? GIT_LOG_MAX_BUFFER,
       timeout: options.timeout ?? GIT_TIMEOUT_MS,
       windowsHide: true,
+      ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
     })
     return String(result.stdout)
   } catch (error) {

@@ -47,6 +47,7 @@ type AppOverlaysProps = {
   onCloseKnowledge: () => void
   onCloseGit: () => void
   onCloseActivity: () => void
+  onSelectWorkspace?: (id: string) => void
   onCloseSkills: () => void
   onCreateWorkspace: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
   onTryDemo: () => void
@@ -76,6 +77,7 @@ export const AppOverlays = ({
   onCloseKnowledge,
   onCloseGit,
   onCloseActivity,
+  onSelectWorkspace,
   onCloseSkills,
   onCreateWorkspace,
   onTryDemo,
@@ -122,9 +124,14 @@ export const AppOverlays = ({
         <WorkspaceGitDrawer onClose={onCloseGit} open workspaceId={workspaceId} />
       </Suspense>
     ) : null}
-    {workspaceId && activityOpen ? (
+    {activityOpen ? (
       <Suspense fallback={null}>
-        <ActivityCenterDrawer onClose={onCloseActivity} open workspaceId={workspaceId} />
+        <ActivityCenterDrawer
+          onClose={onCloseActivity}
+          open
+          workspaceId={workspaceId ?? ''}
+          {...(onSelectWorkspace ? { onSelectWorkspace } : {})}
+        />
       </Suspense>
     ) : null}
     {workspaceId && skillsOpen ? (

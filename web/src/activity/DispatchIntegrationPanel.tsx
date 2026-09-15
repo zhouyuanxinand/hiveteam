@@ -74,7 +74,9 @@ export const DispatchIntegrationPanel = ({
         </p>
       ) : null}
       {!preview ? (
-        <p>{t('delivery.loading')}</p>
+        !error ? (
+          <p>{t('delivery.loading')}</p>
+        ) : null
       ) : preview.worktree ? (
         <>
           <dl className="dispatch-integration-paths">

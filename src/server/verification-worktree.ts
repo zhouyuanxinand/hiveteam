@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { detectGitRepository, GitCommandError, runGit } from './git-command.js'
+import { readMergeState } from './git-merge-state.js'
 
 export const readVerificationVersion = async (workspacePath: string) => {
   try {
@@ -17,7 +18,14 @@ export const readVerificationVersion = async (workspacePath: string) => {
     const prefix = repository.relativePath ? `${repository.relativePath}/` : ''
     const metadata = new Set([`?? ${prefix}.hive/tasks.md`, `?? ${prefix}.hive/PROTOCOL.md`])
     const isDirty = changes.split('\0').some((entry) => entry.length > 0 && !metadata.has(entry))
-    return { ...repository, isDirty, unavailableReason: null }
+    const operation = await readMergeState(repository.repoRoot)
+    return {
+      ...repository,
+      isDirty,
+      unavailableReason: operation
+        ? 'Finish or abort the Git operation in this directory before verifying.'
+        : null,
+    }
   } catch (error) {
     if (!(error instanceof GitCommandError)) throw error
     return {

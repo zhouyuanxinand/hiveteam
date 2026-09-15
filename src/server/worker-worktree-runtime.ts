@@ -44,7 +44,7 @@ export const createWorkerWorktreeRuntime = (db: Database, dataDir: string | null
       )
     return tree.workspacePath
   }
-  const validate = async (tree: WorkerWorktree) => {
+  const validate = async (tree: WorkerWorktree, allowMerge = false) => {
     if (tree.state !== 'ready')
       throw new ConflictError(tree.error ?? 'Worktree preparation has not completed.')
     const version = await readVerificationVersion(tree.workspacePath)
@@ -62,6 +62,10 @@ export const createWorkerWorktreeRuntime = (db: Database, dataDir: string | null
       )
     if ((await commonDir(tree.checkoutPath)) !== (await commonDir(tree.repoRoot)))
       throw new ConflictError('The isolated worktree no longer belongs to this repository.')
+    if (!allowMerge && version.unavailableReason)
+      throw new ConflictError(
+        'Finish or abort the Git operation in this isolated directory before continuing.'
+      )
     return version
   }
   return {

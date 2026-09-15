@@ -93,22 +93,6 @@ export const Topbar = ({
                 </button>
               </Tooltip>
             ) : null}
-            {onToggleActivity ? (
-              <Tooltip label={t('activity.title')}>
-                <button
-                  type="button"
-                  onClick={onToggleActivity}
-                  aria-pressed={activityOpen}
-                  aria-label={t('activity.title')}
-                  className="topbar-knowledge-button"
-                  data-active={activityOpen ? 'true' : undefined}
-                  data-testid="topbar-activity"
-                >
-                  <ClipboardList size={13} aria-hidden />
-                  <span>{t('activity.title')}</span>
-                </button>
-              </Tooltip>
-            ) : null}
             {onToggleMemory ? (
               <Tooltip label={t('memory.title')}>
                 <button
@@ -177,6 +161,22 @@ export const Topbar = ({
             <NotificationSettingsButton />
           </>
         )}
+        {onToggleActivity ? (
+          <Tooltip label={t('activity.title')}>
+            <button
+              type="button"
+              onClick={onToggleActivity}
+              aria-pressed={activityOpen}
+              aria-label={t('activity.title')}
+              className="topbar-knowledge-button"
+              data-active={activityOpen ? 'true' : undefined}
+              data-testid="topbar-activity"
+            >
+              <ClipboardList size={13} aria-hidden />
+              <span>{t('activity.title')}</span>
+            </button>
+          </Tooltip>
+        ) : null}
         <ThemeToggle />
       </div>
     </header>

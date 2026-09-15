@@ -10,16 +10,19 @@ import type {
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import { createDeliveryQueueStore, type DeliveryQueueStore } from './delivery-queue-store.js'
 import {
   createDispatchIntegrationRuntime,
   type DispatchIntegrationRuntime,
 } from './dispatch-integration-runtime.js'
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { GitWorkspaceService } from './git-workspace-service.js'
+import type { GitHubClient } from './github-pull-requests.js'
 import { ConflictError, ForbiddenError } from './http-errors.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import { createPullRequestRuntime, type PullRequestRuntime } from './pull-request-runtime.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import type { RemoteConfigSource } from './remote-config-keys.js'
 import type { DeviceSessionProvider } from './remote-device-session.js'
@@ -54,6 +57,7 @@ import type {
 } from './team-operations.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
 import { createVerificationRuntime, type VerificationRuntime } from './verification-runtime.js'
+import { createWorkerBranchRuntime, type WorkerBranchRuntime } from './worker-branch-runtime.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
 import {
@@ -61,6 +65,10 @@ import {
   type WorkspaceSkillManager,
 } from './workspace-skill-manager.js'
 import type { WorkerInput, WorkspaceRecord } from './workspace-store.js'
+import {
+  createWorktreeResourceRuntime,
+  type WorktreeResourceRuntime,
+} from './worktree-resource-runtime.js'
 
 export interface LocalRetentionDiagnostics {
   databaseBytes: number | null
@@ -74,6 +82,10 @@ interface RuntimeStore {
   verifications: VerificationRuntime
   worktrees: WorkerWorktreeRuntime
   integrations: DispatchIntegrationRuntime
+  pullRequests: PullRequestRuntime
+  deliveryQueue: DeliveryQueueStore
+  branches: WorkerBranchRuntime
+  worktreeResources: WorktreeResourceRuntime
   getDispatchWorkspacePath: (workspaceId: string, dispatchId: string) => string
   close: () => Promise<void>
   git: GitWorkspaceService
@@ -200,6 +212,7 @@ interface RuntimeStore {
 }
 
 interface RuntimeStoreOptions {
+  github?: GitHubClient
   dataDir?: string
   agentManager?: AgentManager
   skillHomePath?: string
@@ -245,6 +258,34 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     git: services.git,
     verifications,
     getDispatch: services.dispatchLedgerStore.getDispatchById,
+  })
+  const pullRequests = createPullRequestRuntime({
+    db: services.db,
+    worktrees: services.worktrees,
+    workspaceStore: services.workspaceStore,
+    agentRuntime: services.agentRuntime,
+    git: services.git,
+    verifications,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
+    ...(options.github ? { github: options.github } : {}),
+  })
+  const deliveryQueue = createDeliveryQueueStore(
+    services.db,
+    services.dispatchLedgerStore.getDispatchById
+  )
+  const branches = createWorkerBranchRuntime({
+    db: services.db,
+    worktrees: services.worktrees,
+    workspaceStore: services.workspaceStore,
+    agentRuntime: services.agentRuntime,
+    git: services.git,
+    verifications,
+  })
+  const worktreeResources = createWorktreeResourceRuntime({
+    db: services.db,
+    dataDir: services.dataDir,
+    worktrees: services.worktrees,
+    agentRuntime: services.agentRuntime,
   })
   const skillPackResolver = services.skillPackResolver
   const skills = createWorkspaceSkillManager({
@@ -517,6 +558,10 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     verifications,
     worktrees: services.worktrees,
     integrations,
+    pullRequests,
+    deliveryQueue,
+    branches,
+    worktreeResources,
     getDispatchWorkspacePath,
     git: services.git,
     createWorkspace: (path, name, language) => {
@@ -540,36 +585,36 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       return workspace
     },
     listWorkspaces: () => services.workspaceStore.listWorkspaces(),
-    deleteWorkspace: async (workspaceId) => {
-      services.worktrees.assertCanChangeWorkers(workspaceId)
-      const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
-      await verifications.deleteWorkspace(workspaceId)
-      await lifecycle.deleteWorkspaceShell(workspaceId)
-      for (const agent of workspace.agents) {
-        const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, agent.id)
-        if (activeRun) {
-          services.agentRuntime.stopAgentRun(activeRun.runId)
-          await services.agentRuntime.waitForAgentRunExit?.(activeRun.runId)
+    deleteWorkspace: async (workspaceId) =>
+      services.worktrees.exclusive(workspaceId, async () => {
+        const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
+        await verifications.deleteWorkspace(workspaceId)
+        await lifecycle.deleteWorkspaceShell(workspaceId)
+        for (const agent of workspace.agents) {
+          const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, agent.id)
+          if (activeRun) {
+            services.agentRuntime.stopAgentRun(activeRun.runId)
+            await services.agentRuntime.waitForAgentRunExit?.(activeRun.runId)
+          }
+          services.agentRuntime.deleteAgentLaunchConfig(workspaceId, agent.id)
         }
-        services.agentRuntime.deleteAgentLaunchConfig(workspaceId, agent.id)
-      }
-      await services.tasksFileWatcher.stop(workspaceId)
-      runDataMutation(() => {
-        services.memoryStore.deleteWorkspaceEntries(workspaceId)
-        services.memoryDreamStore.deleteWorkspace(workspaceId)
-        services.externalGoalStore.deleteWorkspaceGoals(workspaceId)
-        services.reportOutbox.deleteWorkspaceEntries(workspaceId)
-        services.dispatchSkillActivationStore.deleteWorkspace(workspaceId)
-        services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
-        services.git.deleteWorkspace(workspaceId)
-        services.skillPackChangeStore.deleteWorkspace(workspaceId)
-        services.skillSnapshotStore.deleteWorkspace(workspaceId)
-        services.workspaceStore.deleteWorkspace(workspaceId)
-      })
-      if (services.settings.getAppState('active_workspace_id')?.value === workspaceId) {
-        services.settings.setAppState('active_workspace_id', null)
-      }
-    },
+        await services.tasksFileWatcher.stop(workspaceId)
+        runDataMutation(() => {
+          services.memoryStore.deleteWorkspaceEntries(workspaceId)
+          services.memoryDreamStore.deleteWorkspace(workspaceId)
+          services.externalGoalStore.deleteWorkspaceGoals(workspaceId)
+          services.reportOutbox.deleteWorkspaceEntries(workspaceId)
+          services.dispatchSkillActivationStore.deleteWorkspace(workspaceId)
+          services.dispatchLedgerStore.deleteWorkspaceDispatches(workspaceId)
+          services.git.deleteWorkspace(workspaceId)
+          services.skillPackChangeStore.deleteWorkspace(workspaceId)
+          services.skillSnapshotStore.deleteWorkspace(workspaceId)
+          services.workspaceStore.deleteWorkspace(workspaceId)
+        })
+        if (services.settings.getAppState('active_workspace_id')?.value === workspaceId) {
+          services.settings.setAppState('active_workspace_id', null)
+        }
+      }),
     addWorker: (workspaceId, input) => services.workspaceStore.addWorker(workspaceId, input),
     renameWorker: (workspaceId, workerId, name) =>
       services.workspaceStore.renameWorker(workspaceId, workerId, name),

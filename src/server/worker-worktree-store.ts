@@ -18,20 +18,34 @@ export const createWorkerWorktreeStore = (db: Database) => ({
       .get(workspaceId, workerId) as WorkerWorktree | undefined
   },
   insert(tree: WorkerWorktree) {
-    db.prepare(`INSERT INTO worker_worktrees
+    db.transaction(() => {
+      db.prepare(`INSERT INTO worker_worktrees
       (worker_id, workspace_id, repo_root, checkout_path, workspace_path, branch, target_branch, base_sha, state, error)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      tree.workerId,
-      tree.workspaceId,
-      tree.repoRoot,
-      tree.checkoutPath,
-      tree.workspacePath,
-      tree.branch,
-      tree.targetBranch,
-      tree.baseSha,
-      tree.state,
-      tree.error
-    )
+        tree.workerId,
+        tree.workspaceId,
+        tree.repoRoot,
+        tree.checkoutPath,
+        tree.workspacePath,
+        tree.branch,
+        tree.targetBranch,
+        tree.baseSha,
+        tree.state,
+        tree.error
+      )
+      db.prepare(`INSERT INTO worktree_resources
+      (worker_id, workspace_id, workspace_name, repo_root, checkout_path, workspace_path, branch, target_branch)
+      VALUES (?, ?, (SELECT name FROM workspaces WHERE id = ?), ?, ?, ?, ?, ?)`).run(
+        tree.workerId,
+        tree.workspaceId,
+        tree.workspaceId,
+        tree.repoRoot,
+        tree.checkoutPath,
+        tree.workspacePath,
+        tree.branch,
+        tree.targetBranch
+      )
+    })()
   },
   finish(workspaceId: string, workerId: string, error: string | null) {
     db.prepare(

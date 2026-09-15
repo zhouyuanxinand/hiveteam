@@ -1,8 +1,9 @@
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react'
-
+import { deliveryEn, deliveryZh } from './activity/delivery-messages.js'
 import { isUiLanguage, UI_LANGUAGE_STORAGE_KEY, type UiLanguage } from './uiLanguage.js'
 
 const enMessages = {
+  ...deliveryEn,
   'worktree.create': 'Use an isolated working directory',
   'worktree.createHint':
     'Start from the current commit on a separate branch. Commit project changes first. Reused tasks stay on this worker’s branch.',
@@ -881,6 +882,7 @@ const enMessages = {
 export type TranslationKey = keyof typeof enMessages
 
 const zhMessages: Record<TranslationKey, string> = {
+  ...deliveryZh,
   'worktree.create': '使用隔离工作目录',
   'worktree.createHint':
     '从当前提交创建独立分支。请先提交项目改动；后续派给该 Worker 的任务会沿用此分支。',

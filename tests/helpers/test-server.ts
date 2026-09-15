@@ -6,6 +6,7 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { probeDirectory } from '../../src/server/fs-browse.js'
 import type { PickFolderResponse } from '../../src/server/fs-pick-folder.js'
+import type { GitHubClient } from '../../src/server/github-pull-requests.js'
 import type { OpenWorkspaceService } from '../../src/server/route-types.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 
@@ -56,6 +57,7 @@ export const listenOnFetchSafePort = async (server: ReturnType<typeof createApp>
 export const startTestServer = async (
   input: {
     dataDir?: string
+    github?: GitHubClient
     openWorkspaceService?: OpenWorkspaceService
     pickFolderPath?: string
     pickFolderService?: () => Promise<PickFolderResponse>
@@ -63,7 +65,11 @@ export const startTestServer = async (
 ): Promise<TestServerContext> => {
   const ownsDataDir = !input.dataDir
   const dataDir = input.dataDir ?? mkdtempSync(join(tmpdir(), 'hive-test-server-'))
-  const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
+  const store = createRuntimeStore({
+    agentManager: createAgentManager(),
+    dataDir,
+    ...(input.github ? { github: input.github } : {}),
+  })
   const pickFolderService =
     input.pickFolderService ??
     (input.pickFolderPath

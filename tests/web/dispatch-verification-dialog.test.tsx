@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { DispatchVerificationView } from '../../src/shared/verification.js'
 import { DispatchVerificationDialog } from '../../web/src/activity/DispatchVerificationDialog.js'
+import * as pullRequestApi from '../../web/src/activity/pull-request-api.js'
 import * as api from '../../web/src/activity/verification-api.js'
 import type { DispatchSummary } from '../../web/src/api.js'
 import { I18nProvider } from '../../web/src/i18n.js'
@@ -70,6 +71,39 @@ const show = () =>
   )
 
 describe('dispatch verification dialog', () => {
+  test('opens the requested delivery step directly and keeps verification available without a long scroll', async () => {
+    vi.spyOn(api, 'getDispatchVerifications').mockResolvedValue({
+      ...initialView(),
+      isolated: true,
+    })
+    vi.spyOn(pullRequestApi, 'requestPullRequest').mockResolvedValue({
+      repository: null,
+      branch: 'worker',
+      base_branch: 'main',
+      head_sha: sha,
+      verification_id: 'run',
+      can_publish: false,
+      reason: 'github_remote_required',
+      publication: null,
+    })
+    render(
+      <I18nProvider>
+        <DispatchVerificationDialog
+          dispatch={dispatch}
+          initialPanel="publication"
+          onClose={() => {}}
+          onChanged={() => {}}
+        />
+      </I18nProvider>
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Publish and track a pull request' })
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Run verification' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+    expect(screen.getByRole('button', { name: 'Run verification' })).toBeVisible()
+    expect(screen.getByRole('log')).toHaveTextContent('CHECK PASSED')
+  })
   test('shows command evidence and confirms the version only after server acceptance', async () => {
     let view = initialView()
     vi.spyOn(api, 'getDispatchVerifications').mockImplementation(async () => view)

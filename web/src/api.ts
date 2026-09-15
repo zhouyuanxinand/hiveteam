@@ -878,7 +878,7 @@ export interface DispatchSummary extends DispatchResult {
   workspaceId: string
 }
 
-interface DispatchSummaryPayload {
+export interface DispatchSummaryPayload {
   report_outcome?: ReportOutcome | null
   report_revision?: number
   accepted_at?: number | null
@@ -906,7 +906,7 @@ interface DispatchSummaryPayload {
   workspace_id: string
 }
 
-const fromDispatchPayload = (payload: DispatchSummaryPayload): DispatchSummary => ({
+export const fromDispatchPayload = (payload: DispatchSummaryPayload): DispatchSummary => ({
   reportOutcome: payload.report_outcome ?? null,
   reportRevision: payload.report_revision ?? 0,
   acceptedAt: payload.accepted_at ?? null,

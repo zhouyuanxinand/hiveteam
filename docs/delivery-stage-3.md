@@ -102,6 +102,8 @@ configuration are not copied; prepare them through the chosen CLI or verificatio
 command. The workspace task board and Skill configuration remain workspace-wide.
 Verification remains one active command per workspace. PR creation, remote CI,
 automatic rebasing, and worktree garbage collection are outside this stage.
+PR/CI tracking, the global delivery queue, controlled merge updates, and explicit
+directory reclamation are added in [stage 4](delivery-stage-4.md).
 
 ## Validation
 
