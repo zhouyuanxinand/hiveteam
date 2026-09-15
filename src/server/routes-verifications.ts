@@ -21,6 +21,7 @@ const serializeRun = (run: DispatchVerification) => ({
   accepted_at: run.acceptedAt,
 })
 const serializeView = (view: DispatchVerificationView) => ({
+  isolated: view.isolated ?? false,
   head_sha: view.headSha,
   is_dirty: view.isDirty,
   unavailable_reason: view.unavailableReason,

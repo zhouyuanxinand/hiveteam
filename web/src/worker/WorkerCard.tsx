@@ -1,4 +1,4 @@
-import { ImagePlus, Pencil, Play, Square, Trash2 } from 'lucide-react'
+import { GitBranch, ImagePlus, Pencil, Play, Square, Trash2 } from 'lucide-react'
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -158,6 +158,18 @@ export const WorkerCard = ({
             <p className="worker-card__activity" title={worker.lastPtyLine}>
               {worker.lastPtyLine}
             </p>
+          ) : null}
+          {worker.worktreeBranch ? (
+            <p
+              className="worker-isolation-label"
+              title={`${worker.worktreeBranch}\n${worker.workingDirectory ?? ''}`}
+            >
+              <GitBranch size={12} aria-hidden />
+              {t('worktree.isolated')}
+            </p>
+          ) : null}
+          {worker.worktreeError ? (
+            <p className="dispatch-report-error">{worker.worktreeError}</p>
           ) : null}
 
           <div className="worker-card__footer">

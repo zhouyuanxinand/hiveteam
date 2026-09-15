@@ -332,13 +332,13 @@ describe('schema version', () => {
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
       version: 33,
     })
-    for (const version of [34, 35, 36, 37, 38, 39]) {
+    for (const version of [34, 35, 36, 37, 38, 39, 40]) {
       expect(
         db.prepare('SELECT version FROM schema_version WHERE version = ?').get(version)
       ).toEqual({ version })
     }
     expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
-      version: 39,
+      version: 40,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

@@ -36,6 +36,9 @@ export interface AgentSummary {
 }
 
 export interface TeamListItem {
+  worktreeBranch?: string
+  workingDirectory?: string
+  worktreeError?: string
   /** Locally stored PNG/JPEG/WebP data URL selected for this worker. */
   avatar?: string
   id: string
@@ -64,6 +67,9 @@ export interface TeamListItem {
  * Internal TS code uses TeamListItem (camelCase); serializers/deserializers convert.
  */
 export interface TeamListItemPayload {
+  worktree_branch?: string
+  working_directory?: string
+  worktree_error?: string
   avatar?: string
   id: string
   name: string

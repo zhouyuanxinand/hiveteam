@@ -10,6 +10,10 @@ import type {
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import {
+  createDispatchIntegrationRuntime,
+  type DispatchIntegrationRuntime,
+} from './dispatch-integration-runtime.js'
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { GitWorkspaceService } from './git-workspace-service.js'
 import { ConflictError, ForbiddenError } from './http-errors.js'
@@ -50,6 +54,7 @@ import type {
 } from './team-operations.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
 import { createVerificationRuntime, type VerificationRuntime } from './verification-runtime.js'
+import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
 import {
   createWorkspaceSkillManager,
@@ -67,6 +72,9 @@ export interface LocalRetentionDiagnostics {
 
 interface RuntimeStore {
   verifications: VerificationRuntime
+  worktrees: WorkerWorktreeRuntime
+  integrations: DispatchIntegrationRuntime
+  getDispatchWorkspacePath: (workspaceId: string, dispatchId: string) => string
   close: () => Promise<void>
   git: GitWorkspaceService
   createWorkspace: (path: string, name: string, language?: WorkspaceLanguage) => WorkspaceSummary
@@ -206,15 +214,37 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const getDispatchWorkspacePath = (workspaceId: string, dispatchId: string) => {
+    const dispatch = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+    if (!dispatch) throw new ConflictError('Dispatch not found')
+    return services.worktrees.path(
+      services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
+      dispatch.toAgentId
+    )
+  }
   const verifications = createVerificationRuntime({
     db: services.db,
     dataDir: services.dataDir,
-    getWorkspacePath: (id) => services.workspaceStore.getWorkspaceSnapshot(id).summary.path,
+    getWorkspacePath: getDispatchWorkspacePath,
+    isIsolated: (workspaceId, dispatchId) => {
+      const dispatch = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+      return !!dispatch && !!services.worktrees.get(workspaceId, dispatch.toAgentId)
+    },
+    assertWorkspaceWritable: services.worktrees.assertIdle,
     getDispatch: services.dispatchLedgerStore.getDispatchById,
     acceptReport: services.dispatchLedgerStore.acceptReport,
     onAccepted: (id, dispatch) => {
       services.workflowRuntime.recordDispatchReport(id, dispatch)
     },
+  })
+  const integrations = createDispatchIntegrationRuntime({
+    db: services.db,
+    worktrees: services.worktrees,
+    workspaceStore: services.workspaceStore,
+    agentRuntime: services.agentRuntime,
+    git: services.git,
+    verifications,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
   })
   const skillPackResolver = services.skillPackResolver
   const skills = createWorkspaceSkillManager({
@@ -315,6 +345,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       // against a closed database.
       const closeTeamOperations = services.teamOps.close()
       const closeVerifications = verifications.close()
+      const closeWorktrees = services.worktrees.close()
       // Workspace binding performs Git detection in the background so the API
       // remains fast. Await those processes before closing the database and
       // deleting test/workspace directories; otherwise Windows can keep the
@@ -324,6 +355,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       }
       await closeTeamOperations
       await closeVerifications
+      await closeWorktrees
       await memoryDreamScheduler?.close()
       await lifecycle.close()
     })()
@@ -459,6 +491,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     return review
   }
   const reportTask = (workspaceId: string, workerId: string, input?: ReportTaskInput) => {
+    services.worktrees.assertIdle(workspaceId)
     const result = services.teamOps.reportTask(workspaceId, workerId, input)
     if (result.dispatch) {
       try {
@@ -482,6 +515,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   return {
     close,
     verifications,
+    worktrees: services.worktrees,
+    integrations,
+    getDispatchWorkspacePath,
     git: services.git,
     createWorkspace: (path, name, language) => {
       const workspace = services.workspaceStore.createWorkspace(path, name, language)
@@ -505,6 +541,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     },
     listWorkspaces: () => services.workspaceStore.listWorkspaces(),
     deleteWorkspace: async (workspaceId) => {
+      services.worktrees.assertCanChangeWorkers(workspaceId)
       const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
       await verifications.deleteWorkspace(workspaceId)
       await lifecycle.deleteWorkspaceShell(workspaceId)
@@ -539,6 +576,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     setWorkerAvatar: (workspaceId, workerId, avatar) =>
       services.workspaceStore.setWorkerAvatar(workspaceId, workerId, avatar),
     deleteWorker: (workspaceId, workerId) => {
+      services.worktrees.assertCanChangeWorkers(workspaceId)
       verifications.assertWorkerIdle(workspaceId, workerId)
       const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, workerId)
       if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
@@ -572,6 +610,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       return dispatch
     },
     sendDispatchFeedback: (workspaceId, dispatchId, text) => {
+      services.worktrees.assertIdle(workspaceId)
       const previous = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
       try {
         return services.teamOps.sendDispatchFeedback(workspaceId, dispatchId, text)
@@ -589,10 +628,20 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       // A single GROUP BY replaces hydrating every dispatch row on this
       // twice-a-second UI poll path.
       const pendingByWorker = services.dispatchLedgerStore.countPendingByWorker(workspaceId)
-      return services.workspaceStore.listWorkers(workspaceId).map((worker) => ({
-        ...worker,
-        pendingTaskCount: pendingByWorker.get(worker.id) ?? worker.pendingTaskCount,
-      }))
+      return services.workspaceStore.listWorkers(workspaceId).map((worker) => {
+        const tree = services.worktrees.get(workspaceId, worker.id)
+        return {
+          ...worker,
+          ...(tree
+            ? {
+                worktreeBranch: tree.branch,
+                workingDirectory: tree.workspacePath,
+                ...(tree.error ? { worktreeError: tree.error } : {}),
+              }
+            : {}),
+          pendingTaskCount: pendingByWorker.get(worker.id) ?? worker.pendingTaskCount,
+        }
+      })
     },
     getLastPtyLineForAgent: (workspaceId, agentId) =>
       services.workerOutputTracker?.getLastPtyLine(workspaceId, agentId) ?? null,

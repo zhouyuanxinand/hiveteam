@@ -231,6 +231,8 @@ export const workspaceRoutes: RouteDefinition[] = [
       requireUiTokenFromRequest(request, store.validateUiToken)
 
       const body = await readJsonBody<CreateWorkerBody>(request)
+      if (body.isolated !== undefined && typeof body.isolated !== 'boolean')
+        throw new BadRequestError('isolated must be a boolean')
       const presetId = body.command_preset_id ?? null
       const startupCommand = typeof body.startup_command === 'string' ? body.startup_command : null
       const model = typeof body.model === 'string' ? body.model : null
@@ -242,10 +244,25 @@ export const workspaceRoutes: RouteDefinition[] = [
       if (presetId && !startupCommand?.trim() && !launchConfig) {
         throw new Error(`Command preset not found: ${presetId}`)
       }
+      if (body.isolated) store.worktrees.assertCanChangeWorkers(workspaceId)
       const worker = store.addWorker(workspaceId, {
         ...body,
         avatar: readWorkerAvatar(body.avatar),
       })
+      let isolationError: string | null = null
+      if (body.isolated) {
+        try {
+          await store.worktrees.create(store.getWorkspaceSnapshot(workspaceId).summary, worker.id)
+        } catch (error) {
+          if (!store.worktrees.get(workspaceId, worker.id)) {
+            store.deleteWorker(workspaceId, worker.id)
+            throw error
+          }
+          // Keep a failed preparation visible, including its recorded path.
+          // Never start it in the shared directory or remove potential output.
+          isolationError = error instanceof Error ? error.message : String(error)
+        }
+      }
       if (launchConfig) {
         try {
           store.configureAgentLaunch(workspaceId, worker.id, launchConfig)
@@ -255,8 +272,9 @@ export const workspaceRoutes: RouteDefinition[] = [
         }
       }
 
-      const agentStart =
-        body.autostart === true
+      const agentStart = isolationError
+        ? { ok: false, error: isolationError, run_id: null }
+        : body.autostart === true
           ? await autostartAgent(store, workspaceId, worker.id, getRuntimePort(request), {
               missingConfigError: 'No worker launch config available',
             })

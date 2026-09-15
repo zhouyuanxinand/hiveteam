@@ -21,6 +21,7 @@ interface RunPayload {
   accepted_at: number | null
 }
 interface ViewPayload {
+  isolated?: boolean
   head_sha: string | null
   is_dirty: boolean
   unavailable_reason: string | null
@@ -48,6 +49,7 @@ const fromRun = (run: RunPayload): DispatchVerification => ({
   acceptedAt: run.accepted_at,
 })
 const fromView = (view: ViewPayload): DispatchVerificationView => ({
+  isolated: view.isolated ?? false,
   headSha: view.head_sha,
   isDirty: view.is_dirty,
   unavailableReason: view.unavailable_reason,

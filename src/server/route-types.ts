@@ -73,6 +73,7 @@ export interface DesktopFolderProbeBody {
 }
 
 export interface CreateWorkerBody {
+  isolated?: boolean
   autostart?: boolean
   avatar?: string | null
   command_preset_id?: string | null

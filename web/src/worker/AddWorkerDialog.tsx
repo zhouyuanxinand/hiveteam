@@ -134,7 +134,7 @@ export const AddWorkerDialog = ({
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
           <Dialog.Content
             data-testid="add-worker-content"
-            className="dialog-scale-pop elev-2 pointer-events-auto flex h-[min(820px,calc(100vh-32px))] max-h-[calc(100vh-32px)] w-[560px] max-w-full flex-col overflow-hidden rounded-lg border"
+            className="dialog-scale-pop elev-2 pointer-events-auto flex h-[min(820px,calc(100vh-32px))] max-h-[calc(100vh-32px)] w-[min(560px,calc(100vw-32px))] min-w-0 max-w-full flex-col overflow-hidden rounded-lg border"
             style={{
               background: 'var(--bg-elevated)',
               borderColor: 'var(--border-bright)',
@@ -194,6 +194,17 @@ export const AddWorkerDialog = ({
                 </label>
 
                 <RolePicker workerRole={workerRole} onRoleChange={onRoleChange} />
+                <label className="worker-isolation-option">
+                  <input
+                    type="checkbox"
+                    name="isolated"
+                    disabled={creating || Boolean(writeDisabledReason)}
+                  />
+                  <span>
+                    <strong>{t('worktree.create')}</strong>
+                    <span className="text-ter">{t('worktree.createHint')}</span>
+                  </span>
+                </label>
                 <button
                   type="button"
                   onClick={() => setMarketplaceOpen(true)}

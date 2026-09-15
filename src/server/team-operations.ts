@@ -17,13 +17,14 @@ import {
 import type { WorkspaceStore } from './workspace-store.js'
 
 export interface TeamOperationsInput {
+  assertWorkspaceWritable?: (workspaceId: string) => void
   agentRuntime: AgentRuntime
   /**
    * Optional hook that records the workspace Git HEAD as the dispatch
    * baseline. Must be side-effect free and resolve to null when no baseline
    * is available (non-Git workspace, Git missing); it must never throw.
    */
-  captureBaseHeadSha?: (workspaceId: string) => Promise<string | null>
+  captureBaseHeadSha?: (workspaceId: string, workerId: string) => Promise<string | null>
   createDispatch: (input: {
     baseHeadSha?: string | null
     fromAgentId?: string
@@ -114,6 +115,7 @@ const reportForwardErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
 
 export const createTeamOperations = ({
+  assertWorkspaceWritable,
   agentRuntime,
   captureBaseHeadSha,
   createDispatch,
@@ -325,6 +327,7 @@ export const createTeamOperations = ({
     text: string,
     input: DispatchTaskInput = {}
   ) => {
+    assertWorkspaceWritable?.(workspaceId)
     if (text.trim().length === 0) {
       throw new BadRequestError('Task text cannot be empty')
     }
@@ -338,7 +341,7 @@ export const createTeamOperations = ({
     // Start baseline capture after any requested Skill has been validated but
     // before the dispatch can cause worker edits. For ordinary dispatches this
     // preserves the historical pre-await synchronous persistence path.
-    const baseHeadCapture = captureBaseHeadSha ? captureBaseHeadSha(workspaceId) : null
+    const baseHeadCapture = captureBaseHeadSha ? captureBaseHeadSha(workspaceId, workerId) : null
     const message = createSendMessage(workspaceId, workerId, text, input.fromAgentId)
     const messageHandle = insertMessage(message)
     let dispatch: DispatchRecord | undefined

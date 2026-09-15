@@ -80,3 +80,18 @@
   .workspace-delivery-item > summary { flex-wrap: wrap; gap: 6px; }
   .workspace-delivery-task { flex-basis: 65%; }
 }
+.worker-isolation-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-block: 1px solid var(--border);
+  font-size: 13px;
+}
+.worker-isolation-option input { margin-top: 4px; accent-color: var(--accent); }
+.worker-isolation-option span { display: grid; gap: 4px; }
+.worker-isolation-label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-secondary); }
+.dispatch-integration { display: grid; gap: 12px; margin-top: 8px; padding-top: 20px; border-top: 1px solid var(--border); }
+.dispatch-integration-paths { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; font-size: 12px; }
+.dispatch-integration-paths dt { color: var(--text-secondary); }
+.dispatch-integration-paths dd { margin: 0; overflow-wrap: anywhere; }

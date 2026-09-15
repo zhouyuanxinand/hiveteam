@@ -20,6 +20,9 @@ const areWorkersEqual = (a: TeamListItem[], b: TeamListItem[]): boolean => {
       worker.lastPtyLine === other.lastPtyLine &&
       worker.name === other.name &&
       worker.pendingTaskCount === other.pendingTaskCount &&
+      worker.worktreeBranch === other.worktreeBranch &&
+      worker.workingDirectory === other.workingDirectory &&
+      worker.worktreeError === other.worktreeError &&
       worker.role === other.role &&
       worker.status === other.status
     )

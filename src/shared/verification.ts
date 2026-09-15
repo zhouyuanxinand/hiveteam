@@ -20,6 +20,7 @@ export interface DispatchVerification {
 export type VerificationStaleReason = 'report_changed' | 'code_changed' | 'uncommitted_changes'
 
 export interface DispatchVerificationView {
+  isolated?: boolean
   headSha: string | null
   isDirty: boolean
   unavailableReason: string | null

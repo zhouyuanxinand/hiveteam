@@ -49,11 +49,16 @@ import { createTeamSkillRuntime, type TeamSkillRuntime } from './team-skill-runt
 import { resolveTerminalInputProfile } from './terminal-input-profile.js'
 import { createUiAuth } from './ui-auth.js'
 import { createWorkerOutputTracker, type WorkerOutputTracker } from './worker-output-tracker.js'
+import {
+  createWorkerWorktreeRuntime,
+  type WorkerWorktreeRuntime,
+} from './worker-worktree-runtime.js'
 import { createWorkflowRuntime, type WorkflowRuntime } from './workflow-runtime.js'
 import { createWorkspaceShellRuntime } from './workspace-shell-runtime.js'
 import { createWorkspaceStore } from './workspace-store.js'
 
 export interface RuntimeStoreServices {
+  worktrees: WorkerWorktreeRuntime
   agentRunStore: ReturnType<typeof createAgentRunStore>
   git: ReturnType<typeof createGitWorkspaceService>
   gitTurnCoordinator: GitTurnCoordinator
@@ -171,6 +176,7 @@ export const createRuntimeStoreServices = (
   agentRunStore.markUnfinishedRunsStale()
 
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
+  const worktrees = createWorkerWorktreeRuntime(db, options.dataDir ?? null)
   const teamSkillRuntime = createTeamSkillRuntime({
     activationStore: dispatchSkillActivationStore,
     getAgent: workspaceStore.getAgent,
@@ -217,12 +223,17 @@ export const createRuntimeStoreServices = (
     (workspaceId, agentId) => workspaceStore.getAgent(workspaceId, agentId),
     createTeamMemoryDigestProvider(memoryStore, settings),
     (workspaceId): WorkspaceLanguage =>
-      workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
+      workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh',
+    worktrees.withLaunchWorkspace
   )
   const teamOps = createTeamOperations({
+    assertWorkspaceWritable: worktrees.assertIdle,
     agentRuntime,
-    captureBaseHeadSha: (workspaceId) => {
-      const workspacePath = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path
+    captureBaseHeadSha: (workspaceId, workerId) => {
+      const workspacePath = worktrees.path(
+        workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
+        workerId
+      )
       return git.getHeadSha(workspaceId, workspacePath)
     },
     createDispatch: dispatchLedgerStore.createDispatch,
@@ -262,6 +273,7 @@ export const createRuntimeStoreServices = (
   startExistingWorkspaceWatches()
 
   return {
+    worktrees,
     agentRunStore,
     git,
     gitTurnCoordinator,
@@ -332,7 +344,10 @@ export const createRuntimeStoreLifecycle = ({
           initialOutput: run.output,
           runId: run.runId,
           workspaceId,
-          workspacePath: services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path,
+          workspacePath: services.worktrees.path(
+            services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
+            agentId
+          ),
         })
         queueMicrotask(() => {
           try {

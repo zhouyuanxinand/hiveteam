@@ -15,7 +15,9 @@ const reportIsReady = (dispatch: DispatchRecord) =>
 export const createVerificationRuntime = (input: {
   db: Database
   dataDir: string | null
-  getWorkspacePath: (workspaceId: string) => string
+  assertWorkspaceWritable?: (workspaceId: string) => void
+  getWorkspacePath: (workspaceId: string, dispatchId: string) => string
+  isIsolated?: (workspaceId: string, dispatchId: string) => boolean
   getDispatch: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   acceptReport: (workspaceId: string, dispatchId: string, revision: number) => DispatchRecord
   onAccepted: (workspaceId: string, dispatch: DispatchRecord) => void
@@ -45,7 +47,7 @@ export const createVerificationRuntime = (input: {
     workspaceId: string,
     dispatchId: string
   ): Promise<DispatchVerificationView> => {
-    const version = await readVerificationVersion(input.getWorkspacePath(workspaceId))
+    const version = await readVerificationVersion(input.getWorkspacePath(workspaceId, dispatchId))
     const dispatch = getDispatch(workspaceId, dispatchId)
     const runs = store.list(workspaceId, dispatchId)
     const latest = runs[0]
@@ -60,6 +62,7 @@ export const createVerificationRuntime = (input: {
       : null
     const current = !version.unavailableReason && staleReason === null
     return {
+      isolated: input.isIsolated?.(workspaceId, dispatchId) ?? false,
       headSha: version.headSha,
       isDirty: version.isDirty,
       unavailableReason: version.unavailableReason,
@@ -156,6 +159,7 @@ export const createVerificationRuntime = (input: {
     dispatchId: string,
     request: { command: string; headSha: string; reportRevision: number }
   ) => {
+    input.assertWorkspaceWritable?.(workspaceId)
     if (
       closing ||
       removedWorkspaces.has(workspaceId) ||
@@ -169,8 +173,9 @@ export const createVerificationRuntime = (input: {
       )
     starting.add(workspaceId)
     try {
-      const version = await readVerificationVersion(input.getWorkspacePath(workspaceId))
+      const version = await readVerificationVersion(input.getWorkspacePath(workspaceId, dispatchId))
       const dispatch = getDispatch(workspaceId, dispatchId)
+      input.assertWorkspaceWritable?.(workspaceId)
       if (
         closing ||
         removedWorkspaces.has(workspaceId) ||
@@ -242,6 +247,7 @@ export const createVerificationRuntime = (input: {
       return promise
     },
     async accept(workspaceId: string, dispatchId: string, verificationId: string) {
+      input.assertWorkspaceWritable?.(workspaceId)
       const current = await view(workspaceId, dispatchId)
       const latest = current.runs[0]
       if (!latest || latest.id !== verificationId || (!current.canAccept && !current.accepted))
@@ -249,6 +255,7 @@ export const createVerificationRuntime = (input: {
           'Verification is stale, unfinished, or failed. Review the current version and verify again.'
         )
       const dispatch = input.db.transaction(() => {
+        input.assertWorkspaceWritable?.(workspaceId)
         if (
           active.has(workspaceId) ||
           starting.has(workspaceId) ||

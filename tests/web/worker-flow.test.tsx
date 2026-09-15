@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
 import { App } from '../../web/src/app.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
@@ -65,6 +65,12 @@ let originalPath = ''
 let fakeCliDir = ''
 
 const WORKER_FLOW_TIMEOUT_MS = 5000
+
+beforeAll(async () => {
+  // Compile the real lazy dialog before timing interactions. Cold Vite
+  // transforms on Windows can exceed the UI wait without a rendering failure.
+  await import('../../web/src/worker/AddWorkerDialog.js')
+})
 
 const openAddWorkerDialog = async (label = 'Add team member') => {
   fireEvent.click(

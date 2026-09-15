@@ -3,6 +3,38 @@ import { createContext, type ReactNode, useContext, useMemo, useState } from 're
 import { isUiLanguage, UI_LANGUAGE_STORAGE_KEY, type UiLanguage } from './uiLanguage.js'
 
 const enMessages = {
+  'worktree.create': 'Use an isolated working directory',
+  'worktree.createHint':
+    'Start from the current commit on a separate branch. Commit project changes first. Reused tasks stay on this worker’s branch.',
+  'worktree.isolated': 'Isolated development',
+  'worktree.deleteHint': 'The branch and working directory will be kept: {path}',
+  'integration.title': 'Integrate accepted code',
+  'integration.refresh': 'Refresh integration preview',
+  'integration.hint':
+    'Review all changes from the target branch to this accepted version. Integration advances the local target branch to this exact commit.',
+  'integration.source': 'Source',
+  'integration.target': 'Target',
+  'integration.directory': 'Working directory',
+  'integration.diff': 'Changes to integrate',
+  'integration.noDiff': 'The target already contains the same files.',
+  'integration.truncated':
+    'Large diff truncated. Review the complete diff in Git before integrating.',
+  'integration.apply': 'Integrate into {branch}',
+  'integration.busy': 'Integrating…',
+  'integration.integrated': 'Accepted version integrated',
+  'integration.reason.source_dirty':
+    'Commit all changes in the isolated directory, then verify and accept again.',
+  'integration.reason.target_changed':
+    'Restore the original target branch in the project directory, then refresh.',
+  'integration.reason.target_dirty':
+    'The target directory has uncommitted changes. Commit or resolve them, then refresh.',
+  'integration.reason.accept_required': 'Verify and accept the current isolated version first.',
+  'integration.reason.agents_running':
+    'Stop this worker and agents using the shared project directory, then refresh. Other isolated workers can keep running.',
+  'integration.reason.pending_tasks':
+    'This worker still has unfinished tasks. Finish or cancel them, then refresh.',
+  'integration.reason.target_diverged':
+    'The target branch has diverged. Update this isolated branch against the target, then report, verify, and accept the new version.',
   'verification.open': 'Verify code version',
   'verification.title': 'Verification and version acceptance',
   'verification.description':
@@ -849,6 +881,33 @@ const enMessages = {
 export type TranslationKey = keyof typeof enMessages
 
 const zhMessages: Record<TranslationKey, string> = {
+  'worktree.create': '使用隔离工作目录',
+  'worktree.createHint':
+    '从当前提交创建独立分支。请先提交项目改动；后续派给该 Worker 的任务会沿用此分支。',
+  'worktree.isolated': '隔离开发',
+  'worktree.deleteHint': '分支和工作目录将保留：{path}',
+  'integration.title': '集成已验收代码',
+  'integration.refresh': '刷新集成预览',
+  'integration.hint': '审查目标分支到已验收版本的全部差异。集成会将本地目标分支快进到这一提交。',
+  'integration.source': '来源',
+  'integration.target': '目标',
+  'integration.directory': '工作目录',
+  'integration.diff': '本次集成差异',
+  'integration.noDiff': '目标目录已包含相同文件。',
+  'integration.truncated': '差异较大，已截断显示。请在 Git 中审查完整差异后再集成。',
+  'integration.apply': '集成到 {branch}',
+  'integration.busy': '正在集成…',
+  'integration.integrated': '已集成此验收版本',
+  'integration.reason.source_dirty': '请提交隔离目录中的全部修改，再重新验证和验收。',
+  'integration.reason.target_changed': '请在项目目录恢复原目标分支，然后刷新。',
+  'integration.reason.target_dirty': '目标目录有未提交修改。请先提交或处理这些修改，然后刷新。',
+  'integration.reason.accept_required': '请先验证并验收当前隔离版本。',
+  'integration.reason.agents_running':
+    '请停止此 Worker 和使用公共项目目录的代理，然后刷新。其他隔离 Worker 可以继续运行。',
+  'integration.reason.pending_tasks':
+    '此 Worker 还有未完成任务。请先完成或取消这些任务，然后刷新。',
+  'integration.reason.target_diverged':
+    '目标分支已分叉。请在隔离分支更新目标分支的代码，再重新报告、验证和验收。',
   'verification.open': '验证代码版本',
   'verification.title': '验证与版本确认',
   'verification.description': '对已提交代码执行检查，审查证据，再确认该版本。',

@@ -1,4 +1,4 @@
-import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
+import type { AgentSummary, WorkspaceLanguage, WorkspaceSummary } from '../shared/types.js'
 import { createAgentLaunchCache } from './agent-launch-cache.js'
 import type { AgentManager } from './agent-manager.js'
 import { createAgentRunStarter } from './agent-run-starter.js'
@@ -29,7 +29,12 @@ export const createAgentRuntime = (
   restartPolicy: RestartPolicy = createNoopRestartPolicy(),
   getAgent?: (workspaceId: string, agentId: string) => AgentSummary | undefined,
   memoryDigestProvider?: TeamMemoryDigestProvider,
-  getWorkspaceLanguage?: (workspaceId: string) => WorkspaceLanguage | undefined
+  getWorkspaceLanguage?: (workspaceId: string) => WorkspaceLanguage | undefined,
+  withLaunchWorkspace?: (
+    workspace: WorkspaceSummary,
+    agentId: string,
+    launch: (workspace: WorkspaceSummary) => Promise<LiveAgentRun>
+  ) => Promise<LiveAgentRun>
 ): AgentRuntime => {
   const registry = createLiveRunRegistry()
   const launchCache = createAgentLaunchCache(agentRunStore)
@@ -128,11 +133,10 @@ export const createAgentRuntime = (
       if (activeRun) return activeRun
       const pendingStart = startPromises.get(key)
       if (pendingStart) return pendingStart
-      const startPromise = startLiveRun(
-        workspace,
-        agentId,
-        launchCache.get(workspace.id, agentId),
-        input
+      const launch = (launchWorkspace: WorkspaceSummary) =>
+        startLiveRun(launchWorkspace, agentId, launchCache.get(workspace.id, agentId), input)
+      const startPromise = (
+        withLaunchWorkspace ? withLaunchWorkspace(workspace, agentId, launch) : launch(workspace)
       ).finally(() => {
         if (startPromises.get(key) === startPromise) {
           startPromises.delete(key)

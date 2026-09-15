@@ -77,6 +77,7 @@ const createWorkspaceOperationQueue = () => {
 }
 
 export interface GitWorkspaceService {
+  withWorkspaceOperation: <T>(workspaceId: string, operation: () => Promise<T>) => Promise<T>
   createSnapshot: (input: {
     expectedHead?: string | null
     message?: string
@@ -361,6 +362,7 @@ export const createGitWorkspaceService = (db: Database): GitWorkspaceService => 
   }
 
   return {
+    withWorkspaceOperation: runExclusive,
     createSnapshot: (input) => runExclusive(input.workspaceId, () => createSnapshotUnlocked(input)),
     deleteWorkspace(workspaceId: string) {
       snapshotStore.deleteWorkspace(workspaceId)

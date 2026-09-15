@@ -337,6 +337,7 @@ export const useWorkerComposer = ({
     setCreating(true)
     setCreateWorkerError(null)
     void createWorker({
+      isolated: new FormData(event.currentTarget).get('isolated') === 'on',
       avatar,
       commandPresetId,
       model,

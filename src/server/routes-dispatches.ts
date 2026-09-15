@@ -143,7 +143,7 @@ export const dispatchRoutes: RouteDefinition[] = [
 
       requireUiTokenFromRequest(request, store.validateUiToken)
 
-      const workspace = store.getWorkspaceSnapshot(workspaceId)
+      store.getWorkspaceSnapshot(workspaceId)
       const dispatch = store.getDispatch(workspaceId, dispatchId)
       if (!dispatch) {
         throw new HttpError(404, 'Dispatch not found')
@@ -156,7 +156,7 @@ export const dispatchRoutes: RouteDefinition[] = [
 
       const diff = await store.git.getDispatchDiff(
         workspaceId,
-        workspace.summary.path,
+        store.getDispatchWorkspacePath(workspaceId, dispatchId),
         dispatch.baseHeadSha
       )
       sendJson(response, 200, {

@@ -281,7 +281,12 @@ export const WorkersPane = ({
         }}
         title={pendingDelete ? t('worker.deleteConfirm', { name: pendingDelete.name }) : ''}
         description={
-          pendingDelete ? t('worker.deleteDescription', { name: pendingDelete.name }) : ''
+          pendingDelete
+            ? t('worker.deleteDescription', { name: pendingDelete.name }) +
+              (pendingDelete.worktreeBranch
+                ? ` ${t('worktree.deleteHint', { path: pendingDelete.workingDirectory ?? '' })}`
+                : '')
+            : ''
         }
         confirmLabel={t('worker.deleteMember')}
         confirmKind="danger"

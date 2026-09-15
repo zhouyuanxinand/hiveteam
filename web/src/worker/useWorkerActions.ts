@@ -31,6 +31,7 @@ interface UseWorkerActionsInput {
 }
 
 export interface CreateWorkerActionInput {
+  isolated?: boolean
   avatar: string | null
   commandPresetId: string
   name: string
@@ -58,7 +59,16 @@ export const useWorkerActions = ({
   setWorkersByWorkspaceId,
 }: UseWorkerActionsInput): WorkerActions => {
   const createWorkerAction = useCallback<WorkerActions['createWorker']>(
-    async ({ avatar, commandPresetId, model, name, role, roleDescription, startupCommand }) => {
+    async ({
+      avatar,
+      commandPresetId,
+      model,
+      name,
+      role,
+      roleDescription,
+      startupCommand,
+      isolated,
+    }) => {
       if (!activeWorkspaceId) return { error: 'No active workspace', runId: null }
       const startupClean = startupCommand.trim()
       const result = await createWorker(activeWorkspaceId, {
@@ -66,6 +76,7 @@ export const useWorkerActions = ({
         // the Orchestrator has a dispatch. A real dispatch starts a stopped
         // worker on demand; users can still start it explicitly from the card.
         autostart: false,
+        ...(isolated ? { isolated: true } : {}),
         avatar,
         command_preset_id: commandPresetId || null,
         description: roleDescription.trim(),

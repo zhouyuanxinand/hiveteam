@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { DispatchVerificationView } from '../../../src/shared/verification.js'
 import type { DispatchSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { DispatchIntegrationPanel } from './DispatchIntegrationPanel.js'
 import {
   getDispatchVerifications,
   startDispatchVerification,
@@ -257,6 +258,14 @@ export const DispatchVerificationDialog = ({
                         </details>
                       ))}
                     </details>
+                  ) : null}
+                  {view.isolated ? (
+                    <DispatchIntegrationPanel
+                      key={`${view.headSha}:${latest?.id}:${view.accepted}:${view.isDirty}`}
+                      workspaceId={dispatch.workspaceId}
+                      dispatchId={dispatch.id}
+                      onChanged={onChanged}
+                    />
                   ) : null}
                 </>
               )}

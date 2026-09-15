@@ -13,6 +13,7 @@ import { dispatchRoutes } from './routes-dispatches.js'
 import { externalGoalRoutes } from './routes-external-goals.js'
 import { fsRoutes } from './routes-fs.js'
 import { gitRoutes } from './routes-git.js'
+import { integrationRoutes } from './routes-integrations.js'
 import { marketplaceRoutes } from './routes-marketplace.js'
 import { memoryDreamRoutes } from './routes-memory-dream.js'
 import { openWorkspaceRoutes } from './routes-open-workspace.js'
@@ -40,6 +41,7 @@ const routes: RouteDefinition[] = [
   ...openWorkspaceRoutes,
   ...dispatchRoutes,
   ...verificationRoutes,
+  ...integrationRoutes,
   ...versionRoutes,
   ...uiRoutes,
   ...settingsRoutes,

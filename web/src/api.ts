@@ -58,6 +58,9 @@ const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
   pendingTaskCount: payload.pending_task_count,
   ...(payload.last_pty_line ? { lastPtyLine: payload.last_pty_line } : {}),
   ...(payload.command_preset_id ? { commandPresetId: payload.command_preset_id } : {}),
+  ...(payload.worktree_branch ? { worktreeBranch: payload.worktree_branch } : {}),
+  ...(payload.working_directory ? { workingDirectory: payload.working_directory } : {}),
+  ...(payload.worktree_error ? { worktreeError: payload.worktree_error } : {}),
 })
 
 export const readErrorMessage = async (response: Response, fallback: string): Promise<string> => {
@@ -1890,6 +1893,7 @@ export const listTerminalRuns = async (workspaceId: string): Promise<TerminalRun
 export const createWorker = async (
   workspaceId: string,
   input: Pick<AgentSummary, 'name'> & {
+    isolated?: boolean
     autostart?: boolean
     avatar?: string | null
     command_preset_id?: string | null
