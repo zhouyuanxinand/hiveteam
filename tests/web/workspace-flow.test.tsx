@@ -99,6 +99,13 @@ describe('workspace flow with real server', () => {
       { timeout: WORKSPACE_CREATE_TIMEOUT_MS }
     )
 
+    await waitFor(() => {
+      expect(screen.queryByTestId('confirm-workspace-dialog')).toBeNull()
+      expect(screen.queryByTestId('confirm-workspace-overlay')).toBeNull()
+      expect(screen.queryByTestId('add-workspace-picking')).toBeNull()
+      expect(screen.queryByTestId('add-workspace-dialog')).toBeNull()
+    })
+
     // Workspace name + path live in the sidebar (workspace row); the canvas
     // sub-header was removed in M6-A polish. Assert the orchestrator slot
     // mounted as the canonical "workspace canvas is loaded" signal.

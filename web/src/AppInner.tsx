@@ -87,6 +87,8 @@ export const AppInner = () => {
   useInitializeUiSession(setWorkspaces, setActiveWorkspaceId, onBootstrapError)
   const wsCreate = useWorkspaceCreate({
     onWorkspaceCreated: (ws) => {
+      setAddDialogTrigger(0)
+      setDroppedWorkspaceProbe(null)
       setWorkspaces((c) => (c === null ? [ws] : [...c, ws]))
       selectWorkspace(ws.id)
       setWorkersByWorkspaceId((c) => ({ ...c, [ws.id]: [] }))

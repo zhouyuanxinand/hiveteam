@@ -149,17 +149,32 @@ const windowsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => 
   const script = [
     'Add-Type -AssemblyName System.Windows.Forms',
     '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+    '$owner = New-Object System.Windows.Forms.Form',
+    'try {',
+    // A shown owner gives the native dialog a real topmost window to stay above.
+    // Keep the helper transparent and off the taskbar; dispose it with the picker.
+    '$owner.TopMost = $true',
+    '$owner.ShowInTaskbar = $false',
+    '$owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None',
+    '$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen',
+    '$owner.Size = New-Object System.Drawing.Size(1, 1)',
+    '$owner.Opacity = 0',
+    '$owner.Show()',
     '$dialog.RootFolder = [System.Environment+SpecialFolder]::MyComputer',
     '$dialog.Description = "Select Hive workspace folder. Documents inside it are detected after you click OK."',
     '$dialog.ShowNewFolderButton = $false',
-    '$result = $dialog.ShowDialog()',
+    '$result = $dialog.ShowDialog($owner)',
     `if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $encodedPath = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($dialog.SelectedPath)); [Console]::Out.WriteLine("${WINDOWS_PICKER_PATH_PREFIX}" + $encodedPath); exit 0 }`,
     'exit 1',
-  ].join('; ')
+    '} finally {',
+    '$dialog.Dispose()',
+    '$owner.Dispose()',
+    '}',
+  ].join('\n')
   const result = await run(
     'powershell.exe',
     ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    {}
+    { windowsHide: true }
   )
   if (result.spawnError?.code === 'ENOENT') {
     return emptyResponse({
