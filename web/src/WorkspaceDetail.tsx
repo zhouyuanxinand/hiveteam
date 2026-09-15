@@ -14,6 +14,7 @@ import {
 } from './api.js'
 import { useI18n } from './i18n.js'
 import { WorkspaceNotifications } from './notifications/WorkspaceNotifications.js'
+import { WorkspaceComposer } from './review/WorkspaceComposer.js'
 import { TerminalBottomPanel } from './terminal/TerminalBottomPanel.js'
 import { useTerminalPanelTabs } from './terminal/useTerminalPanelTabs.js'
 import { findRunByAgentId } from './terminal/useTerminalRuns.js'
@@ -39,6 +40,11 @@ const AddWorkerDialog = lazy(() =>
 )
 const WorkerModal = lazy(() =>
   import('./worker/WorkerModal.js').then((module) => ({ default: module.WorkerModal }))
+)
+const WorkspacePlanPanel = lazy(() =>
+  import('./review/WorkspacePlanPanel.js').then((module) => ({
+    default: module.WorkspacePlanPanel,
+  }))
 )
 
 type WorkspaceDetailProps = {
@@ -80,6 +86,8 @@ export const WorkspaceDetail = ({
   workers,
   workspace,
 }: WorkspaceDetailProps) => {
+  const [planWorkspaceId, setPlanWorkspaceId] = useState<string | null>(null)
+  const plansOpen = planWorkspaceId === workspace?.id
   const { t } = useI18n()
   const [activeWorkerId, setActiveWorkerId] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
@@ -316,6 +324,16 @@ export const WorkspaceDetail = ({
       style={{ background: 'var(--bg-2)' }}
     >
       <WorkspaceNotifications terminalRuns={terminalRuns} workers={workers} workspace={workspace} />
+      {plansOpen ? (
+        <Suspense fallback={null}>
+          <WorkspacePlanPanel
+            key={workspace.id}
+            workspaceId={workspace.id}
+            open={plansOpen}
+            onClose={() => setPlanWorkspaceId(null)}
+          />
+        </Suspense>
+      ) : null}
       <WorkspaceDeliveryPanel key={workspace.id} workspaceId={workspace.id} workers={workers} />
       <div ref={split.containerRef} className="workspace-pane-split relative flex min-h-0 flex-1">
         <div
@@ -323,17 +341,24 @@ export const WorkspaceDetail = ({
           style={{ width: orchWidth }}
           data-testid="orchestrator-pane-shell"
         >
-          <OrchestratorPane
-            state={orchestrator.state}
-            onStop={orchestrator.stop}
-            onRemoveWorkspace={() => {
-              void onDeleteWorkspace(workspace).catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : String(error)
-                toast.show({ kind: 'error', message: `Delete failed: ${message}` })
-              })
-            }}
-            onStart={orchestrator.start}
-            onRestart={orchestrator.restart}
+          <div className="min-h-0 flex-1">
+            <OrchestratorPane
+              state={orchestrator.state}
+              onStop={orchestrator.stop}
+              onRemoveWorkspace={() => {
+                void onDeleteWorkspace(workspace).catch((error: unknown) => {
+                  const message = error instanceof Error ? error.message : String(error)
+                  toast.show({ kind: 'error', message: `Delete failed: ${message}` })
+                })
+              }}
+              onStart={orchestrator.start}
+              onRestart={orchestrator.restart}
+            />
+          </div>
+          <WorkspaceComposer
+            key={workspace.id}
+            workspaceId={workspace.id}
+            onOpenPlans={() => setPlanWorkspaceId(workspace.id)}
           />
         </div>
         {/* biome-ignore lint/a11y/useSemanticElements: <hr> can't host pointer/keyboard handlers and the visible accent line; aria role="separator" is the canonical resize-handle role */}

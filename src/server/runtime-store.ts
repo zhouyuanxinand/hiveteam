@@ -60,6 +60,7 @@ import { createVerificationRuntime, type VerificationRuntime } from './verificat
 import { createWorkerBranchRuntime, type WorkerBranchRuntime } from './worker-branch-runtime.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
+import { createWorkspaceReview, type WorkspaceReview } from './workspace-review.js'
 import {
   createWorkspaceSkillManager,
   type WorkspaceSkillManager,
@@ -89,6 +90,7 @@ interface RuntimeStore {
   getDispatchWorkspacePath: (workspaceId: string, dispatchId: string) => string
   close: () => Promise<void>
   git: GitWorkspaceService
+  review: WorkspaceReview
   createWorkspace: (path: string, name: string, language?: WorkspaceLanguage) => WorkspaceSummary
   deleteWorkspace: (workspaceId: string) => Promise<void>
   listWorkspaces: () => WorkspaceSummary[]
@@ -227,6 +229,15 @@ export type { RuntimeStore }
 
 export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeStore => {
   const services = createRuntimeStoreServices(options)
+  const review = createWorkspaceReview({
+    db: services.db,
+    getWorkspacePath: (id) => services.workspaceStore.getWorkspaceSnapshot(id).summary.path,
+    isActive: (id) => !!services.agentRuntime.getActiveRunByAgentId(id, `${id}:orchestrator`),
+    deliver: (id, text) =>
+      services.agentRuntime.deliverSystemMessageToAgent(id, `${id}:orchestrator`, text, {
+        requireActiveRun: true,
+      }),
+  })
   const getDispatchWorkspacePath = (workspaceId: string, dispatchId: string) => {
     const dispatch = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
     if (!dispatch) throw new ConflictError('Dispatch not found')
@@ -380,6 +391,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const close = () => {
     if (closePromise) return closePromise
     closePromise = (async () => {
+      review.close()
       // Stop new dispatches immediately and drain any task that already began.
       // A dispatch captures its Git baseline asynchronously; closing SQLite
       // before that promise settles used to make the failure-recovery write run
@@ -555,6 +567,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   let remoteTunnel: RemoteTunnel | null = null
   return {
     close,
+    review,
     verifications,
     worktrees: services.worktrees,
     integrations,

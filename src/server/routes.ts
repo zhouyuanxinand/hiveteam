@@ -33,12 +33,14 @@ import { versionRoutes } from './routes-version.js'
 import { workerBranchRoutes } from './routes-worker-branches.js'
 import { workflowRoutes } from './routes-workflows.js'
 import { workspaceMemoryRoutes } from './routes-workspace-memory.js'
+import { workspaceReviewRoutes } from './routes-workspace-review.js'
 import { workspaceRoutes } from './routes-workspaces.js'
 import { worktreeResourceRoutes } from './routes-worktree-resources.js'
 
 const routes: RouteDefinition[] = [
   ...activityRoutes,
   ...workspaceRoutes,
+  ...workspaceReviewRoutes,
   ...workspaceMemoryRoutes,
   ...memoryDreamRoutes,
   ...workflowRoutes,
