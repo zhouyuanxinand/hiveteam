@@ -79,6 +79,7 @@ export const workspaceReviewRoutes: RouteDefinition[] = [
         request_id: textField(body, 'request_id'),
         text: textField(body, 'text'),
         question: textField(body, 'question'),
+        ...(body.agent_id !== undefined ? { agent_id: textField(body, 'agent_id') } : {}),
       })
     )
   }),

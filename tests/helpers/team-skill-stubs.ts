@@ -11,8 +11,12 @@ export const readyTeamSkillRuntime: Pick<TeamSkillRuntime, 'assertLaunchReady'> 
 
 export const rejectUnexpectedTeamSkillOperations: Pick<
   TeamOperationsInput,
-  'createDispatchActivation' | 'getDispatchActivation' | 'resolveDispatchActivation'
+  | 'createDispatchActivation'
+  | 'getDispatchActivation'
+  | 'resolveDispatchActivation'
+  | 'clarificationForWorker'
 > = {
+  clarificationForWorker: () => null,
   createDispatchActivation: () => {
     throw new Error('Unexpected Skill activation in a non-Skill test')
   },

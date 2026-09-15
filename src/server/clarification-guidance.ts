@@ -1,0 +1,13 @@
+import type { WorkspaceLanguage } from '../shared/types.js'
+
+export const clarificationRouting = (language: WorkspaceLanguage = 'zh') =>
+  language === 'en'
+    ? 'For grill/grilling/grill-me/grill-with-docs requests, delegate BEFORE reading the interview instructions or asking questions: run `team list` and `team skill list`, select one idle Hive worker with no pending tasks, then `team send "<worker-name>" "<requirements brief>" --skill "<pack/grill-skill>"`. Do not run the interview here or use native subagents. Tell the user which member window to answer in. If no member is available, ask the user to add or free one; never interrupt busy work. Await only the final `team report`, then decompose and dispatch implementation tasks. Do not read interview notes or request intermediate answers/status.'
+    : '收到 grill/grilling/grill-me/grill-with-docs 请求时，必须先转交，不要在主线程读取访谈 Skill 正文或提问：执行 `team list` 和 `team skill list`，选择一位空闲且无待办的真实 Hive 成员，用 `team send "<worker-name>" "<需求简述>" --skill "<pack/grill-skill>"` 派单。告诉用户进入该成员窗口回答。无可用成员时请用户添加或释放成员，不打断忙碌成员，不用内置 subagent。主线程只等待最终 `team report`，再拆解和派发实现任务；不读取访谈记录，不索要中间问答或状态正文。'
+
+export const workerClarificationGuidance = (dispatchId: string, language: WorkspaceLanguage) => {
+  const folder = `docs/clarifications/${dispatchId}`
+  return language === 'en'
+    ? `Hive clarification contract: conduct this interview entirely in YOUR member window. Accept free-form answers and edits, not just numbered options. Wait for the user there; waiting for an answer is not a blocked outcome and must not trigger team report. Keep interview notes in ${folder}/interview.md, not shared tasks/context/memory. Present the final plan in your window and ${folder}/final.md for explicit user confirmation. Only after confirmation, report once with team report --stdin --dispatch ${dispatchId} --outcome success: a concise summary (at most 6000 characters) of goals, scope, decisions, constraints, acceptance criteria, risks, and the final document path. Never include the Q&A transcript or intermediate drafts. Do not implement or dispatch tasks; the Orchestrator handles that after your final handoff. If genuinely unable to continue, report only the terminal outcome and concise reason, without the interview history. If cancelled, follow the Hive cancellation protocol; do not report on a cancelled dispatch.`
+    : `Hive 需求澄清合同：完整访谈只在你自己的成员窗口进行。支持用户自由填写和修改答案，不限定编号选项。提问后在本窗口等待用户；等待回答不是阻塞，不要因此 team report。访谈记录写入 ${folder}/interview.md，不写共享 tasks、CONTEXT 或 memory。最终方案在本窗口展示并写入 ${folder}/final.md，等待用户明确确认。确认后才使用 team report --stdin --dispatch ${dispatchId} --outcome success 回传一次精简结论（最多 6000 字符）：目标、范围、决策、约束、验收标准、风险及最终文档路径。不回传逐轮问答和中间草稿。不实现、不派工，由 Orchestrator 收到最终结论后拆解和分派。真正无法继续时仅汇报终止结果和简短原因，不附访谈历史；取消后遵循 Hive 取消协议。`
+}

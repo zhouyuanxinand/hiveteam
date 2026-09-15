@@ -13,6 +13,7 @@ export interface MessageLogRecord {
     | 'report'
     | 'status'
     | 'feedback'
+    | 'member_feedback'
     | 'system_env_sync'
     | 'system_recovery_summary'
   workerId: string
@@ -82,6 +83,7 @@ interface MessageRow {
     | 'report'
     | 'status'
     | 'feedback'
+    | 'member_feedback'
     | 'system_env_sync'
     | 'system_recovery_summary'
   worker_id: string
@@ -111,6 +113,7 @@ export const createMessageLogStore = (db: Database) => {
     `SELECT worker_id, type, from_agent_id, to_agent_id, text, status, artifacts, created_at
      FROM messages
      WHERE workspace_id = ? AND created_at >= ?
+       AND NOT (type = 'status' AND to_agent_id IS NOT NULL AND to_agent_id = worker_id)
      ORDER BY sequence ASC`
   )
   const deleteMessageStmt = db.prepare('DELETE FROM messages WHERE sequence = ?')

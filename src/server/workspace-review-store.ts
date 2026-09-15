@@ -15,7 +15,7 @@ export const createWorkspaceReviewStore = (db: Database) => {
       .get(workspaceId, path) as ReviewDraft | undefined) ?? null
   const submission = (workspaceId: string, requestId: string) => {
     const row = db
-      .prepare(`SELECT request_id, kind, path, status, error, created_at
+      .prepare(`SELECT request_id, agent_id, kind, path, status, error, created_at
       FROM workspace_review_submissions WHERE workspace_id = ? AND request_id = ?`)
       .get(workspaceId, requestId) as ReviewSubmission | undefined
     if (!row) throw new HttpError(404, 'Submission not found')
@@ -44,7 +44,7 @@ export const createWorkspaceReviewStore = (db: Database) => {
     interrupt,
     submissions: (workspaceId: string, path: string) =>
       db
-        .prepare(`SELECT request_id, kind, path, status, error, created_at
+        .prepare(`SELECT request_id, agent_id, kind, path, status, error, created_at
       FROM workspace_review_submissions WHERE workspace_id = ? AND path = ? ORDER BY created_at DESC, rowid DESC LIMIT 8`)
         .all(workspaceId, path) as ReviewSubmission[],
     confirmation: (workspaceId: string, path: string, revision: string) => {
@@ -102,18 +102,20 @@ export const createWorkspaceReviewStore = (db: Database) => {
       kind: ReviewSubmission['kind'],
       path: string | null,
       identity: string,
-      payload: string
+      payload: string,
+      agentId: string
     ) => {
       db.prepare(`INSERT INTO workspace_review_submissions
-        (workspace_id, request_id, kind, path, identity, payload, status, error, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 'blocked', NULL, ?)`).run(
+        (workspace_id, request_id, kind, path, identity, payload, status, error, created_at, agent_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'blocked', NULL, ?, ?)`).run(
         workspaceId,
         requestId,
         kind,
         path,
         identity,
         payload,
-        Date.now()
+        Date.now(),
+        agentId
       )
     },
   }

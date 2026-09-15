@@ -1640,11 +1640,11 @@ html, body {
   }
 }
 
-/* Member terminals close by clicking the desktop overlay. A touch device has
-   no reliable outside target once the terminal is full-screen, so retain a
-   conventional top-right close affordance there. */
+/* Member terminals close by clicking the desktop overlay. Touch devices and
+   narrow windows lack a reliable outside target when full-screen, so retain
+   a conventional top-right close affordance there. */
 .worker-modal__close { display: none; }
-@media (hover: none), (pointer: coarse) {
+@media (hover: none), (pointer: coarse), (max-width: 640px) {
   .worker-modal__close { display: inline-flex; }
 }
 

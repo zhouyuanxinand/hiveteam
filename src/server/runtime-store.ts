@@ -18,7 +18,7 @@ import {
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { GitWorkspaceService } from './git-workspace-service.js'
 import type { GitHubClient } from './github-pull-requests.js'
-import { ConflictError, ForbiddenError } from './http-errors.js'
+import { ConflictError, ForbiddenError, HttpError } from './http-errors.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
@@ -232,9 +232,13 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const review = createWorkspaceReview({
     db: services.db,
     getWorkspacePath: (id) => services.workspaceStore.getWorkspaceSnapshot(id).summary.path,
-    isActive: (id) => !!services.agentRuntime.getActiveRunByAgentId(id, `${id}:orchestrator`),
-    deliver: (id, text) =>
-      services.agentRuntime.deliverSystemMessageToAgent(id, `${id}:orchestrator`, text, {
+    assertRecipient: (id, agentId) => {
+      if (!services.workspaceStore.hasAgent(id, agentId))
+        throw new HttpError(404, 'Recipient not found in this workspace')
+    },
+    isActive: (id, agentId) => !!services.agentRuntime.getActiveRunByAgentId(id, agentId),
+    deliver: (id, text, agentId) =>
+      services.agentRuntime.deliverSystemMessageToAgent(id, agentId, text, {
         requireActiveRun: true,
       }),
   })
@@ -688,8 +692,13 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       const pendingByWorker = services.dispatchLedgerStore.countPendingByWorker(workspaceId)
       return services.workspaceStore.listWorkers(workspaceId).map((worker) => {
         const tree = services.worktrees.get(workspaceId, worker.id)
+        const clarification = services.dispatchSkillActivationStore.clarificationForWorker(
+          workspaceId,
+          worker.id
+        )
         return {
           ...worker,
+          ...(clarification ? { clarification } : {}),
           ...(tree
             ? {
                 worktreeBranch: tree.branch,
@@ -702,7 +711,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       })
     },
     getLastPtyLineForAgent: (workspaceId, agentId) =>
-      services.workerOutputTracker?.getLastPtyLine(workspaceId, agentId) ?? null,
+      services.dispatchSkillActivationStore.clarificationForWorker(workspaceId, agentId)
+        ? null
+        : (services.workerOutputTracker?.getLastPtyLine(workspaceId, agentId) ?? null),
     getWorkspaceSnapshot: (workspaceId) =>
       services.workspaceStore.getWorkspaceSnapshot(workspaceId),
     getWorker: (workspaceId, workerId) => services.workspaceStore.getWorker(workspaceId, workerId),

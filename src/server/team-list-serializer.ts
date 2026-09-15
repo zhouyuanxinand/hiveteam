@@ -2,6 +2,7 @@ import type { TeamListItem, TeamListItemPayload } from '../shared/types.js'
 
 export const serializeTeamListItem = ({
   avatar,
+  clarification,
   commandPresetId,
   id,
   lastPtyLine,
@@ -13,6 +14,15 @@ export const serializeTeamListItem = ({
   workingDirectory,
   worktreeError,
 }: TeamListItem): TeamListItemPayload => ({
+  ...(clarification
+    ? {
+        clarification: {
+          dispatch_id: clarification.dispatchId,
+          skill_name: clarification.skillName,
+          active: clarification.active,
+        },
+      }
+    : {}),
   ...(avatar ? { avatar } : {}),
   ...(worktreeBranch ? { worktree_branch: worktreeBranch } : {}),
   ...(workingDirectory ? { working_directory: workingDirectory } : {}),

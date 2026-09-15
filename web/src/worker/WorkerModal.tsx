@@ -3,6 +3,8 @@ import { AlertTriangle, Play, SlidersHorizontal, X } from 'lucide-react'
 
 import type { TeamListItem } from '../../../src/shared/types.js'
 import { useI18n } from '../i18n.js'
+import { useReviewCopy } from '../review/review-copy.js'
+import { WorkspaceComposer } from '../review/WorkspaceComposer.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { CliAgentAvatar } from './CliAgentAvatar.js'
 import { getRolePresentation } from './role-presentation.js'
@@ -18,10 +20,11 @@ type WorkerModalProps = {
   startError: string | null
   starting: boolean
   worker: TeamListItem
+  workspaceId: string
 }
 
 /**
- * Worker detail dialog — pure PTY view. All control actions (Stop / Restart /
+ * Worker detail dialog — PTY and recipient-scoped replies. All control actions (Stop / Restart /
  * Delete / Start) live on the WorkerCard's hover cluster now; this dialog
  * only handles "watch the terminal" + "close". Desktop users close it by
  * clicking the overlay; touch/full-screen layouts retain a visible close
@@ -37,8 +40,10 @@ export const WorkerModal = ({
   startError,
   starting,
   worker,
+  workspaceId,
 }: WorkerModalProps) => {
   const { t } = useI18n()
+  const copy = useReviewCopy()
   const role = getRolePresentation(worker.role)
   const ptyRunning = !!runId
   const status = presentWorkerRuntimeStatus(ptyRunning)
@@ -64,6 +69,7 @@ export const WorkerModal = ({
             style={{
               background: 'var(--bg-1)',
               width: `${resize.width}px`,
+              maxWidth: '100vw',
             }}
           >
             {/* biome-ignore lint/a11y/useSemanticElements: aria role="separator" is the canonical resize-handle role */}
@@ -94,6 +100,11 @@ export const WorkerModal = ({
             <Dialog.Description className="sr-only">
               {role.label} agent — status {status.label}
             </Dialog.Description>
+            {worker.clarification?.active ? (
+              <p className="shrink-0 px-4 pt-3 text-sm text-pri">
+                {copy.interview} · {worker.name}
+              </p>
+            ) : null}
 
             {startError ? (
               <div
@@ -178,6 +189,7 @@ export const WorkerModal = ({
                 )}
               </div>
             </div>
+            <WorkspaceComposer workspaceId={workspaceId} recipient={worker} />
           </Dialog.Content>
         </div>
       </Dialog.Portal>

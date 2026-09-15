@@ -20,6 +20,8 @@ html[data-hive-theme="light"] .workspace-plan-panel { --review-link: var(--accen
   gap: .5rem;
 }
 .review-actions { justify-content: flex-start; }
+.clarification-notice { flex-shrink: 0; display: grid; gap: .5rem; padding: .75rem 1rem; background: var(--bg-2); color: var(--text-primary); max-height: 25vh; overflow: auto; }
+.clarification-notice button, .workspace-composer label { overflow-wrap: anywhere; white-space: normal; min-width: 0; }
 .review-input {
   display: block;
   width: 100%;

@@ -1,3 +1,5 @@
+import type { ClarificationAssignment } from './clarification.js'
+
 export const agentStatuses = ['idle', 'working', 'stopped'] as const
 
 export type AgentStatus = (typeof agentStatuses)[number]
@@ -36,6 +38,7 @@ export interface AgentSummary {
 }
 
 export interface TeamListItem {
+  clarification?: ClarificationAssignment
   worktreeBranch?: string
   workingDirectory?: string
   worktreeError?: string
@@ -67,6 +70,7 @@ export interface TeamListItem {
  * Internal TS code uses TeamListItem (camelCase); serializers/deserializers convert.
  */
 export interface TeamListItemPayload {
+  clarification?: { dispatch_id: string; skill_name: string; active: boolean }
   worktree_branch?: string
   working_directory?: string
   worktree_error?: string

@@ -244,6 +244,7 @@ export const createRuntimeStoreServices = (
     findOpenDispatchById: dispatchLedgerStore.findOpenDispatchById,
     getDispatchById: dispatchLedgerStore.getDispatchById,
     getDispatchActivation: dispatchSkillActivationStore.get,
+    clarificationForWorker: dispatchSkillActivationStore.clarificationForWorker,
     listOpenWorkspaceDispatches: (workspaceId) =>
       dispatchLedgerStore
         .listWorkspaceDispatches(workspaceId)

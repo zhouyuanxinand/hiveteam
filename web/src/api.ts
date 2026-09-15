@@ -50,6 +50,15 @@ export type {
 }
 
 const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
+  ...(payload.clarification
+    ? {
+        clarification: {
+          dispatchId: payload.clarification.dispatch_id,
+          skillName: payload.clarification.skill_name,
+          active: payload.clarification.active,
+        },
+      }
+    : {}),
   ...(payload.avatar ? { avatar: payload.avatar } : {}),
   id: payload.id,
   name: payload.name,

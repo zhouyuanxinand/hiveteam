@@ -1,4 +1,5 @@
 import type { Database } from 'better-sqlite3'
+import { type ClarificationAssignment, isClarificationSkill } from '../shared/clarification.js'
 
 import type { DispatchSkillActivation, ResolvedSkillActivation } from '../shared/skill-packs.js'
 
@@ -80,7 +81,26 @@ export const createDispatchSkillActivationStore = (db: Database) => {
     ).run(workspaceId, workerId)
   }
 
-  return { deleteDispatch, deleteWorker, deleteWorkspace, get, insert }
+  const clarificationForWorker = (
+    workspaceId: string,
+    workerId: string
+  ): ClarificationAssignment | null => {
+    const row = db
+      .prepare(`SELECT d.id, d.status, a.skill_name
+      FROM dispatches d LEFT JOIN dispatch_skill_activations a ON a.dispatch_id = d.id
+      WHERE d.workspace_id = ? AND d.to_agent_id = ? ORDER BY d.sequence DESC LIMIT 1`)
+      .get(workspaceId, workerId) as
+      | { id: string; status: string; skill_name: string | null }
+      | undefined
+    if (!row?.skill_name || !isClarificationSkill(row.skill_name)) return null
+    return {
+      dispatchId: row.id,
+      skillName: row.skill_name,
+      active: ['queued', 'submitted', 'failed'].includes(row.status),
+    }
+  }
+
+  return { clarificationForWorker, deleteDispatch, deleteWorker, deleteWorkspace, get, insert }
 }
 
 export type DispatchSkillActivationStore = ReturnType<typeof createDispatchSkillActivationStore>

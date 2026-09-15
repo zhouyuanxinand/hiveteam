@@ -34,13 +34,35 @@ const readDraft = (key: string): { draft: AnswerDraft; failed: boolean } => {
 export const WorkspaceComposer = ({
   workspaceId,
   onOpenPlans,
+  recipient,
 }: {
   workspaceId: string
-  onOpenPlans: () => void
+  onOpenPlans?: () => void
+  recipient?: { id: string; name: string }
+}) => {
+  // Recipient changes remount the stateful editor; drafts and request IDs never cross members.
+  return (
+    <RecipientComposer
+      key={`${workspaceId}:${recipient?.id ?? 'orchestrator'}`}
+      workspaceId={workspaceId}
+      {...(onOpenPlans ? { onOpenPlans } : {})}
+      {...(recipient ? { recipient } : {})}
+    />
+  )
+}
+
+const RecipientComposer = ({
+  workspaceId,
+  onOpenPlans,
+  recipient,
+}: {
+  workspaceId: string
+  onOpenPlans?: () => void
+  recipient?: { id: string; name: string }
 }) => {
   const copy = useReviewCopy()
   const labelId = useId()
-  const key = `hive:answer:${workspaceId}`
+  const key = `hive:answer:${workspaceId}${recipient ? `:${recipient.id}` : ''}`
   const [initial] = useState(() => readDraft(key))
   const [draft, setDraft] = useState(initial.draft)
   const [storageError, setStorageError] = useState(initial.failed)
@@ -72,7 +94,10 @@ export const WorkspaceComposer = ({
     if (!draft.text.trim() || delivery.busy) return
     setDraft((value) => ({ ...value, attempted: true }))
     void delivery.send(draft.request_id, () =>
-      reviewRequest<ReviewSubmission>(workspaceId, '/answer', 'POST', draft)
+      reviewRequest<ReviewSubmission>(workspaceId, '/answer', 'POST', {
+        ...draft,
+        ...(recipient ? { agent_id: recipient.id } : {}),
+      })
     )
   }
   return (
@@ -85,13 +110,16 @@ export const WorkspaceComposer = ({
     >
       <div className="review-toolbar">
         <label id={labelId} htmlFor={`${labelId}-answer`} className="font-medium">
-          {copy.answer}
+          {recipient ? `${copy.replyTo} ${recipient.name}` : copy.answer}
         </label>
-        <button type="button" className="icon-btn" onClick={onOpenPlans}>
-          <FileText size={15} aria-hidden />
-          {copy.plans}
-        </button>
+        {onOpenPlans ? (
+          <button type="button" className="icon-btn" onClick={onOpenPlans}>
+            <FileText size={15} aria-hidden />
+            {copy.plans}
+          </button>
+        ) : null}
       </div>
+      {recipient ? <p className="text-xs text-sec">{copy.memberOnly}</p> : null}
       <details>
         <summary className="text-sec text-xs">{copy.question}</summary>
         <input

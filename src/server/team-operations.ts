@@ -1,3 +1,4 @@
+import { isClarificationSkill } from '../shared/clarification.js'
 import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
 import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { AgentRuntime } from './agent-runtime.js'
@@ -44,6 +45,7 @@ export interface TeamOperationsInput {
   /** Required for the review-feedback path; optional for lightweight callers. */
   getDispatchById?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   getDispatchActivation: DispatchSkillActivationStore['get']
+  clarificationForWorker: DispatchSkillActivationStore['clarificationForWorker']
   listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
   insertMessage: (record: MessageLogRecord) => MessageLogHandle
   markDispatchCancelled: (input: {
@@ -126,6 +128,7 @@ export const createTeamOperations = ({
   findOpenDispatchById,
   getDispatchById,
   getDispatchActivation,
+  clarificationForWorker,
   listOpenWorkspaceDispatches = () => [],
   insertMessage,
   markDispatchCancelled,
@@ -361,6 +364,18 @@ export const createTeamOperations = ({
       if (input.fromAgentId) dispatchInput.fromAgentId = input.fromAgentId
       let createdDispatch: DispatchRecord | undefined
       runMutation(() => {
+        const interview = clarificationForWorker(workspaceId, workerId)
+        if (interview?.active)
+          throw new ConflictError(
+            'This member is conducting a clarification. Finish or cancel it before dispatching another task.'
+          )
+        if (skillActivation && isClarificationSkill(skillActivation.skillName)) {
+          const worker = workspaceStore.getWorker(workspaceId, workerId)
+          if (worker.status !== 'idle' || findOpenDispatch(workspaceId, workerId))
+            throw new ConflictError(
+              'Clarification requires an idle member with no pending dispatches.'
+            )
+        }
         const candidate = createDispatch(dispatchInput)
         if (skillActivation) createDispatchActivation(candidate.id, skillActivation)
         createdDispatch = candidate
@@ -507,6 +522,16 @@ export const createTeamOperations = ({
       if (dispatch.status === 'cancelled') {
         throw new ConflictError('This dispatch was cancelled; dispatch a new task instead')
       }
+      const interview = clarificationForWorker(workspaceId, dispatch.toAgentId)
+      const isInterview = isClarificationSkill(getDispatchActivation(dispatchId)?.skillName ?? '')
+      if (interview?.active && interview.dispatchId !== dispatchId)
+        throw new ConflictError(
+          'This member is conducting a clarification. Finish or cancel it before reopening other work.'
+        )
+      if (isInterview && interview?.dispatchId !== dispatchId)
+        throw new ConflictError(
+          'This member has moved to another task. Start a new clarification dispatch instead of reopening the old interview.'
+        )
       // Feedback only makes sense when the worker can actually read it.
       if (!agentRuntime.getActiveRunByAgentId(workspaceId, dispatch.toAgentId)) {
         throw new PtyInactiveError('The worker is not running. Start it first, then send feedback.')
@@ -521,7 +546,10 @@ export const createTeamOperations = ({
         }
       }
 
-      insertMessage(createFeedbackMessage(workspaceId, dispatch.toAgentId, text))
+      insertMessage({
+        ...createFeedbackMessage(workspaceId, dispatch.toAgentId, text),
+        ...(isInterview ? { type: 'member_feedback' as const } : {}),
+      })
       try {
         agentRuntime.writeWorkerFeedbackPrompt(workspaceId, dispatch.toAgentId, dispatchId, text)
       } catch (error) {
@@ -537,13 +565,15 @@ export const createTeamOperations = ({
       const text = input.text ?? ''
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
-      const messageHandle = insertMessage(
-        createStatusMessage(workspaceId, workerId, text, artifacts)
-      )
+      const isolated = !!clarificationForWorker(workspaceId, workerId)
+      const messageHandle = insertMessage({
+        ...createStatusMessage(workspaceId, workerId, text, artifacts),
+        ...(isolated ? { toAgentId: workerId } : {}),
+      })
       try {
         let forwardError: string | null = null
         let forwarded = false
-        if (input.requireActiveRun === true) {
+        if (input.requireActiveRun === true && !isolated) {
           try {
             agentRuntime.writeStatusPrompt(workspaceId, worker.name, workerId, text, artifacts, {
               requireActiveRun: input.requireActiveRun,

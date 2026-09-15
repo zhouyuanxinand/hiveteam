@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import type { ReviewDocumentState } from '../../src/shared/workspace-review.js'
+import { ClarificationNotice } from '../../web/src/review/ClarificationNotice.js'
 import { PlanEditor } from '../../web/src/review/PlanEditor.js'
 import { ReviewMarkdown } from '../../web/src/review/ReviewMarkdown.js'
 import { WorkspaceComposer } from '../../web/src/review/WorkspaceComposer.js'
@@ -27,6 +28,73 @@ const Harness = ({ initial = original }: { initial?: ReviewDocumentState }) => {
   const [state, setState] = useState(initial)
   return <PlanEditor workspaceId="w1" state={state} onUpdate={setState} onReload={() => {}} />
 }
+
+test('member replies and drafts remain recipient-scoped when switching windows', async () => {
+  const payloads: Array<Record<string, unknown>> = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>
+    payloads.push(body)
+    return Response.json({
+      ...body,
+      kind: 'answer',
+      path: null,
+      status: 'submitted',
+      error: null,
+      created_at: 1,
+    })
+  })
+  const view = render(
+    <WorkspaceComposer workspaceId="w1" recipient={{ id: 'alice', name: 'Alice' }} />
+  )
+  fireEvent.change(screen.getByLabelText('Reply to Alice'), {
+    target: { value: 'Alice only\nCustom reply' },
+  })
+  view.rerender(<WorkspaceComposer workspaceId="w1" recipient={{ id: 'bob', name: 'Bob' }} />)
+  expect(screen.getByLabelText('Reply to Bob')).toHaveValue('')
+  fireEvent.change(screen.getByLabelText('Reply to Bob'), { target: { value: 'Bob draft' } })
+  view.rerender(<WorkspaceComposer workspaceId="w1" />)
+  expect(screen.getByLabelText('Your reply')).toHaveValue('')
+  view.rerender(<WorkspaceComposer workspaceId="w1" recipient={{ id: 'alice', name: 'Alice' }} />)
+  expect(screen.getByLabelText('Reply to Alice')).toHaveValue('Alice only\nCustom reply')
+  expect(screen.getByText('Sent only to this member, not to Orchestrator.')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Plan documents' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }))
+  await waitFor(() => expect(screen.getByLabelText('Reply to Alice')).toHaveValue(''))
+  expect(payloads).toHaveLength(1)
+  expect(payloads[0]).toMatchObject({ agent_id: 'alice', text: 'Alice only\nCustom reply' })
+  view.rerender(<WorkspaceComposer workspaceId="w1" recipient={{ id: 'bob', name: 'Bob' }} />)
+  expect(screen.getByLabelText('Reply to Bob')).toHaveValue('Bob draft')
+})
+
+test('the clarification notice opens only the assigned member and disappears when reported', () => {
+  const worker = {
+    id: 'alice',
+    name: 'Alice',
+    role: 'coder' as const,
+    status: 'working' as const,
+    pendingTaskCount: 1,
+    clarification: { dispatchId: 'd1', skillName: 'grilling', active: true },
+  }
+  const Notice = () => {
+    const [opened, setOpened] = useState('')
+    return (
+      <>
+        <ClarificationNotice workers={[worker]} onOpen={setOpened} />
+        <output>{opened}</output>
+      </>
+    )
+  }
+  const view = render(<Notice />)
+  fireEvent.click(screen.getByRole('button', { name: 'Answer in member window · Alice' }))
+  expect(screen.getByRole('status')).toHaveTextContent('alice')
+  view.rerender(
+    <ClarificationNotice
+      workers={[{ ...worker, clarification: { ...worker.clarification, active: false } }]}
+      onOpen={() => {}}
+    />
+  )
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+})
 test('free-form answers preserve multiline text, question context and drafts across remounts', async () => {
   const payloads: Array<Record<string, unknown>> = []
   vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {

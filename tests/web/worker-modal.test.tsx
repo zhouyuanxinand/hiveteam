@@ -33,6 +33,7 @@ const renderModal = (
   const onStart = vi.fn()
   render(
     <WorkerModal
+      workspaceId="test-workspace"
       onClose={onClose}
       onStart={onStart}
       runId={options.runId === undefined ? 'run-1' : options.runId}

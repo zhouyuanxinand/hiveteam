@@ -1,9 +1,11 @@
+import { isClarificationSkill } from '../shared/clarification.js'
 import type { ReportOutcome } from '../shared/dispatch-result.js'
 import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { WorkspaceLanguage } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import { workerClarificationGuidance } from './clarification-guidance.js'
 import {
   buildWorkerReminderTail,
   getOrchestratorReminderTail,
@@ -117,6 +119,8 @@ export const buildWorkerDispatchPayload = (
     `dispatch_id: ${dispatchId}`,
   ]
   if (skillActivation) {
+    if (isClarificationSkill(skillActivation.skillName))
+      lines.push('', workerClarificationGuidance(dispatchId, language ?? 'zh'))
     lines.push(
       '',
       english ? 'Activated Skill:' : '已激活 Skill：',
@@ -138,6 +142,8 @@ export const buildWorkerDispatchPayload = (
   // workspace-aware callers pass an explicit language for a fully localized
   // dispatch.
   lines.push('', buildWorkerReminderTail(dispatchId, language ?? 'en'), '')
+  if (skillActivation && isClarificationSkill(skillActivation.skillName))
+    lines.push(workerClarificationGuidance(dispatchId, language ?? 'zh'))
   return lines.join('\n')
 }
 

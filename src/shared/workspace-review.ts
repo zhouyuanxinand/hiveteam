@@ -17,6 +17,7 @@ export interface ReviewDraft {
 }
 
 export interface ReviewSubmission {
+  agent_id?: string
   request_id: string
   kind: 'answer' | 'review'
   path: string | null

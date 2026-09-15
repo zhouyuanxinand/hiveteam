@@ -1,3 +1,4 @@
+import { clarificationSkillNames } from './clarification.js'
 import type { SkillPackManifest, SkillProfileName, SkillProfiles } from './skill-packs.js'
 import { skillProfileNames } from './skill-packs.js'
 
@@ -6,7 +7,7 @@ const recommendedProfiles: Record<SkillProfileName, string[]> = {
   custom: [],
   orchestrator: [
     'ask-matt',
-    'grilling',
+    ...clarificationSkillNames,
     'to-spec',
     'to-tickets',
     'to-goal',

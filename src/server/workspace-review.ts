@@ -40,13 +40,15 @@ const requestId = (value: unknown): string => {
 export const createWorkspaceReview = ({
   db,
   getWorkspacePath,
+  assertRecipient,
   isActive,
   deliver,
 }: {
   db: Database
   getWorkspacePath: (workspaceId: string) => string
-  isActive: (workspaceId: string) => boolean
-  deliver: (workspaceId: string, text: string) => Promise<void>
+  assertRecipient: (workspaceId: string, agentId: string) => void
+  isActive: (workspaceId: string, agentId: string) => boolean
+  deliver: (workspaceId: string, text: string, agentId: string) => Promise<void>
 }) => {
   const records = createWorkspaceReviewStore(db)
   const busy = new Set<string>()
@@ -65,28 +67,30 @@ export const createWorkspaceReview = ({
     kind: ReviewSubmission['kind'],
     path: string | null,
     identity: string,
-    payload: string
+    payload: string,
+    agentId = `${workspaceId}:orchestrator`
   ) => {
     if (closed) throw new HttpError(503, 'Runtime is stopping')
     getWorkspacePath(workspaceId)
+    assertRecipient(workspaceId, agentId)
     const existing = records.existing(workspaceId, id, identity)
     if (existing && existing.status !== 'blocked') return existing
-    if (!existing) records.create(workspaceId, id, kind, path, identity, payload)
-    if (!isActive(workspaceId) || busy.has(workspaceId)) {
+    if (!existing) records.create(workspaceId, id, kind, path, identity, payload, agentId)
+    if (!isActive(workspaceId, agentId) || busy.has(agentId)) {
       records.updateStatus(
         workspaceId,
         id,
         'blocked',
-        busy.has(workspaceId)
+        busy.has(agentId)
           ? 'Another submission is being sent. Retry after it completes.'
-          : 'Orchestrator is stopped. Start it, then retry.'
+          : 'Recipient is stopped. Start it, then retry.'
       )
       return records.submission(workspaceId, id)
     }
     records.updateStatus(workspaceId, id, 'sending', null)
-    busy.add(workspaceId)
+    busy.add(agentId)
     void Promise.resolve()
-      .then(() => deliver(workspaceId, payload))
+      .then(() => deliver(workspaceId, payload, agentId))
       .then(
         () => {
           if (!closed) records.updateStatus(workspaceId, id, 'submitted', null)
@@ -102,7 +106,7 @@ export const createWorkspaceReview = ({
             )
         }
       )
-      .finally(() => busy.delete(workspaceId))
+      .finally(() => busy.delete(agentId))
     return records.submission(workspaceId, id)
   }
   return {
@@ -136,12 +140,22 @@ export const createWorkspaceReview = ({
       records.confirm(workspaceId, document)
       return { confirmed_revision: document.revision }
     },
-    answer(workspaceId: string, input: { request_id: string; text: string; question: string }) {
+    answer(
+      workspaceId: string,
+      input: { request_id: string; text: string; question: string; agent_id?: string }
+    ) {
       const id = requestId(input.request_id)
       const text = validateReviewText(input.text, 'text', 16000)
       const question = validateReviewText(input.question, 'question', 4000)
       if (!text.trim()) throw new BadRequestError('Answer cannot be empty')
-      const identity = reviewRevision(JSON.stringify({ text, question }))
+      const agentId = input.agent_id ?? `${workspaceId}:orchestrator`
+      const identity = reviewRevision(
+        JSON.stringify({
+          text,
+          question,
+          ...(agentId !== `${workspaceId}:orchestrator` ? { agent_id: agentId } : {}),
+        })
+      )
       const payload = [
         `[Hive user response ${id}]`,
         '以下是用户自由填写的回答。保留原意，不强制归类为选项；如修订了旧答案，请核对受影响的方案。',
@@ -151,7 +165,7 @@ export const createWorkspaceReview = ({
           Number.POSITIVE_INFINITY
         ),
       ].join('\n')
-      return submit(workspaceId, id, 'answer', null, identity, payload)
+      return submit(workspaceId, id, 'answer', null, identity, payload, agentId)
     },
     async review(
       workspaceId: string,

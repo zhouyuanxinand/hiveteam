@@ -2,6 +2,7 @@ import { isUtf8 } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { readFile, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isClarificationSkill } from '../shared/clarification.js'
 
 import type {
   AvailableSkill,
@@ -332,9 +333,27 @@ export const createTeamSkillRuntime = ({
   const loadReleaseSkill = async (
     workspaceId: string,
     agentId: string,
-    requestedSkill: string
+    requestedSkill: string,
+    delegateClarification = false
   ): Promise<ResolvedSkillActivation> => {
     const profile = await resolveProfile(workspaceId, agentId)
+    // An explicit grill dispatch may delegate a planner-owned interview Skill.
+    // This does not expose other planner Skills or change the worker's profile.
+    if (
+      delegateClarification &&
+      profile.agent.role !== 'orchestrator' &&
+      isClarificationSkill(requestedSkill)
+    ) {
+      const delegated = await resolveReferences(
+        profile.state.configuration,
+        profile.state.lock,
+        profile.state.configuration.profiles.orchestrator.filter(isClarificationSkill)
+      )
+      const existing = new Set(profile.skills.map((skill) => skill.available.qualifiedName))
+      profile.skills.push(
+        ...delegated.filter((skill) => !existing.has(skill.available.qualifiedName))
+      )
+    }
     const available = profile.skills.map((skill) => skill.available)
     const selected = resolveAllowedReference(available, requestedSkill)
     const resolved = profile.skills.find(
@@ -480,6 +499,12 @@ export const createTeamSkillRuntime = ({
         'Workers may load only the Skill pinned to their own open dispatch'
       )
     }
+    if (isClarificationSkill(input.skillName)) {
+      throw new TeamSkillRuntimeError(
+        'skill_not_allowed',
+        'Delegate the interview with team send "<idle-worker>" "<brief>" --skill "<pack/grill-skill>". The Orchestrator receives only the final report.'
+      )
+    }
     return loadReleaseSkill(input.workspaceId, input.agentId, input.skillName)
   }
 
@@ -559,7 +584,8 @@ export const createTeamSkillRuntime = ({
     listAvailable,
     loadForAgent,
     readDispatchReference,
-    resolveDispatchActivation: loadReleaseSkill,
+    resolveDispatchActivation: (workspaceId: string, agentId: string, skillName: string) =>
+      loadReleaseSkill(workspaceId, agentId, skillName, true),
   }
 }
 

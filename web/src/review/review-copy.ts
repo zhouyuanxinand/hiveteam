@@ -2,6 +2,12 @@ import { useI18n } from '../i18n.js'
 
 const en = {
   answer: 'Your reply',
+  replyTo: 'Reply to',
+  memberOnly: 'Sent only to this member, not to Orchestrator.',
+  clarification:
+    'Requirement clarification stays in the member window. Orchestrator waits for the final report.',
+  openInterview: 'Answer in member window',
+  interview: 'Requirement clarification',
   question: 'Question or earlier answer to revise (optional)',
   answerHint: 'Write in your own words. Enter adds a line; Ctrl/⌘ + Enter sends.',
   placeholder: 'None of those options? Describe what you need…',
@@ -38,7 +44,7 @@ const en = {
   noDiff: 'No text changes. You can add review instructions below.',
   reviewHint:
     'Review only: Orchestrator should revise the plan and wait for confirmation, not implement it.',
-  blocked: 'Not sent. Start Orchestrator or wait for the previous submission, then retry.',
+  blocked: 'Not sent. Start the recipient or wait for the previous submission, then retry.',
   sending: 'Waiting for terminal submission… Do not resend in the terminal.',
   submitted: 'Submitted to the terminal. Check the model’s reply; this is not a review approval.',
   uncertain:
@@ -60,6 +66,11 @@ const en = {
 }
 const zh: typeof en = {
   answer: '自由回答',
+  replyTo: '回答给',
+  memberOnly: '仅发送给这位成员，不转发给 Orchestrator。',
+  clarification: '需求澄清在成员窗口进行，Orchestrator 等待最终结论。',
+  openInterview: '进入成员窗口回答',
+  interview: '需求澄清',
   question: '对应问题／要修改的旧答案（可选）',
   answerHint: '直接表达你的想法。Enter 换行；Ctrl/⌘ + Enter 发送。',
   placeholder: '不必局限于选项，填写你的完整回答…',
@@ -93,7 +104,7 @@ const zh: typeof en = {
   savedDraft: '草稿已保存',
   noDiff: '正文没有变化，也可以在下方补充复核意见。',
   reviewHint: '仅复核方案：要求 Orchestrator 修订并等待再次确认，不开始实现。',
-  blocked: '尚未发送。请启动 Orchestrator，或等待上一条提交完成后重试。',
+  blocked: '尚未发送。请启动接收成员，或等待上一条提交完成后重试。',
   sending: '正在等待终端接收…请勿在终端重复发送。',
   submitted: '已提交到终端，请查看模型回复；这不代表方案已通过复核。',
   uncertain: '发送结果不确定。请先查看终端确认；Hive 不会自动重发。',

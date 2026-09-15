@@ -149,7 +149,8 @@ describe('agent startup instructions', () => {
         expect(output).toContain('或 user 明确要求 worker/成员处理时，再用 `team send`')
         expect(output).toContain('如果只有一个可用 worker，直接用 `team send "<worker-name>"')
         expect(output).toContain('不要使用你所在 CLI 的内置 subagent / 子代理工具')
-        expect(output).not.toContain('team report')
+        expect(output).toContain('主线程只等待最终 `team report`')
+        expect(output).not.toContain('你是 Hive worker。')
         expect(output).toContain('SUBMITTED')
       }, 6000)
 
