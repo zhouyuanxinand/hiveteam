@@ -188,6 +188,17 @@ agents use by default and which CLIs they are allowed to use.
 
 ## Share Skills with Skill Packs
 
+New workspaces automatically bind `tt-a1i/matt-skills-with-to-goal` as `matt`
+before starting the Orchestrator, with role profiles, an immutable lock, and
+native `to-goal`, `to-spec`, and `to-tickets` entry points. The first download
+requires Git and access to GitHub. Later creations reuse and verify the local
+cache; existing workspace versions are never automatically updated. Explicitly
+resolving a newer release makes that cached version available to new workspaces.
+Existing Matt bindings retain their versions and selections. Pack-name or native
+directory conflicts fail visibly without overwriting user files or starting an
+agent. Other CLIs use Hive's role catalogs and `team skill` on demand; binding a
+Pack does not execute its scripts.
+
 Open **Skills** in the active Workspace topbar to bind one locked Skill source
 for the whole team:
 

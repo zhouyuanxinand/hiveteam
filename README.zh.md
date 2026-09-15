@@ -130,6 +130,14 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 
 ## 用 Skill Pack 给团队共享 Skills
 
+新建 Workspace 会在启动 Orchestrator 前自动绑定 `tt-a1i/matt-skills-with-to-goal`
+（Pack 名称 `matt`），写入角色 Profile、锁文件和 `to-goal` / `to-spec` / `to-tickets`
+原生入口。首次需要 Git 和 GitHub 网络连接；以后优先复用本机同源缓存并校验内容摘要，
+不自动更新已有 Workspace 的版本。手动解析新版本后，新建 Workspace 会使用该缓存版本。
+已有项目中的 Matt 绑定、版本和角色选择保持不变；同名 Pack 或原生目录冲突会明确报错，
+不会覆盖用户文件。初始化失败不会启动 Orchestrator，可以修复原因后重新创建。
+其他 CLI 继续通过 Hive 的按角色 Skill 目录和 `team skill` 按需读取，绑定不会执行 Pack 脚本。
+
 在当前 Workspace 顶栏打开 **Skills**，即可让全队使用同一份锁定来源：
 
 1. 在 **Packs** 选择 GitHub，输入

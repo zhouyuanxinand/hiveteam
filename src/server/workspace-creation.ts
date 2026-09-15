@@ -1,8 +1,10 @@
 import { isWorkspaceLanguage, type WorkspaceSummary } from '../shared/types.js'
+import { prepareDefaultWorkspaceSkillPack } from './default-workspace-skill-pack.js'
 import { autostartOrchestrator, type OrchestratorStartResult } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { CreateWorkspaceBody } from './route-types.js'
 import type { RuntimeStore } from './runtime-store.js'
+import { SkillPackChangeError } from './skill-pack-operation-errors.js'
 import { validateWorkspacePath } from './workspace-path-validation.js'
 import { getOrchestratorId } from './workspace-store-support.js'
 
@@ -32,7 +34,17 @@ export const createWorkspaceWithOrchestrator = (
   if (existing) return existing
 
   const creation = (async (): Promise<CreatedWorkspace> => {
+    const initializeSkills = await prepareDefaultWorkspaceSkillPack(store, path)
     const workspace = store.createWorkspace(path, body.name, language)
+    try {
+      await initializeSkills(workspace.id)
+    } catch (error) {
+      // Keep an incomplete change journal available for the existing recovery flow.
+      if (!(error instanceof SkillPackChangeError && error.code === 'recovery_required')) {
+        await store.deleteWorkspace(workspace.id)
+      }
+      throw error
+    }
     seedOrchestratorLaunchConfig(store, store.settings, workspace.id, presetId, startupCommand)
     const orchestratorStart = autostart
       ? await autostartOrchestrator(store, workspace.id, getOrchestratorId(workspace.id), hivePort)

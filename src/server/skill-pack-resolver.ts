@@ -54,6 +54,7 @@ const runGit = (
           GIT_TERMINAL_PROMPT: '0',
         },
         maxBuffer: 2 * 1024 * 1024,
+        timeout: 60_000,
         windowsHide: true,
       },
       (error, stdout, stderr) => {
@@ -195,7 +196,10 @@ const publishCacheEntry = async (
 export interface SkillPackResolver {
   getReleasePath: (release: Pick<SkillPackRelease, 'cacheKey'>) => string
   inspectRelease: (release: SkillPackRelease) => Promise<InspectedSkillPackTree>
-  resolve: (input: ResolveSkillPackInput) => Promise<SkillPackRelease>
+  resolve: (
+    input: ResolveSkillPackInput,
+    options?: { preferCached: boolean }
+  ) => Promise<SkillPackRelease>
 }
 
 export const createSkillPackResolver = ({
@@ -205,6 +209,7 @@ export const createSkillPackResolver = ({
   const resolvedCacheRoot = resolve(cacheRoot)
   const cacheDirectory = join(resolvedCacheRoot, 'cache')
   const stagingDirectory = join(resolvedCacheRoot, 'staging')
+  const pendingCachedResolutions = new Map<string, Promise<SkillPackRelease>>()
   const getReleasePath = (release: Pick<SkillPackRelease, 'cacheKey'>) => {
     const path = resolve(cacheDirectory, release.cacheKey)
     if (!isPathWithinRoot(cacheDirectory, path)) {
@@ -259,10 +264,34 @@ export const createSkillPackResolver = ({
     }
   }
 
+  const resolveWithCache: SkillPackResolver['resolve'] = (rawInput, options) => {
+    if (!options?.preferCached) return resolvePack(rawInput)
+    const input = normalizeResolveSkillPackInput(rawInput)
+    const key = JSON.stringify(input)
+    const pending = pendingCachedResolutions.get(key)
+    if (pending) return pending
+    const result = (async () => {
+      const cached = releaseStore.findLatest(input.source, input.packName)
+      if (cached) {
+        const inspection = await inspectCachedSkillPackTree(getReleasePath(cached), cached.manifest)
+        if (inspection.contentDigest !== cached.contentDigest) {
+          throw new SkillPackResolutionError(
+            'source_path_unsafe',
+            'Cached Skill Pack digest changed'
+          )
+        }
+        return cached
+      }
+      return resolvePack(input)
+    })().finally(() => pendingCachedResolutions.delete(key))
+    pendingCachedResolutions.set(key, result)
+    return result
+  }
+
   return {
     getReleasePath,
     inspectRelease: async (release) =>
       inspectCachedSkillPackTree(getReleasePath(release), release.manifest),
-    resolve: resolvePack,
+    resolve: resolveWithCache,
   }
 }

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { createSkillPackReleaseStore } from '../../src/server/skill-pack-release-store.js'
 import { applySchemaVersion35 } from '../../src/server/sqlite-schema-v35.js'
 import type { SkillPackManifest, SkillPackSource } from '../../src/shared/skill-packs.js'
@@ -42,6 +42,34 @@ const saveRelease = (
   )
 
 describe('Skill Pack release store', () => {
+  test('latest cache selection respects source refs and insertion order for equal timestamps', () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    const db = new Database(':memory:')
+    applySchemaVersion35(db)
+    const store = createSkillPackReleaseStore(db)
+    const source = {
+      type: 'github',
+      repository: 'tt-a1i/matt-skills-with-to-goal',
+      ref: 'main',
+    } as const
+    try {
+      const first = saveRelease(store, source)
+      const second = store.save(
+        { ...first, contentDigest: `sha256:${'e'.repeat(64)}`, resolvedRevision: 'f'.repeat(40) },
+        'matt'
+      )
+      const tag = saveRelease(store, { ...source, ref: 'v1' })
+      const reloaded = createSkillPackReleaseStore(db)
+      expect(reloaded.findLatest(source, 'alias')?.id).toBe(second.id)
+      expect(reloaded.findLatest(source, 'alias')?.packName).toBe('alias')
+      expect(reloaded.findLatest({ ...source, ref: 'v1' }, 'matt')?.id).toBe(tag.id)
+      expect(reloaded.findLatest({ ...source, repository: 'unrelated/skills' }, 'matt')).toBeNull()
+    } finally {
+      clock.mockRestore()
+      db.close()
+    }
+  })
+
   test('preserves requested refs across reloads and does not collapse source aliases', () => {
     const db = new Database(':memory:')
     applySchemaVersion35(db)

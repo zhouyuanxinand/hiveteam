@@ -104,5 +104,14 @@ export const createSkillPackReleaseStore = (db: Database) => {
     return row ? fromRow(row, packName) : null
   }
 
-  return { getById, save }
+  const findLatest = (source: SkillPackSource, packName: string): SkillPackRelease | null => {
+    const row = db
+      .prepare(
+        `${SELECT_RELEASE} WHERE source_json = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`
+      )
+      .get(serializeSource(source)) as SkillPackReleaseRow | undefined
+    return row ? fromRow(row, packName) : null
+  }
+
+  return { findLatest, getById, save }
 }

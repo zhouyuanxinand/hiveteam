@@ -5,13 +5,11 @@ import { join, resolve } from 'node:path'
 
 import type {
   EffectiveSkillObservation,
-  ResolveSkillPackInput,
   SkillChangePlan,
   SkillChangeReceipt,
   SkillMemberInspection,
   SkillNameConflict,
   SkillPackChangeIntent,
-  SkillPackRelease,
   SkillRootObservation,
   SkillScanStatus,
   SkillSourceScope,
@@ -272,7 +270,7 @@ export interface WorkspaceSkillManager {
   listForAgent: TeamSkillRuntime['listAvailable']
   loadForAgent: TeamSkillRuntime['loadForAgent']
   plan: (workspaceId: string, intent: SkillPackChangeIntent) => Promise<SkillChangePlan>
-  resolvePack: (input: ResolveSkillPackInput) => Promise<SkillPackRelease>
+  resolvePack: SkillPackResolver['resolve']
   scan: (workspaceId: string) => Promise<WorkspaceSkillInspection>
   readDispatchReference: TeamSkillRuntime['readDispatchReference']
   undoReceipt: (workspaceId: string, receiptId: string) => Promise<SkillChangeReceipt>
@@ -410,14 +408,14 @@ export const createWorkspaceSkillManager = ({
       }
       return planner.plan(workspaceId, intent)
     },
-    resolvePack: (input) => {
+    resolvePack: (input, options) => {
       if (!packResolver) {
         throw new SkillPackResolutionError(
           'cache_unavailable',
           'Skill Pack resolution requires a persistent Hive data directory'
         )
       }
-      return packResolver.resolve(input)
+      return packResolver.resolve(input, options)
     },
     readDispatchReference: teamSkillRuntime.readDispatchReference,
     scan,

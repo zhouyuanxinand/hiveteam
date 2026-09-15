@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
+import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
 
 const tempDirs: string[] = []
 const describeUnixOnly = process.platform === 'win32' ? describe.skip : describe
@@ -71,6 +72,7 @@ describeUnixOnly('hive runtime SIGTERM shutdown', () => {
       throw new Error('Expected UI session cookie')
     }
 
+    await seedDefaultSkillPackCache(join(root, 'data'), root)
     const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie },

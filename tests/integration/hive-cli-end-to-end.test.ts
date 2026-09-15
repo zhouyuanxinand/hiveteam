@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +8,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -299,6 +300,9 @@ describe('hive cli end to end', () => {
       expect(orchestrator?.id).toBe('orchestrator')
       expect(orchestrator?.default_command).toBe('claude')
 
+      // The child is outside Vitest's module mocks. Seed a real verified cache
+      // so this CLI/default-data-directory test does not depend on GitHub.
+      const fixture = await seedDefaultSkillPackCache(join(homeDir, '.config', 'hive'), homeDir)
       const response = await fetch(`${baseUrl}/api/workspaces`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie: uiCookie },
@@ -319,6 +323,9 @@ describe('hive cli end to end', () => {
         run_id: null,
       })
       expect(existsSync(join(homeDir, '.config', 'hive', 'runtime.sqlite'))).toBe(true)
+      expect(
+        JSON.parse(readFileSync(join(workspacePath, '.hive', 'skill-packs.lock.json'), 'utf8'))
+      ).toMatchObject({ packs: [{ release_id: fixture.release.id }] })
     } finally {
       processHandle.kill('SIGTERM')
       await new Promise<void>((resolve) => processHandle.once('exit', () => resolve()))

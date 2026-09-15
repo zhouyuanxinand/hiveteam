@@ -16,6 +16,8 @@ import type {
   UserInputBody,
 } from './route-types.js'
 import type { RuntimeStore } from './runtime-store.js'
+import { SkillPackChangeError } from './skill-pack-operation-errors.js'
+import { SkillPackResolutionError } from './skill-pack-source.js'
 import { authenticateCliAgent, requireCommandForRole } from './team-authz.js'
 import { enrichTeamList } from './team-list-enrichment.js'
 import { serializeTeamListItem } from './team-list-serializer.js'
@@ -93,8 +95,21 @@ export const workspaceRoutes: RouteDefinition[] = [
   route('POST', '/api/workspaces', async ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     const body = await readJsonBody<CreateWorkspaceBody>(request)
-    const workspace = await createWorkspaceWithOrchestrator(store, body, getRuntimePort(request))
-    sendJson(response, 201, workspace)
+    try {
+      const workspace = await createWorkspaceWithOrchestrator(store, body, getRuntimePort(request))
+      sendJson(response, 201, workspace)
+    } catch (error) {
+      if (!(error instanceof SkillPackChangeError || error instanceof SkillPackResolutionError))
+        throw error
+      const prefix =
+        body.language === 'en'
+          ? 'Default Skill Pack initialization failed'
+          : '默认 Skill Pack 初始化失败'
+      sendJson(response, error instanceof SkillPackResolutionError ? 502 : 409, {
+        error: `${prefix}: ${error.message}`,
+        error_code: error.code,
+      })
+    }
   }),
   route('DELETE', '/api/workspaces/:workspaceId', async ({ params, request, response, store }) => {
     const workspaceId = getRequiredParam(

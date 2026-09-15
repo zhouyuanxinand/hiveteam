@@ -1,3 +1,4 @@
+import { defaultSkillPackSelection } from '../../src/shared/skill-pack-defaults.js'
 import { describeSkillPackSource } from '../../src/shared/skill-pack-source.js'
 import type {
   SkillPackRelease,
@@ -21,24 +22,6 @@ export interface SkillPackSelection {
   nativeExposure: Set<string>
   profiles: Record<SkillProfileName, Set<string>>
 }
-
-const recommendedProfiles: Record<SkillProfileName, Set<string>> = {
-  coder: new Set(['implement', 'tdd', 'diagnosing-bugs', 'codebase-design']),
-  custom: new Set(),
-  orchestrator: new Set([
-    'ask-matt',
-    'grilling',
-    'to-spec',
-    'to-tickets',
-    'to-goal',
-    'goal-crafter',
-    'wayfinder',
-  ]),
-  reviewer: new Set(['code-review', 'domain-modeling', 'resolving-merge-conflicts']),
-  tester: new Set(['tdd', 'diagnosing-bugs', 'research']),
-}
-
-const nativeDefaults = new Set(['to-goal', 'to-spec', 'to-tickets'])
 
 export const createDefaultSkillPackSourceDraft = (): SkillPackSourceDraft => ({
   packName: '',
@@ -86,18 +69,14 @@ export const selectSkillsForRelease = (
 ): SkillPackSelection => {
   const prefix = `${release.packName}/`
   const availableSkillNames = new Set(release.manifest.skills.map((skill) => skill.name))
+  const defaults = defaultSkillPackSelection(release.manifest)
   const profiles = Object.fromEntries(
     skillProfileNames.map((profile) => {
       const existing = configuration.profiles[profile]
         .filter((reference) => reference.startsWith(prefix))
         .map((reference) => reference.slice(prefix.length))
         .filter((name) => availableSkillNames.has(name))
-      const selected =
-        action === 'update'
-          ? existing
-          : release.manifest.skills
-              .filter((skill) => recommendedProfiles[profile].has(skill.name))
-              .map((skill) => skill.name)
+      const selected = action === 'update' ? existing : defaults.profiles[profile]
       return [profile, new Set(selected)]
     })
   ) as Record<SkillProfileName, Set<string>>
@@ -106,13 +85,7 @@ export const selectSkillsForRelease = (
     .map((reference) => reference.slice(prefix.length))
     .filter((name) => availableSkillNames.has(name))
   return {
-    nativeExposure: new Set(
-      action === 'update'
-        ? existingNative
-        : release.manifest.skills
-            .filter((skill) => nativeDefaults.has(skill.name))
-            .map((skill) => skill.name)
-    ),
+    nativeExposure: new Set(action === 'update' ? existingNative : defaults.nativeExposure),
     profiles,
   }
 }

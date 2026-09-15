@@ -1,6 +1,14 @@
 import '@testing-library/jest-dom/vitest'
 
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
+
+// Unrelated HTTP/PTY suites isolate default provisioning from GitHub and disk
+// installation. The workspace-default-skill-pack suites unmock this seam and
+// exercise the real HTTP -> SQLite -> cache -> filesystem -> PTY flow.
+vi.mock('../../src/server/default-workspace-skill-pack.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/server/default-workspace-skill-pack.js')>()),
+  prepareDefaultWorkspaceSkillPack: async () => async () => {},
+}))
 
 // node-pty's ConPTY cleanup helper calls AttachConsole from a forked process.
 // Vitest is not attached to a Windows console, so use winpty for real-PTY
