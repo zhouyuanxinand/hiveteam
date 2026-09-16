@@ -12,6 +12,10 @@ html[data-hive-theme="light"] .workspace-plan-panel { --review-link: var(--accen
   max-height: 42vh;
   overflow-y: auto;
 }
+.workspace-composer-form { display: grid; gap: .5rem; }
+.workspace-composer-form[hidden] { display: none; }
+.workspace-composer-toggle.icon-btn { height: auto; min-height: 28px; text-align: left; white-space: normal; }
+.workspace-composer-toggle svg { flex-shrink: 0; }
 .review-toolbar, .review-actions, .review-panel-header {
   display: flex;
   align-items: center;
