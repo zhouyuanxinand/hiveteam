@@ -1,5 +1,6 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
+import { ConflictError } from './http-errors.js'
 import type { SessionCaptureSnapshot } from './session-capture.js'
 import { doesCapturedSessionExist, supportsNativeSessionExistenceCheck } from './session-capture.js'
 
@@ -57,8 +58,7 @@ export const withPresetResumeArgs = (
   preset: BoundPreset | null | undefined,
   lastSessionId: string | undefined,
   cwd?: string,
-  discriminator?: SessionCaptureSnapshot['discriminator'],
-  onInvalidSessionId?: (sessionId: string) => void
+  discriminator?: SessionCaptureSnapshot['discriminator']
 ) => {
   let nextConfig = withPresetYoloArgs(config, preset)
   const sessionIdCapture = getEffectiveCapture(nextConfig, preset)
@@ -75,8 +75,9 @@ export const withPresetResumeArgs = (
     supportsNativeSessionExistenceCheck(sessionIdCapture) &&
     !doesCapturedSessionExist(cwd, sessionIdCapture, lastSessionId, discriminator)
   ) {
-    onInvalidSessionId?.(lastSessionId)
-    return nextConfig
+    throw new ConflictError(
+      `Saved native session ${lastSessionId} is unavailable or does not belong to this member. Restore its original harness session files and retry. Hive retained the binding and did not start a new conversation.`
+    )
   }
   // Do not treat the presence of a Codex `thread-writer-locks/<id>.lock`
   // file as proof that another process still owns the session. Codex uses an

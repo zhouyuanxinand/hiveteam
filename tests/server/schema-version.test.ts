@@ -169,6 +169,7 @@ describe('schema version', () => {
     expect(agentRunColumns.has('pid')).toBe(true)
     expect(agentRunColumns.has('ended_at')).toBe(true)
     expect(agentRunColumns.has('consecutive_fast_exits')).toBe(true)
+    expect(agentRunColumns.has('resume_on_restart')).toBe(true)
     expect(launchConfigColumns.has('command_preset_id')).toBe(true)
     expect(launchConfigColumns.has('interactive_command')).toBe(true)
     expect(launchConfigColumns.has('preset_augmentation_disabled')).toBe(true)
@@ -332,13 +333,13 @@ describe('schema version', () => {
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
       version: 33,
     })
-    for (const version of [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44]) {
+    for (const version of [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]) {
       expect(
         db.prepare('SELECT version FROM schema_version WHERE version = ?').get(version)
       ).toEqual({ version })
     }
     expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
-      version: 44,
+      version: 46,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

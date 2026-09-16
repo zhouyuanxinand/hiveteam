@@ -1,72 +1,67 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { expect, test } from 'vitest'
 
-import { afterEach, describe, expect, test } from 'vitest'
+import { handleAgentRunExit } from '../../src/server/agent-run-exit-handler.js'
+import { createAgentRunStore } from '../../src/server/agent-run-store.js'
+import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
+import { createAgentTokenRegistry } from '../../src/server/agent-tokens.js'
+import { createLiveRunRegistry } from '../../src/server/live-run-registry.js'
+import { openRuntimeDatabase } from '../../src/server/runtime-database.js'
 
-import { clearResumedSessionIfInvalid } from '../../src/server/agent-run-exit-handler.js'
-
-const tempDirs: string[] = []
-const originalCodexHome = process.env.CODEX_HOME
-
-const createCodexSession = (cwd: string, sessionId: string) => {
-  const root = mkdtempSync(join(tmpdir(), 'hive-exit-handler-codex-'))
-  const codexHome = join(root, '.codex')
-  const sessionDir = join(codexHome, 'sessions', '2026', '04', '30')
-  mkdirSync(sessionDir, { recursive: true })
-  writeFileSync(
-    join(sessionDir, `rollout-${sessionId}.jsonl`),
-    `${JSON.stringify({ payload: { cwd, id: sessionId } })}\n`
-  )
-  process.env.CODEX_HOME = codexHome
-  tempDirs.push(root)
-  return codexHome
-}
-
-const createContext = (workspacePath: string, sessionId: string, cleared: string[]) => ({
-  agentId: 'agent-1',
-  sessionStore: {
-    clearLastSessionId: (workspaceId: string, agentId: string) => {
-      cleared.push(`${workspaceId}:${agentId}`)
-    },
-  } as never,
-  startConfig: {
-    resumedSessionId: sessionId,
-    sessionIdCapture: {
-      pattern: '~/.codex/sessions/**/*.jsonl',
-      source: 'codex_session_jsonl_dir' as const,
-    },
-  },
-  workspace: { id: 'workspace-1', name: 'Workspace', path: workspacePath },
-})
-
-afterEach(() => {
-  if (originalCodexHome === undefined) delete process.env.CODEX_HOME
-  else process.env.CODEX_HOME = originalCodexHome
-  for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
-})
-
-describe('resumed session cleanup', () => {
-  test('keeps a Codex session after a failed resume when the native session still exists', () => {
-    const workspacePath = '/tmp/codex-session-still-exists'
-    const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
-    createCodexSession(workspacePath, sessionId)
-    const cleared: string[] = []
-
-    clearResumedSessionIfInvalid(createContext(workspacePath, sessionId, cleared), 1)
-
-    expect(cleared).toEqual([])
-  })
-
-  test('clears a Codex session pointer when the native session is gone', () => {
-    const workspacePath = '/tmp/codex-session-is-gone'
-    const sessionId = '019dc277-0e8e-75c1-9794-94929426288e'
-    const codexHome = createCodexSession(workspacePath, sessionId)
-    rmSync(codexHome, { force: true, recursive: true })
-    const cleared: string[] = []
-
-    clearResumedSessionIfInvalid(createContext(workspacePath, sessionId, cleared), 1)
-
-    expect(cleared).toEqual(['workspace-1:agent-1'])
-  })
+test.each([
+  0, 1,
+])('exit code %s settles the run without discarding the original native session', async (exitCode) => {
+  const db = openRuntimeDatabase()
+  try {
+    db.prepare('INSERT INTO workspaces (id, name, path, created_at) VALUES (?, ?, ?, ?)').run(
+      'workspace-1',
+      'Recovery',
+      '/tmp/recovery',
+      Date.now()
+    )
+    const agentId = 'workspace-1:orchestrator'
+    const sessions = createAgentSessionStore(db)
+    sessions.setLastSessionId('workspace-1', agentId, 'native-session-1')
+    const store = createAgentRunStore(db)
+    store.insertAgentRun('run-1', agentId, 100, 1, 'running')
+    const registry = createLiveRunRegistry()
+    registry.add({
+      agentId,
+      runId: 'run-1',
+      pid: 1,
+      startedAt: 100,
+      status: 'running',
+      exitCode: null,
+      output: '',
+    })
+    registry.createExitEntry('run-1')
+    const tokenRegistry = createAgentTokenRegistry()
+    const context = {
+      agentId,
+      registry,
+      store,
+      sessionStore: sessions,
+      tokenRegistry,
+      token: tokenRegistry.issue(agentId),
+      handledRunExits: new Set<string>(),
+      onAgentExit: () => {},
+      startConfig: { resumedSessionId: 'native-session-1' },
+      workspace: { id: 'workspace-1', name: 'Recovery', path: '/tmp/recovery' },
+    }
+    expect(handleAgentRunExit(context, { exitCode, endedAt: 200, runId: 'run-1' })).toBe(true)
+    await registry.getExitEntry('run-1')?.promise
+    expect(store.listAgentRuns(agentId)).toEqual([
+      expect.objectContaining({
+        status: exitCode === 0 ? 'exited' : 'error',
+        exitCode,
+        endedAt: 200,
+      }),
+    ])
+    expect(createAgentSessionStore(db).getLastSessionId('workspace-1', agentId)).toBe(
+      'native-session-1'
+    )
+    expect(handleAgentRunExit(context, { exitCode, endedAt: 300, runId: 'run-1' })).toBe(false)
+    expect(store.listAgentRuns(agentId)[0]?.endedAt).toBe(200)
+  } finally {
+    db.close()
+  }
 })

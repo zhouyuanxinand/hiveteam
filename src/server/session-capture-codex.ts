@@ -20,7 +20,7 @@ const expandHome = (path: string) =>
 
 export const getCodexHome = (pattern?: string) => {
   if (!pattern) return getDefaultCodexHome()
-  const markerIndex = pattern.indexOf('/sessions/')
+  const markerIndex = pattern.replace(/\\/g, '/').indexOf('/sessions/')
   if (markerIndex === -1) return getDefaultCodexHome()
   const rawRoot = pattern.slice(0, markerIndex)
   if (rawRoot === '~/.codex' || rawRoot === '~/.codex/') return getDefaultCodexHome()
@@ -149,18 +149,28 @@ export const captureCodexSessionId = async (
   cwd: string,
   knownSessionIds: Set<string>,
   onCapture: (sessionId: string) => void,
-  timeoutMs = 5000,
+  timeoutMs: number | null = 5000,
   intervalMs = 100,
   codexHome = getDefaultCodexHome(),
-  discriminator?: CodexSessionCaptureDiscriminator
+  discriminator?: CodexSessionCaptureDiscriminator,
+  signal?: AbortSignal
 ) => {
   await captureSessionIdWithCoordinator({
     intervalMs,
     knownSessionIds,
-    listSessionIds: () => listSessionIds(cwd, codexHome, discriminator),
+    listSessionIds: () => listSessionIds(cwd, codexHome),
+    ...(discriminator?.contentIncludes
+      ? {
+          filterSessionIds: (sessionIds: string[]) => {
+            const matchingIds = new Set(listSessionIds(cwd, codexHome, discriminator))
+            return sessionIds.filter((id) => matchingIds.has(id))
+          },
+        }
+      : {}),
     onCapture,
     projectKey: join(codexHome, 'sessions', cwd),
     timeoutMs,
+    signal,
   })
 }
 

@@ -13,7 +13,7 @@ const expandHome = (path: string) =>
 
 export const getGeminiHome = (pattern?: string) => {
   if (!pattern) return getDefaultGeminiHome()
-  const markerIndex = pattern.indexOf('/tmp/')
+  const markerIndex = pattern.replace(/\\/g, '/').indexOf('/tmp/')
   if (markerIndex === -1) return getDefaultGeminiHome()
   const rawRoot = pattern.slice(0, markerIndex)
   if (rawRoot === '~/.gemini' || rawRoot === '~/.gemini/') return getDefaultGeminiHome()
@@ -74,9 +74,10 @@ export const captureGeminiSessionId = async (
   cwd: string,
   knownSessionIds: Set<string>,
   onCapture: (sessionId: string) => void,
-  timeoutMs = 5000,
+  timeoutMs: number | null = 5000,
   intervalMs = 100,
-  geminiHome = getDefaultGeminiHome()
+  geminiHome = getDefaultGeminiHome(),
+  signal?: AbortSignal
 ) => {
   await captureSessionIdWithCoordinator({
     intervalMs,
@@ -85,6 +86,7 @@ export const captureGeminiSessionId = async (
     onCapture,
     projectKey: join(geminiHome, 'tmp', cwd),
     timeoutMs,
+    signal,
   })
 }
 

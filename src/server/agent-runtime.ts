@@ -76,7 +76,7 @@ export const createAgentRuntime = (
     async close() {
       closing = true
       await Promise.allSettled([...startPromises.values()])
-      await closeAgentRuntime(agentManager, registry, syncRun)
+      await closeAgentRuntime(agentManager, registry, syncRun, agentRunStore.checkpointShutdownRuns)
     },
     configureAgentLaunch(workspaceId, agentId, input) {
       launchCache.save(workspaceId, agentId, input)

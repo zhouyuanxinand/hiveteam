@@ -5,17 +5,24 @@ import type { LiveRunRegistry } from './live-run-registry.js'
 export const closeAgentRuntime = async (
   agentManager: AgentManager | undefined,
   registry: LiveRunRegistry,
-  syncRun: (run: LiveAgentRun) => LiveAgentRun
+  syncRun: (run: LiveAgentRun) => LiveAgentRun,
+  checkpointShutdownRuns: (runIds: string[]) => void
 ) => {
   const runs = registry.list()
+  const activeRunIds: string[] = []
   for (const run of runs) {
     try {
-      syncRun(run)
+      const { status } = syncRun(run)
+      if (status === 'starting' || status === 'running') activeRunIds.push(run.runId)
     } catch {
       // A PTY may have already exited and been removed while the runtime is
       // closing. Persisting its final state is best effort during shutdown.
     }
+  }
+  // Commit recovery intent before any stop can synchronously emit a PTY exit.
+  checkpointShutdownRuns(activeRunIds)
 
+  for (const run of runs) {
     if (!agentManager) {
       registry.resolveExit(run.runId)
       continue

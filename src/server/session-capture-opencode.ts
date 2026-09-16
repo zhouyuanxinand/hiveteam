@@ -49,9 +49,10 @@ export const captureOpenCodeSessionId = async (
   cwd: string,
   knownSessionIds: Set<string>,
   onCapture: (sessionId: string) => void,
-  timeoutMs = 5000,
+  timeoutMs: number | null = 5000,
   intervalMs = 100,
-  dbPath = getDefaultOpenCodeDbPath()
+  dbPath = getDefaultOpenCodeDbPath(),
+  signal?: AbortSignal
 ) => {
   await captureSessionIdWithCoordinator({
     intervalMs,
@@ -60,5 +61,6 @@ export const captureOpenCodeSessionId = async (
     onCapture,
     projectKey: `${dbPath}:${cwd}`,
     timeoutMs,
+    signal,
   })
 }

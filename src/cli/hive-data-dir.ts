@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
-export const resolveDataDir = () => process.env.HIVE_DATA_DIR || join(homedir(), '.config', 'hive')
+export const resolveDataDir = () =>
+  resolve(process.env.HIVE_DATA_DIR || join(homedir(), '.config', 'hive'))

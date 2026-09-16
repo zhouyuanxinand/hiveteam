@@ -163,6 +163,11 @@ const spawnNode = (nodeExecutable, args, environment, label, readyText) => {
 }
 
 const launchLocalServices = async ({ dataDir, randomPorts = false } = {}) => {
+  const environment = createDesktopServiceEnvironment(
+    process.env,
+    dataDir ? { HIVE_DATA_DIR: dataDir } : {}
+  )
+  console.log(`[HiveTeam] Data directory: ${environment.HIVE_DATA_DIR}`)
   const sourceRuntimeEntry = resolve(projectRoot, 'src', 'cli', 'hive.ts')
   const builtRuntimeEntry = resolve(projectRoot, 'dist', 'src', 'cli', 'hive.js')
   const viteEntry = resolve(projectRoot, 'node_modules', 'vite', 'bin', 'vite.js')
@@ -179,8 +184,7 @@ const launchLocalServices = async ({ dataDir, randomPorts = false } = {}) => {
   const bridgeToken = randomBytes(32).toString('hex')
   const nodeExecutable =
     process.env.HIVE_NODE_EXECUTABLE?.trim() || process.env.npm_node_execpath?.trim() || 'node'
-  const environment = createDesktopServiceEnvironment(process.env, {
-    ...(dataDir ? { HIVE_DATA_DIR: dataDir } : {}),
+  Object.assign(environment, {
     HIVE_DESKTOP_BRIDGE_TOKEN: bridgeToken,
     HIVE_RUNTIME_PORT: String(runtimePort),
     HIVE_WEB_PORT: String(webPort),

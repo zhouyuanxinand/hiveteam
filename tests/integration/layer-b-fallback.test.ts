@@ -481,7 +481,7 @@ describe('Layer B fallback integration', () => {
     }
   }, 10_000)
 
-  test('resume failure falls back to Layer B on the next start instead of restarting blank', async () => {
+  test('failed native resume keeps its binding instead of substituting a Layer B summary', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-layer-b-failure-home-'))
     const workspacePathRaw = join(homeDir, 'workspace')
     tempDirs.push(homeDir)
@@ -494,8 +494,8 @@ describe('Layer B fallback integration', () => {
     try {
       const cookie = await getUiCookie(server.baseUrl)
       const workspace = await createWorkspaceViaHttp(server.baseUrl, cookie, workspacePath)
-      // Keep this recovery fallback on the orchestrator path; worker starts
-      // without an assignment intentionally remain at the native prompt.
+      // An orchestrator is eligible for summary injection, so this checks that
+      // a failed native resume does not silently replace the original history.
       const alice = { id: orchestratorId(workspace.id) }
       const bob = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Bob', 'tester')
       const bobScript = writeEchoAgent(workspacePath, 'bob-passive.js')
@@ -524,8 +524,6 @@ describe('Layer B fallback integration', () => {
       })
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
-        // An idle worker must stay at its native prompt on the first start;
-        // Layer B input is only injected after the failed resume below.
         expect(state.output).toContain('ARGS:')
       })
       const inputResponse = await fetch(
@@ -550,41 +548,28 @@ describe('Layer B fallback integration', () => {
         expect(state.status).toBe('error')
       })
       await waitFor(() => {
-        expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBeUndefined()
+        expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBe(sessionId)
       })
 
       rmSync(join(workspacePath, '.fail-next-resume'), { force: true })
       expect(listSystemMessages(server.dataDir, 'system_recovery_summary')).toHaveLength(0)
 
-      const thirdRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, alice.id)
-      await waitFor(async () => {
-        const state = await getRunViaHttp(server.baseUrl, cookie, thirdRun.runId)
-        expect(state.status).toBe('running')
-        expect(state.output).not.toContain('--resume')
-        if (process.platform !== 'win32') {
-          expect(state.output).toContain('STDIN:\u001b[200~[Hive 系统消息：你是 Alpha 的')
-          expect(state.output).toContain('\u001b[201~')
-        }
-        expect(state.output).toContain('recover after failed resume')
-        expect(state.output).toContain('恢复后检查 Layer B 摘要')
-        expect(state.output).toContain('Bob')
+      const blocked = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${alice.id}/start`,
+        { method: 'POST', headers: { cookie } }
+      )
+      expect(blocked.status).toBe(409)
+      expect(await blocked.json()).toMatchObject({
+        error: expect.stringContaining('Saved native session'),
       })
-
-      const recoverySummaries = listSystemMessages(server.dataDir, 'system_recovery_summary')
-      expect(recoverySummaries).toHaveLength(1)
-      expect(recoverySummaries).toContainEqual(
+      expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBe(sessionId)
+      expect(listSystemMessages(server.dataDir, 'system_recovery_summary')).toHaveLength(0)
+      expect(listRecoverySourceMessages(server.dataDir)).toContainEqual(
         expect.objectContaining({
-          type: 'system_recovery_summary',
-          worker_id: alice.id,
-          text: expect.stringContaining('recover after failed resume'),
+          type: 'user_input',
+          text: '恢复后检查 Layer B 摘要',
         })
       )
-      await waitForPtyOutputFlush()
-      server.store.writeRunInput(thirdRun.runId, '__HIVE_TEST_EXIT__\n')
-      await waitFor(async () => {
-        const state = await getRunViaHttp(server.baseUrl, cookie, thirdRun.runId)
-        expect(state.status).toBe('exited')
-      })
       server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\n')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, bobRun.runId)

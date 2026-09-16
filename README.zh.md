@@ -228,7 +228,7 @@ Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里�
 - `.hive/tasks.md` 编辑器，带外部文件冲突处理。
 - PTY 后台保留 + 尽力使用各 CLI 原生 session 恢复。
 - 升级后的 What's New 弹窗，用简短 release highlights 告诉你新版改了什么。
-- 元数据存在本机 SQLite，Windows 默认在 `%APPDATA%\hive`，macOS / Linux 默认在 `~/.config/hive`，也可以通过 `$HIVE_DATA_DIR` 指定。
+- 元数据存在本机 SQLite，Windows 默认在 `%USERPROFILE%\.config\hive`，macOS / Linux 默认在 `~/.config/hive`，也可以通过 `$HIVE_DATA_DIR` 指定。
 
 Hive **不**提供 sandbox 隔离、多用户认证，也不自带任何 agent 模型。它只负责调度你已经在用的本机 CLI。
 
@@ -265,10 +265,32 @@ Hive 是本机开发工具，**不是**托管服务。
 
 | 数据 | 位置 |
 | --- | --- |
-| Runtime 元数据 | Windows: `%APPDATA%\hive`；macOS / Linux: `~/.config/hive`；或 `$HIVE_DATA_DIR` |
+| Runtime 元数据 | Windows: `%USERPROFILE%\.config\hive`；macOS / Linux: `~/.config/hive`；或 `$HIVE_DATA_DIR` |
 | Workspace 任务图 | `<workspace>/.hive/tasks.md` |
 | 内部 `team` 命令 | 包内 `dist/bin/`，通过 PATH 注入 PTY |
 | Web UI 资源 | 由 runtime 从包内 `web/dist` 直接服务 |
+
+CLI、`npm start` / `pnpm dev` 和桌面启动器的两种模式统一默认使用
+`<系统用户主目录>/.config/hive`，启动日志中的 `Data directory` 会显示实际使用的绝对路径。
+`HIVE_DATA_DIR` 可指定自定义目录；相对路径会在启动子服务之前，按启动器进程被调用时的工作目录
+转换为绝对路径。npm / pnpm 可能将工作目录设为包目录。若要从不同位置启动并使用同一份数据，
+请指定绝对路径：
+
+```powershell
+$env:HIVE_DATA_DIR = 'D:\HiveData'
+npm start
+```
+
+```bash
+HIVE_DATA_DIR=/absolute/path/to/hive-data npm start
+```
+
+Windows 与 WSL 使用各自的用户主目录和环境变量，因此默认数据目录彼此独立。
+Hive 不会在两者之间转换路径，也不会自动查找、复制或合并其他目录中的数据库。
+即使其他目录已有数据，显式设置的 `HIVE_DATA_DIR` 也会优先使用。
+
+重启后的成员恢复、原生会话绑定与恢复失败处理，参见
+[Workspace 与原生会话恢复说明](docs/session-recovery.md)。
 
 ## 故障排查
 

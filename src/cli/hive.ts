@@ -114,6 +114,7 @@ const formatListenError = (error: unknown, requestedPort: number) => {
 export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResult> => {
   const port = parseHivePort(argv)
   const dataDir = resolveDataDir()
+  console.log(`[hive] Data directory: ${dataDir}`)
   const app = createApp({
     store: createRuntimeStore({
       agentManager: createAgentManager(),

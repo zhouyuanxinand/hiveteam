@@ -80,6 +80,7 @@ interface InterruptedAgentRunRow extends AgentRunRow {
 
 export const createAgentRunStore = (db: Database) => {
   let closed = false
+  const shutdownRuns = new Set<string>()
 
   const close = () => {
     closed = true
@@ -181,31 +182,35 @@ export const createAgentRunStore = (db: Database) => {
     exitCode: number | null = null,
     endedAt: number | null = null
   ) => {
-    if (closed) {
-      return
-    }
-    const previous = db
-      .prepare(
-        'SELECT consecutive_fast_exits FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC LIMIT 1'
-      )
-      .get(agentId) as { consecutive_fast_exits: number } | undefined
-    db.prepare(
-      `INSERT INTO agent_runs (
+    if (closed) return
+    db.transaction(() => {
+      const previous = db
+        .prepare(
+          'SELECT consecutive_fast_exits, resume_on_restart FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1'
+        )
+        .get(agentId) as { consecutive_fast_exits: number; resume_on_restart: number } | undefined
+      db.prepare(
+        `INSERT INTO agent_runs (
          run_id, agent_id, pid, status, exit_code, started_at, ended_at,
-         consecutive_fast_exits, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      runId,
-      agentId,
-      pid,
-      status,
-      exitCode,
-      startedAt,
-      endedAt,
-      previous?.consecutive_fast_exits ?? 0,
-      startedAt,
-      startedAt
-    )
+         consecutive_fast_exits, created_at, updated_at, resume_on_restart
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        runId,
+        agentId,
+        pid,
+        status,
+        exitCode,
+        startedAt,
+        endedAt,
+        previous?.consecutive_fast_exits ?? 0,
+        startedAt,
+        startedAt,
+        status === 'exited' ? 0 : (previous?.resume_on_restart ?? 0)
+      )
+      db.prepare(
+        'UPDATE agent_runs SET resume_on_restart = 0 WHERE agent_id = ? AND run_id != ?'
+      ).run(agentId, runId)
+    })()
   }
 
   const updatePersistedRun = (
@@ -218,10 +223,25 @@ export const createAgentRunStore = (db: Database) => {
       return
     }
     const current = db
-      .prepare('SELECT started_at, consecutive_fast_exits FROM agent_runs WHERE run_id = ?')
-      .get(runId) as { consecutive_fast_exits: number; started_at: number } | undefined
+      .prepare(
+        'SELECT started_at, ended_at, consecutive_fast_exits, resume_on_restart FROM agent_runs WHERE run_id = ?'
+      )
+      .get(runId) as
+      | {
+          consecutive_fast_exits: number
+          resume_on_restart: number
+          started_at: number
+          ended_at: number | null
+        }
+      | undefined
     let consecutiveFastExits = current?.consecutive_fast_exits ?? 0
-    if (endedAt !== null && status !== 'starting' && status !== 'running') {
+    if (
+      !shutdownRuns.has(runId) &&
+      current?.ended_at === null &&
+      endedAt !== null &&
+      status !== 'starting' &&
+      status !== 'running'
+    ) {
       const fastExit =
         exitCode !== null &&
         exitCode !== 0 &&
@@ -230,9 +250,17 @@ export const createAgentRunStore = (db: Database) => {
     }
     db.prepare(
       `UPDATE agent_runs
-       SET status = ?, exit_code = ?, ended_at = ?, consecutive_fast_exits = ?, updated_at = ?
+       SET status = ?, exit_code = ?, ended_at = ?, consecutive_fast_exits = ?, updated_at = ?, resume_on_restart = ?
        WHERE run_id = ?`
-    ).run(status, exitCode, endedAt, consecutiveFastExits, Date.now(), runId)
+    ).run(
+      status,
+      exitCode,
+      endedAt,
+      consecutiveFastExits,
+      Date.now(),
+      status === 'exited' && !shutdownRuns.has(runId) ? 0 : (current?.resume_on_restart ?? 0),
+      runId
+    )
   }
 
   const listAgentRuns = (agentId: string) => {
@@ -242,7 +270,7 @@ export const createAgentRunStore = (db: Database) => {
 
     return db
       .prepare(
-        'SELECT run_id, agent_id, pid, status, exit_code, started_at, ended_at FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC'
+        'SELECT run_id, agent_id, pid, status, exit_code, started_at, ended_at FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC, rowid DESC'
       )
       .all(agentId)
       .map((row: unknown) => {
@@ -268,7 +296,12 @@ export const createAgentRunStore = (db: Database) => {
                 r.consecutive_fast_exits, c.workspace_id
          FROM agent_runs r
          INNER JOIN agent_launch_configs c ON c.agent_id = r.agent_id
-         WHERE r.status IN ('starting', 'running')
+         WHERE (r.status IN ('starting', 'running') OR r.resume_on_restart = 1)
+           AND r.rowid = (
+             SELECT latest.rowid FROM agent_runs latest
+             WHERE latest.agent_id = r.agent_id
+             ORDER BY latest.started_at DESC, latest.rowid DESC LIMIT 1
+           )
          ORDER BY r.started_at ASC`
       )
       .all()
@@ -288,6 +321,19 @@ export const createAgentRunStore = (db: Database) => {
       })
   }
 
+  const checkpointShutdownRuns = (runIds: string[]) => {
+    if (closed) return
+    const checkpoint = db.prepare(
+      `UPDATE agent_runs SET resume_on_restart = 1, updated_at = ?
+       WHERE run_id = ? AND status IN ('starting', 'running')`
+    )
+    db.transaction(() => {
+      const updatedAt = Date.now()
+      for (const runId of runIds) checkpoint.run(updatedAt, runId)
+    })()
+    for (const runId of runIds) shutdownRuns.add(runId)
+  }
+
   const resetFastExitCount = (agentId: string) => {
     if (closed) return
     db.prepare('UPDATE agent_runs SET consecutive_fast_exits = 0 WHERE agent_id = ?').run(agentId)
@@ -299,12 +345,13 @@ export const createAgentRunStore = (db: Database) => {
     }
     db.prepare(
       `UPDATE agent_runs
-       SET status = 'error', exit_code = NULL, ended_at = ?, updated_at = ?
+       SET status = 'error', exit_code = NULL, ended_at = ?, updated_at = ?, resume_on_restart = 1
        WHERE status IN ('starting', 'running')`
     ).run(endedAt, endedAt)
   }
 
   return {
+    checkpointShutdownRuns,
     close,
     insertAgentRun,
     deleteLaunchConfig,

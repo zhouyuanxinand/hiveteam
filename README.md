@@ -316,7 +316,7 @@ same shell environment you use to start Hive.
 - `.hive/tasks.md` editor with external-file conflict handling.
 - Background PTY preservation and best-effort native session resume.
 - A What's New dialog after upgrades with curated release highlights.
-- Local SQLite metadata under `%APPDATA%\hive` on Windows and `~/.config/hive`
+- Local SQLite metadata under `%USERPROFILE%\.config\hive` on Windows and `~/.config/hive`
   on macOS / Linux by default, or `$HIVE_DATA_DIR` when set.
 
 Hive does not provide sandboxing, multi-user auth, or any bundled agent model.
@@ -383,10 +383,34 @@ Read [SECURITY.md](SECURITY.md) before using Hive with sensitive repositories.
 
 | Data | Location |
 | --- | --- |
-| Runtime metadata | Windows: `%APPDATA%\hive`; macOS / Linux: `~/.config/hive`; or `$HIVE_DATA_DIR` |
+| Runtime metadata | Windows: `%USERPROFILE%\.config\hive`; macOS / Linux: `~/.config/hive`; or `$HIVE_DATA_DIR` |
 | Workspace tasks | `<workspace>/.hive/tasks.md` |
 | Internal `team` command | Packaged under `dist/bin/`, injected into PTYs |
 | Web UI assets | Served by the runtime from the packaged `web/dist` build |
+
+The CLI, `npm start` / `pnpm dev`, and both desktop launch modes use the same
+default: `<OS home>/.config/hive`. Startup logs show the selected absolute
+`Data directory`. `HIVE_DATA_DIR` selects a custom directory; a relative value
+is resolved against the launcher's invocation working directory before it starts
+child services. npm / pnpm may set that working directory to the package directory.
+Use an absolute path to select the same data from different launch locations:
+
+```powershell
+$env:HIVE_DATA_DIR = 'D:\HiveData'
+npm start
+```
+
+```bash
+HIVE_DATA_DIR=/absolute/path/to/hive-data npm start
+```
+
+Windows and WSL have separate home directories and environment settings, so each
+has its own default. Hive does not translate paths between them or automatically
+find, copy, or merge databases from other directories. An explicit override is
+honored even when another directory already contains saved data.
+
+See [Workspace and native session recovery](docs/session-recovery.md) for restart
+behavior, per-member conversation bindings, and recovery failure handling.
 
 ## Troubleshooting
 

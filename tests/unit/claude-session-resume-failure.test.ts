@@ -40,7 +40,7 @@ afterEach(() => {
 })
 
 describe('claude session resume failure', () => {
-  test('clears stale session id after resumed Claude run exits non-zero and next start is bare', async () => {
+  test('retains the native session binding after a failed resume and blocks a fresh start', async () => {
     const cwd = '/tmp/hive-resume-failure-workspace'
     const staleSessionId = '77777777-7777-4777-8777-777777777777'
     const claudeRoot = createClaudeSessionRoot(cwd, staleSessionId)
@@ -119,6 +119,7 @@ describe('claude session resume failure', () => {
           },
         ],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: () => {},
@@ -131,16 +132,17 @@ describe('claude session resume failure', () => {
 
     await runtime.startAgent({ id: 'ws-1', name: 'A', path: cwd }, 'agent-1', { hivePort: '4010' })
     await new Promise((resolve) => setTimeout(resolve, 0))
-    await runtime.startAgent({ id: 'ws-1', name: 'A', path: cwd }, 'agent-1', { hivePort: '4010' })
+    await expect(
+      runtime.startAgent({ id: 'ws-1', name: 'A', path: cwd }, 'agent-1', { hivePort: '4010' })
+    ).rejects.toThrow(/Saved native session/)
 
-    expect(startArgs[0]).toEqual(['--resume', staleSessionId, '--dangerously-skip-permissions'])
-    expect(startArgs[1]).toEqual(['--dangerously-skip-permissions'])
-    expect(sessionStore.getLastSessionId('ws-1', 'agent-1')).toBeUndefined()
+    expect(startArgs).toEqual([['--resume', staleSessionId, '--dangerously-skip-permissions']])
+    expect(sessionStore.getLastSessionId('ws-1', 'agent-1')).toBe(staleSessionId)
     expect(
       db.prepare('SELECT last_session_id FROM workers WHERE id = ?').get('agent-1') as {
         last_session_id: string | null
       }
-    ).toEqual({ last_session_id: null })
+    ).toEqual({ last_session_id: staleSessionId })
 
     db.close()
   })

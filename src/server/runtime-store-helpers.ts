@@ -64,7 +64,6 @@ export interface RuntimeStoreServices {
   gitTurnCoordinator: GitTurnCoordinator
   agentSessionStore: ReturnType<typeof createAgentSessionStore>
   agentRuntime: ReturnType<typeof createAgentRuntime>
-  interruptedRuns: InterruptedAgentRun[]
   db: ReturnType<typeof openRuntimeDatabase>
   dataDir: string | null
   dispatchLedgerStore: ReturnType<typeof createDispatchLedgerStore>
@@ -172,7 +171,6 @@ export const createRuntimeStoreServices = (
   const uiAuth = createUiAuth()
   const shellRuntime = createWorkspaceShellRuntime(options.agentManager)
 
-  const interruptedRuns = agentRunStore.listInterruptedRuns()
   agentRunStore.markUnfinishedRunsStale()
 
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
@@ -280,7 +278,6 @@ export const createRuntimeStoreServices = (
     gitTurnCoordinator,
     agentSessionStore,
     agentRuntime,
-    interruptedRuns,
     db,
     dataDir: options.dataDir ?? null,
     dispatchLedgerStore,
@@ -421,7 +418,7 @@ export const createRuntimeStoreLifecycle = ({
       if (!agentManager) return []
 
       const latestByAgent = new Map<string, InterruptedAgentRun>()
-      for (const candidate of services.interruptedRuns) {
+      for (const candidate of services.agentRunStore.listInterruptedRuns()) {
         const current = latestByAgent.get(`${candidate.workspaceId}:${candidate.agentId}`)
         if (!current || current.startedAt < candidate.startedAt) {
           latestByAgent.set(`${candidate.workspaceId}:${candidate.agentId}`, candidate)

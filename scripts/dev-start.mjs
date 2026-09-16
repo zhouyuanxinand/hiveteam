@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -24,6 +25,7 @@ const runtimePort = readPort('HIVE_RUNTIME_PORT', isSourceCheckout ? 4010 : 9483
 const webPort = readPort('HIVE_WEB_PORT', 5180)
 const childEnvironment = {
   ...process.env,
+  HIVE_DATA_DIR: resolve(process.env.HIVE_DATA_DIR || join(homedir(), '.config', 'hive')),
   HIVE_RUNTIME_PORT: String(runtimePort),
   HIVE_WEB_PORT: String(webPort),
 }
@@ -36,6 +38,7 @@ const spawnNode = (args) =>
   })
 
 console.log(`[HiveTeam] Runtime: http://127.0.0.1:${runtimePort}`)
+console.log(`[HiveTeam] Data directory: ${childEnvironment.HIVE_DATA_DIR}`)
 if (isSourceCheckout) console.log(`[HiveTeam] Web:     http://127.0.0.1:${webPort}`)
 
 const runtime = spawnNode(

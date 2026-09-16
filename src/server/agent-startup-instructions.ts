@@ -14,8 +14,8 @@ export const buildAgentSessionBindingMarker = ({
   agent,
   workspace,
 }: {
-  agent: AgentSummary
-  workspace: WorkspaceSummary
+  agent: Pick<AgentSummary, 'id'>
+  workspace: Pick<WorkspaceSummary, 'id'>
 }) => `Hive session binding: workspace_id=${workspace.id}; agent_id=${agent.id}`
 
 export const buildAgentLegacyIdentityMarker = ({

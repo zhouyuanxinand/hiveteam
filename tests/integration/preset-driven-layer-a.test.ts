@@ -522,19 +522,19 @@ describe('preset-driven Layer A', () => {
     const secondServer = await startTestServer({ dataDir })
     try {
       const cookie = await getUiCookie(secondServer.baseUrl)
-      const aliceRun = await startWorkerViaHttp(secondServer.baseUrl, cookie, workspaceId, aliceId)
-      await waitFor(async () => {
-        const state = await getRunViaHttp(secondServer.baseUrl, cookie, aliceRun.runId)
-        expect(state.status).toBe('running')
-        expect(state.output).toContain(
-          `ARGS:--dangerously-skip-permissions --permission-mode=bypassPermissions --disallowedTools=Task --session-id-test ${aliceSessionId}`
-        )
-        expect(state.output).not.toContain('--resume')
+      const response = await fetch(
+        `${secondServer.baseUrl}/api/workspaces/${workspaceId}/agents/${aliceId}/start`,
+        {
+          method: 'POST',
+          headers: { cookie },
+        }
+      )
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({
+        error: expect.stringContaining('does not belong to this member'),
       })
-      await waitFor(() => {
-        expect(readLastSessionId(dataDir, workspaceId, aliceId)).toBe(aliceSessionId)
-        expect(readLastSessionId(dataDir, workspaceId, bobId)).toBe(bobSessionId)
-      })
+      expect(readLastSessionId(dataDir, workspaceId, aliceId)).toBe(bobSessionId)
+      expect(readLastSessionId(dataDir, workspaceId, bobId)).toBe(bobSessionId)
     } finally {
       await secondServer.close()
     }
@@ -657,7 +657,7 @@ describe('preset-driven Layer A', () => {
     }
   })
 
-  test('bound codex preset starts fresh when the captured session is gone', async () => {
+  test('bound codex preset retains the session pointer and blocks a fresh start when its file is gone', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-codex-fast-resume-'))
     const workspacePathRaw = join(homeDir, 'workspace')
     tempDirs.push(homeDir)
@@ -689,17 +689,18 @@ describe('preset-driven Layer A', () => {
         expect(state.status).toBe('exited')
       })
       rmSync(codexHome, { force: true, recursive: true })
-      writeFileSync(join(workspacePath, '.expect-fresh'), '1\n')
-
-      const secondRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
-      await waitFor(async () => {
-        const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
-        expect(state.status).toBe('running')
-        expect(state.output).toContain(
-          `ARGS:--dangerously-bypass-approvals-and-sandbox --session-id-test ${sessionId}`
-        )
-        expect(state.output).not.toContain(` resume ${sessionId}`)
+      const response = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/start`,
+        {
+          method: 'POST',
+          headers: { cookie },
+        }
+      )
+      expect(response.status).toBe(409)
+      expect(await response.json()).toMatchObject({
+        error: expect.stringContaining('Saved native session'),
       })
+      expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
     } finally {
       await server.close()
     }

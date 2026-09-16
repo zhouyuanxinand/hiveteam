@@ -90,10 +90,11 @@ export const captureClaudeSessionId = async (
   cwd: string,
   knownSessionIds: Set<string>,
   onCapture: (sessionId: string) => void,
-  timeoutMs = 5000,
+  timeoutMs: number | null = 5000,
   intervalMs = 100,
   projectsRoot = getDefaultProjectsRoot(),
-  discriminator: ClaudeSessionCaptureDiscriminator = {}
+  discriminator: ClaudeSessionCaptureDiscriminator = {},
+  signal?: AbortSignal
 ) => {
   const contentIncludes = discriminator.contentIncludes
   await captureSessionIdWithCoordinator({
@@ -103,10 +104,13 @@ export const captureClaudeSessionId = async (
     onCapture,
     projectKey: join(projectsRoot, encodeClaudeProjectPath(cwd)),
     timeoutMs,
+    signal,
     ...(contentIncludes
       ? {
-          matchesSessionId: (sessionId: string) =>
-            sessionFileContainsAny(cwd, projectsRoot, sessionId, contentIncludes),
+          filterSessionIds: (sessionIds: string[]) =>
+            sessionIds.filter((sessionId) =>
+              sessionFileContainsAny(cwd, projectsRoot, sessionId, contentIncludes)
+            ),
         }
       : {}),
   })

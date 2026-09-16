@@ -20,6 +20,15 @@ services and closes.
 For unattended development or automation, skip the chooser with
 `HIVE_DESKTOP_LAUNCH_MODE=desktop` or `HIVE_DESKTOP_LAUNCH_MODE=web`.
 
+Both modes print `Data directory` at startup and use the CLI's default
+`<OS home>/.config/hive`, including `%USERPROFILE%\.config\hive` on Windows.
+`HIVE_DATA_DIR` overrides the default. Relative overrides are resolved against
+the launcher's working directory before child services switch to the install
+directory; `pnpm --dir desktop start` starts the launcher in `desktop/`.
+Use an absolute override when launching from different directories.
+See [Data Locations](../README.md#data-locations) for examples and the separate
+Windows / WSL defaults.
+
 Drag exactly one folder from Explorer, Finder, or a Linux file manager anywhere
 onto the HiveTeam window. The existing Workspace confirmation dialog opens with
 the folder's absolute path.

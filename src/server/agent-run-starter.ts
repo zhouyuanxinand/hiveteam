@@ -2,7 +2,7 @@ import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 import { discoverWorkspaceDocuments } from '../shared/workspace-documents.js'
 import type { AgentManager } from './agent-manager.js'
 import { buildAgentRunBootstrap, startAgentRunCapture } from './agent-run-bootstrap.js'
-import { clearResumedSessionIfInvalid, handleAgentRunExit } from './agent-run-exit-handler.js'
+import { handleAgentRunExit } from './agent-run-exit-handler.js'
 import type { AgentRunExitContext, AgentRunStarterStorePort } from './agent-run-start-context.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
@@ -64,7 +64,7 @@ export const createAgentRunStarter =
     if (input.autoResume !== true) store.resetFastExitCount?.(agentId)
 
     const agent = getAgent?.(workspace.id, agentId)
-    const { sessionCaptureDiscriminator, sessionCaptureSnapshot, startConfig, startEnv } =
+    const { commitSessionContext, sessionCaptureSnapshot, startConfig, startEnv } =
       buildAgentRunBootstrap(workspace, agentId, config, sessionStore, getCommandPreset, agent)
     const skillReadiness = await assertSkillLaunchReady({
       agentId,
@@ -80,9 +80,6 @@ export const createAgentRunStarter =
       handledRunExits,
       onAgentExit,
       registry,
-      sessionStore,
-      startConfig,
-      sessionCaptureDiscriminator,
       store,
       token,
       tokenRegistry,
@@ -130,6 +127,7 @@ export const createAgentRunStarter =
       status: run.status === 'error' ? 'error' : 'starting',
     }
     try {
+      if (run.status !== 'error') commitSessionContext()
       store.insertAgentRun(run.runId, agentId, startedAt, run.pid, liveRun.status, liveRun.exitCode)
     } catch (error) {
       abortedRunIds.add(run.runId)
@@ -143,7 +141,6 @@ export const createAgentRunStarter =
 
     if (run.status === 'error') {
       store.updatePersistedRun(run.runId, 'error', run.exitCode, Date.now())
-      clearResumedSessionIfInvalid(exitContext, run.exitCode)
       tokenRegistry.revokeIfMatches(agentId, token)
       // Ensure §12 three-state: failed spawn must flip AgentSummary to stopped.
       onAgentExit(workspace.id, agentId)
@@ -152,7 +149,14 @@ export const createAgentRunStarter =
       return liveRun
     }
 
-    startAgentRunCapture({ agentId, sessionCaptureSnapshot, sessionStore, startConfig, workspace })
+    exitContext.stopSessionCapture = startAgentRunCapture({
+      agentId,
+      sessionCaptureSnapshot,
+      sessionStore,
+      startConfig,
+      workspace,
+    })
+    void registry.getExitEntry(run.runId)?.promise.then(exitContext.stopSessionCapture)
     const postStartWriter = createPostStartInputWriter(
       agentManager,
       startConfig.interactiveCommand ?? startConfig.command

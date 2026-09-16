@@ -15,6 +15,8 @@ const outputBus = {
 
 const sessionStore = {
   clearLastSessionId: () => {},
+  getCaptureContext: () => undefined,
+  saveCaptureContext: () => {},
   getLastSessionId: () => undefined,
   setLastSessionId: () => {},
 }
@@ -66,6 +68,7 @@ describe('agent run status model (unit)', () => {
           { workspaceId: 'ws-1', agentId: 'agent-1', config: { command: '/bin/bash', args: [] } },
         ],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: () => {},

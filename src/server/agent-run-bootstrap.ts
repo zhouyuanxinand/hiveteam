@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { AgentSummary, WorkspaceSummary } from '../shared/types.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
+import { prepareAgentSessionRecovery } from './agent-session-recovery.js'
 import {
   buildAgentLegacyIdentityMarker,
   buildAgentSessionBindingMarker,
@@ -14,7 +15,6 @@ import {
   captureSessionIdForCapture,
   getSessionCaptureEnvironment,
   type SessionCaptureSnapshot,
-  snapshotSessionIdsForCapture,
 } from './session-capture.js'
 
 const resolveHiveBinDir = () => {
@@ -26,7 +26,7 @@ const resolveHiveBinDir = () => {
 }
 
 const HIVE_BIN_DIR = resolveHiveBinDir()
-const SESSION_CAPTURE_TIMEOUT_MS = 30_000
+const SESSION_CAPTURE_INTERVAL_MS = 1000
 
 type LaunchPreset = Pick<
   CommandPresetRecord,
@@ -53,11 +53,11 @@ const resolveLaunchPreset = (
 const createSessionCaptureDiscriminator = (
   workspace: WorkspaceSummary,
   agent: AgentSummary | undefined,
-  codexSessionCapture = false
+  includeLegacyIdentity = false
 ) => {
   if (!agent) return undefined
   const contentIncludes = [buildAgentSessionBindingMarker({ agent, workspace })]
-  if (!codexSessionCapture) {
+  if (includeLegacyIdentity) {
     contentIncludes.push(
       buildAgentLegacyIdentityMarker({
         agent,
@@ -81,28 +81,33 @@ export const buildAgentRunBootstrap = (
 ) => {
   const preset = resolveLaunchPreset(config, getCommandPreset)
   const capture = config.sessionIdCapture ?? preset?.sessionIdCapture
-  const discriminator = createSessionCaptureDiscriminator(
-    workspace,
-    agent,
-    capture?.source === 'codex_session_jsonl_dir'
-  )
+  const discriminator = createSessionCaptureDiscriminator(workspace, agent)
+  const recovery = prepareAgentSessionRecovery({
+    agentId,
+    capture,
+    cwd: workspace.path,
+    discriminator,
+    sessionStore,
+    workspaceId: workspace.id,
+  })
   const startConfig = withPresetResumeArgs(
-    config,
+    recovery.capture ? { ...config, sessionIdCapture: recovery.capture } : config,
     preset,
     sessionStore.getLastSessionId(workspace.id, agentId),
     workspace.path,
-    discriminator,
-    () => sessionStore.clearLastSessionId(workspace.id, agentId)
+    createSessionCaptureDiscriminator(
+      workspace,
+      agent,
+      capture?.source === 'claude_project_jsonl_dir'
+    )
   )
-  const sessionCaptureSnapshot = startConfig.resumedSessionId
-    ? undefined
-    : snapshotSessionIdsForCapture(workspace.path, startConfig.sessionIdCapture, discriminator)
+  const sessionCaptureSnapshot = startConfig.resumedSessionId ? undefined : recovery.snapshot
   return {
+    commitSessionContext: () => recovery.commitContext?.(),
     sessionCaptureSnapshot,
-    sessionCaptureDiscriminator: discriminator,
     startConfig,
     startEnv: {
-      ...getSessionCaptureEnvironment(sessionCaptureSnapshot),
+      ...getSessionCaptureEnvironment(recovery.snapshot),
       HIVE_PORT: '',
       HIVE_PROJECT_ID: workspace.id,
       HIVE_AGENT_ID: agentId,
@@ -125,7 +130,8 @@ export const startAgentRunCapture = ({
   startConfig: AgentLaunchConfigInput
   workspace: WorkspaceSummary
 }) => {
-  if (!sessionCaptureSnapshot || !startConfig.sessionIdCapture) return
+  const controller = new AbortController()
+  if (!sessionCaptureSnapshot || !startConfig.sessionIdCapture) return () => {}
   void captureSessionIdForCapture(
     workspace.path,
     startConfig.sessionIdCapture,
@@ -133,6 +139,11 @@ export const startAgentRunCapture = ({
     (sessionId) => {
       sessionStore.setLastSessionId(workspace.id, agentId, sessionId)
     },
-    SESSION_CAPTURE_TIMEOUT_MS
-  )
+    null,
+    SESSION_CAPTURE_INTERVAL_MS,
+    controller.signal
+  ).catch((error: unknown) => {
+    console.error(`[hive] session capture failed for ${agentId}`, error)
+  })
+  return () => controller.abort()
 }

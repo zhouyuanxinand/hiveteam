@@ -123,8 +123,9 @@ export const captureSessionIdForCapture = async (
   capture: SessionIdCaptureConfig,
   snapshot: SessionCaptureSnapshot,
   onCapture: (sessionId: string) => void,
-  timeoutMs = 5000,
-  intervalMs = 100
+  timeoutMs: number | null = 5000,
+  intervalMs = 100,
+  signal?: AbortSignal
 ) => {
   if (capture.source === 'claude_project_jsonl_dir') {
     await captureClaudeSessionId(
@@ -134,7 +135,8 @@ export const captureSessionIdForCapture = async (
       timeoutMs,
       intervalMs,
       snapshot.root,
-      snapshot.discriminator
+      snapshot.discriminator,
+      signal
     )
   }
   if (capture.source === 'codex_session_jsonl_dir') {
@@ -145,7 +147,8 @@ export const captureSessionIdForCapture = async (
       timeoutMs,
       intervalMs,
       snapshot.root,
-      snapshot.discriminator
+      snapshot.discriminator,
+      signal
     )
   }
   if (capture.source === 'gemini_session_json_dir') {
@@ -155,7 +158,8 @@ export const captureSessionIdForCapture = async (
       onCapture,
       timeoutMs,
       intervalMs,
-      snapshot.root
+      snapshot.root,
+      signal
     )
   }
   if (capture.source === 'opencode_session_db') {
@@ -165,7 +169,8 @@ export const captureSessionIdForCapture = async (
       onCapture,
       timeoutMs,
       intervalMs,
-      snapshot.root
+      snapshot.root,
+      signal
     )
   }
 }

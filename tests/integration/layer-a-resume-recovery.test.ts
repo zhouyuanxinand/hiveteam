@@ -205,7 +205,7 @@ describe('Layer A resume recovery integration', () => {
     }
   })
 
-  test('T2 stale session: missing Claude jsonl skips --resume', async () => {
+  test('T2 missing native file: preserves the binding and resumes after the file is restored', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-layer-a-home-'))
     const workspacePathRaw = join(homeDir, 'workspace')
     tempDirs.push(homeDir)
@@ -243,25 +243,42 @@ describe('Layer A resume recovery integration', () => {
       })
 
       unlinkSync(getClaudeSessionFilePath(workspacePath, sessionId))
-      writeFileSync(join(workspacePath, '.expect-fresh'), '1\n')
-
+      const blocked = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/start`,
+        {
+          method: 'POST',
+          headers: { cookie },
+        }
+      )
+      expect(blocked.status).toBe(409)
+      expect(await blocked.json()).toMatchObject({
+        error: expect.stringContaining('Saved native session'),
+      })
+      expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
+      writeFileSync(
+        getClaudeSessionFilePath(workspacePath, sessionId),
+        JSON.stringify({
+          text: `Hive session binding: workspace_id=${workspace.id}; agent_id=${worker.id}`,
+        })
+      )
       const secondRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
       await waitFor(async () => {
         const run = await getRunOutputViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(run.status).toBe('running')
         const output = compactPtyText(run.output)
         expect(output).toContain(
-          compactPtyText(`ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`)
+          compactPtyText(
+            `ARGS:--resume ${sessionId} --dangerously-skip-permissions --session-id-test ${sessionId}`
+          )
         )
-        expect(output).not.toContain('--resume')
+        expect(output).toContain('--resume')
       })
-      unlinkSync(join(workspacePath, '.expect-fresh'))
     } finally {
       await server.close()
     }
   })
 
-  test('T3 resume failure: non-zero resumed start clears session id and next start is bare', async () => {
+  test('T3 resume failure: non-zero exit retains the original session and blocks a fresh start', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-layer-a-home-'))
     const workspacePathRaw = join(homeDir, 'workspace')
     tempDirs.push(homeDir)
@@ -306,23 +323,37 @@ describe('Layer A resume recovery integration', () => {
         expect(run.status).toBe('error')
       })
       await waitFor(() => {
-        expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBeUndefined()
+        expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
       })
 
       unlinkSync(join(workspacePath, '.fail-next-resume'))
-      writeFileSync(join(workspacePath, '.expect-fresh'), '1\n')
-
+      const blocked = await fetch(
+        `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/start`,
+        {
+          method: 'POST',
+          headers: { cookie },
+        }
+      )
+      expect(blocked.status).toBe(409)
+      expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
+      writeFileSync(
+        getClaudeSessionFilePath(workspacePath, sessionId),
+        JSON.stringify({
+          text: `Hive session binding: workspace_id=${workspace.id}; agent_id=${worker.id}`,
+        })
+      )
       const thirdRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
       await waitFor(async () => {
         const run = await getRunOutputViaHttp(server.baseUrl, cookie, thirdRun.runId)
         expect(run.status).toBe('running')
         const output = compactPtyText(run.output)
         expect(output).toContain(
-          compactPtyText(`ARGS:--dangerously-skip-permissions --session-id-test ${sessionId}`)
+          compactPtyText(
+            `ARGS:--resume ${sessionId} --dangerously-skip-permissions --session-id-test ${sessionId}`
+          )
         )
-        expect(output).not.toContain('--resume')
+        expect(output).toContain('--resume')
       })
-      unlinkSync(join(workspacePath, '.expect-fresh'))
     } finally {
       await server.close()
     }

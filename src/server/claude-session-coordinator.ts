@@ -1,7 +1,8 @@
 type CaptureWaiter = {
   knownSessionIds: Set<string>
-  matchesSessionId?: (sessionId: string) => boolean
+  filterSessionIds?: (sessionIds: string[]) => string[]
   onCapture: (sessionId: string) => void
+  reject: (error: unknown) => void
   resolve: () => void
 }
 
@@ -28,19 +29,24 @@ const flushWaiters = (projectKey: string, listSessionIds: () => string[]) => {
   const remainingWaiters: CaptureWaiter[] = []
 
   for (const waiter of waiters) {
-    const nextSessionId = availableSessionIds.find(
-      (sessionId) =>
-        !waiter.knownSessionIds.has(sessionId) &&
-        (!waiter.matchesSessionId || waiter.matchesSessionId(sessionId))
+    const candidateSessionIds = availableSessionIds.filter(
+      (sessionId) => !waiter.knownSessionIds.has(sessionId)
     )
+    const nextSessionId = candidateSessionIds.length
+      ? (waiter.filterSessionIds?.(candidateSessionIds) ?? candidateSessionIds)[0]
+      : undefined
     if (!nextSessionId) {
       remainingWaiters.push(waiter)
       continue
     }
-    claimedSessionIds.add(nextSessionId)
-    availableSessionIds.splice(availableSessionIds.indexOf(nextSessionId), 1)
-    waiter.onCapture(nextSessionId)
-    waiter.resolve()
+    try {
+      waiter.onCapture(nextSessionId)
+      claimedSessionIds.add(nextSessionId)
+      availableSessionIds.splice(availableSessionIds.indexOf(nextSessionId), 1)
+      waiter.resolve()
+    } catch (error) {
+      waiter.reject(error)
+    }
   }
 
   waitersByProjectKey.set(projectKey, remainingWaiters)
@@ -54,36 +60,59 @@ export const captureSessionIdWithCoordinator = async ({
   onCapture,
   projectKey,
   timeoutMs = 5000,
-  matchesSessionId,
+  filterSessionIds,
+  signal,
 }: {
   intervalMs?: number
   knownSessionIds: Set<string>
   listSessionIds: () => string[]
-  matchesSessionId?: (sessionId: string) => boolean
+  filterSessionIds?: (sessionIds: string[]) => string[]
   onCapture: (sessionId: string) => void
   projectKey: string
-  timeoutMs?: number
+  timeoutMs?: number | null
+  signal?: AbortSignal | undefined
 }) => {
-  await new Promise<void>((resolve) => {
-    let timeout: ReturnType<typeof setTimeout>
-    const waiter: CaptureWaiter = {
-      knownSessionIds,
-      ...(matchesSessionId ? { matchesSessionId } : {}),
-      onCapture,
-      resolve: () => {
-        clearTimeout(timeout)
-        resolve()
-      },
+  if (signal?.aborted) return
+  await new Promise<void>((resolve, reject) => {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const cleanup = () => {
+      if (timeout) clearTimeout(timeout)
+      signal?.removeEventListener('abort', abort)
     }
-    timeout = setTimeout(() => {
+    const removeWaiter = () => {
       waitersByProjectKey.set(
         projectKey,
         (waitersByProjectKey.get(projectKey) ?? []).filter((candidate) => candidate !== waiter)
       )
       clearPollerIfIdle(projectKey)
-      resolve()
-    }, timeoutMs)
-    timeout.unref?.()
+    }
+    const abort = () => {
+      // Native CLIs may flush their first session file only while exiting.
+      flushWaiters(projectKey, listSessionIds)
+      removeWaiter()
+      waiter.resolve()
+    }
+    const waiter: CaptureWaiter = {
+      knownSessionIds,
+      ...(filterSessionIds ? { filterSessionIds } : {}),
+      onCapture,
+      reject: (error) => {
+        cleanup()
+        reject(error)
+      },
+      resolve: () => {
+        cleanup()
+        resolve()
+      },
+    }
+    if (timeoutMs !== null) {
+      timeout = setTimeout(() => {
+        removeWaiter()
+        waiter.resolve()
+      }, timeoutMs)
+      timeout.unref?.()
+    }
+    signal?.addEventListener('abort', abort, { once: true })
     waitersByProjectKey.set(projectKey, [...(waitersByProjectKey.get(projectKey) ?? []), waiter])
     if (!pollersByProjectKey.has(projectKey)) {
       pollersByProjectKey.set(

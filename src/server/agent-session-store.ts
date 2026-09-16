@@ -1,4 +1,8 @@
 import type { Database } from 'better-sqlite3'
+import {
+  type AgentSessionContext,
+  createAgentSessionContextStore,
+} from './agent-session-context.js'
 
 interface AgentSessionRow {
   agent_id: string
@@ -7,6 +11,8 @@ interface AgentSessionRow {
 }
 
 export interface AgentSessionStore {
+  getCaptureContext: (workspaceId: string, agentId: string) => AgentSessionContext | undefined
+  saveCaptureContext: (workspaceId: string, agentId: string, context: AgentSessionContext) => void
   clearLastSessionId: (workspaceId: string, agentId: string) => void
   getLastSessionId: (workspaceId: string, agentId: string) => string | undefined
   setLastSessionId: (workspaceId: string, agentId: string, sessionId: string) => void
@@ -62,6 +68,7 @@ export const createAgentSessionStore = (db: Database): AgentSessionStore => {
   )
 
   return {
+    ...createAgentSessionContextStore(db),
     clearLastSessionId(workspaceId, agentId) {
       clearTransaction(workspaceId, agentId)
       lastSessionIds.delete(`${workspaceId}:${agentId}`)

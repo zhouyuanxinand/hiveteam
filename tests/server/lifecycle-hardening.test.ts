@@ -16,6 +16,8 @@ import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const sessionStore = {
   clearLastSessionId: () => {},
+  getCaptureContext: () => undefined,
+  saveCaptureContext: () => {},
   getLastSessionId: () => undefined,
   setLastSessionId: () => {},
 }

@@ -39,8 +39,10 @@ import { applySchemaVersion41 } from './sqlite-schema-v41.js'
 import { applySchemaVersion42 } from './sqlite-schema-v42.js'
 import { applySchemaVersion43 } from './sqlite-schema-v43.js'
 import { applySchemaVersion44 } from './sqlite-schema-v44.js'
+import { applySchemaVersion45 } from './sqlite-schema-v45.js'
+import { applySchemaVersion46 } from './sqlite-schema-v46.js'
 
-export const CURRENT_SCHEMA_VERSION = 44
+export const CURRENT_SCHEMA_VERSION = 46
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -485,5 +487,13 @@ export const initializeRuntimeDatabase = (db: Database) => {
   applySchemaVersion44(db)
   if (!appliedVersions.has(44)) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(44, Date.now())
+  }
+  applySchemaVersion45(db)
+  if (!appliedVersions.has(45)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(45, Date.now())
+  }
+  applySchemaVersion46(db)
+  if (!appliedVersions.has(46)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(46, Date.now())
   }
 }

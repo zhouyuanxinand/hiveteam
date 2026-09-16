@@ -15,6 +15,8 @@ const outputBus = {
 
 const sessionStore = {
   clearLastSessionId: () => {},
+  getCaptureContext: () => undefined,
+  saveCaptureContext: () => {},
   getLastSessionId: () => undefined,
   setLastSessionId: () => {},
 }
@@ -59,6 +61,7 @@ describe('agent runtime races (unit)', () => {
           { workspaceId: 'ws-1', agentId: 'agent-1', config: { command: '/bin/bash', args: [] } },
         ],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: (runId, status, exitCode) => {
@@ -111,6 +114,7 @@ describe('agent runtime races (unit)', () => {
         listAgentRuns: () => [],
         listLaunchConfigs: () => [],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: () => {},
@@ -165,6 +169,7 @@ describe('agent runtime races (unit)', () => {
           { workspaceId: 'ws-1', agentId: 'agent-1', config: { command: '/bin/bash', args: [] } },
         ],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: () => {},
@@ -231,6 +236,7 @@ describe('agent runtime races (unit)', () => {
           { workspaceId: 'ws-1', agentId: 'agent-1', config: { command: '/bin/bash', args: [] } },
         ],
         deleteLaunchConfig: () => {},
+        checkpointShutdownRuns: () => {},
         markUnfinishedRunsStale: () => {},
         saveLaunchConfig: () => {},
         updatePersistedRun: () => {},

@@ -170,7 +170,7 @@ describe('claude session support', () => {
     })
   })
 
-  test('withPresetResumeArgs returns original config when the session file is stale', () => {
+  test('withPresetResumeArgs blocks a fresh start when the saved session file is missing', () => {
     createTempRoot()
     const config = {
       command: 'claude',
@@ -179,15 +179,15 @@ describe('claude session support', () => {
       sessionIdCapture: presetCapture,
     }
 
-    expect(
+    expect(() =>
       withPresetResumeArgs(config, null, '66666666-6666-4666-8666-666666666666', '/tmp/project-g')
-    ).toBe(config)
+    ).toThrow(/Saved native session/)
     expect(hasClaudeSessionFile('/tmp/project-g', '66666666-6666-4666-8666-666666666666')).toBe(
       false
     )
   })
 
-  test('withPresetResumeArgs skips Claude resume when the session file belongs to another worker', () => {
+  test('withPresetResumeArgs blocks Claude resume when the session file belongs to another worker', () => {
     const root = createTempRoot()
     const cwd = '/tmp/project-owner-check'
     const sessionId = '88888888-8888-4888-8888-888888888888'
@@ -198,53 +198,33 @@ describe('claude session support', () => {
       sessionIdCapture: presetCapture,
     }
     writeSession(root, cwd, sessionId, '你是 Demo 的 Bob（coder）。\n')
-    const invalidSessionIds: string[] = []
-
-    const result = withPresetResumeArgs(
-      config,
-      null,
-      sessionId,
-      cwd,
-      {
+    expect(() =>
+      withPresetResumeArgs(config, null, sessionId, cwd, {
         contentIncludes: '你是 Demo 的 Alice（coder）。',
-      },
-      (invalidSessionId) => invalidSessionIds.push(invalidSessionId)
-    )
-
-    expect(result).toMatchObject({
-      args: ['--dangerously-skip-permissions'],
-    })
-    expect(result).not.toHaveProperty('resumedSessionId')
-    expect(invalidSessionIds).toEqual([sessionId])
+      })
+    ).toThrow(/does not belong to this member/)
   })
 
-  test('withPresetResumeArgs clears a stale Codex session before resume', () => {
+  test('withPresetResumeArgs blocks a fresh Codex session when the saved conversation is missing', () => {
     createCodexHome()
-    const invalidSessionIds: string[] = []
-    const result = withPresetResumeArgs(
-      {
-        command: 'codex',
-        args: [],
-      },
-      {
-        resumeArgsTemplate: 'resume {session_id}',
-        sessionIdCapture: {
-          source: 'codex_session_jsonl_dir',
-          pattern: '~/.codex/sessions/**/*.jsonl',
+    expect(() =>
+      withPresetResumeArgs(
+        {
+          command: 'codex',
+          args: [],
         },
-        yoloArgsTemplate: null,
-      },
-      '019dc277-0e8e-75c1-9794-94929426288e',
-      '/tmp/no-such-codex-workspace',
-      undefined,
-      (invalidSessionId) => invalidSessionIds.push(invalidSessionId)
-    )
-
-    expect(result).toMatchObject({
-      args: [],
-    })
-    expect(result).not.toHaveProperty('resumedSessionId')
-    expect(invalidSessionIds).toEqual(['019dc277-0e8e-75c1-9794-94929426288e'])
+        {
+          resumeArgsTemplate: 'resume {session_id}',
+          sessionIdCapture: {
+            source: 'codex_session_jsonl_dir',
+            pattern: '~/.codex/sessions/**/*.jsonl',
+          },
+          yoloArgsTemplate: null,
+        },
+        '019dc277-0e8e-75c1-9794-94929426288e',
+        '/tmp/no-such-codex-workspace'
+      )
+    ).toThrow(/Saved native session/)
   })
 
   test('withPresetResumeArgs resumes Codex when the native session exists', () => {
