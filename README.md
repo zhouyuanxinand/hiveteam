@@ -189,14 +189,19 @@ agents use by default and which CLIs they are allowed to use.
 ## Share Skills with Skill Packs
 
 New workspaces automatically bind `tt-a1i/matt-skills-with-to-goal` as `matt`
-before starting the Orchestrator, with role profiles, an immutable lock, and
-native `to-goal`, `to-spec`, and `to-tickets` entry points. The first download
+and `zhouyuanxinand/code-janitor` as `code-janitor` before starting the Orchestrator,
+with role profiles, immutable locks, and native `to-goal`, `to-spec`, `to-tickets`,
+and `code-janitor` entry points. Janitor is available to the Orchestrator, Coder,
+Reviewer, and Tester on demand; binding it does not run a cleanup. The first download
 requires Git and access to GitHub. Later creations reuse and verify the local
 cache; existing workspace versions are never automatically updated. Explicitly
 resolving a newer release makes that cached version available to new workspaces.
-Existing Matt bindings retain their versions and selections. Pack-name or native
+Existing bindings retain their aliases, versions, and selections; only missing
+defaults are added on creation. Existing workspaces are not migrated. Pack-name or native
 directory conflicts fail visibly without overwriting user files or starting an
-agent. Other CLIs use Hive's role catalogs and `team skill` on demand; binding a
+agent. If a later default Pack fails, earlier bindings from this creation are undone;
+an unsafe rollback retains the workspace and receipts for recovery. Other CLIs use
+Hive's role catalogs and `team skill` on demand; binding a
 Pack does not execute its scripts.
 
 Open **Skills** in the active Workspace topbar to bind one locked Skill source
@@ -219,6 +224,7 @@ Inside the Orchestrator terminal:
 ```bash
 team skill list
 team skill load matt/to-goal
+team skill load code-janitor/code-janitor
 team send "Alice" "Implement the approved change test-first" --skill matt/tdd
 ```
 

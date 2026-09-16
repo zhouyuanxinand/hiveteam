@@ -1,5 +1,5 @@
 import { isWorkspaceLanguage, type WorkspaceSummary } from '../shared/types.js'
-import { prepareDefaultWorkspaceSkillPack } from './default-workspace-skill-pack.js'
+import { prepareDefaultWorkspaceSkillPacks } from './default-workspace-skill-pack.js'
 import { autostartOrchestrator, type OrchestratorStartResult } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { CreateWorkspaceBody } from './route-types.js'
@@ -34,7 +34,7 @@ export const createWorkspaceWithOrchestrator = (
   if (existing) return existing
 
   const creation = (async (): Promise<CreatedWorkspace> => {
-    const initializeSkills = await prepareDefaultWorkspaceSkillPack(store, path)
+    const initializeSkills = await prepareDefaultWorkspaceSkillPacks(store, path)
     const workspace = store.createWorkspace(path, body.name, language)
     try {
       await initializeSkills(workspace.id)

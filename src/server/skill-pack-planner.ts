@@ -345,6 +345,11 @@ const createPlacementOperations = async (
       target: null,
     }
     const expected = activePlacement ? { fingerprint: 'missing', target: null } : observed
+    // An imported project may already expose this exact release. Preserve the
+    // link without claiming ownership; future Remove/Undo must not delete it.
+    if (!activePlacement && observed.fingerprint === fingerprintLinkTarget(placement.sourcePath)) {
+      continue
+    }
     if (!activePlacement && observed.fingerprint !== 'missing') {
       throw new SkillPackChangeError(
         'placement_conflict',

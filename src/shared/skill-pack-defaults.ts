@@ -3,7 +3,7 @@ import type { SkillPackManifest, SkillProfileName, SkillProfiles } from './skill
 import { skillProfileNames } from './skill-packs.js'
 
 const recommendedProfiles: Record<SkillProfileName, string[]> = {
-  coder: ['implement', 'tdd', 'diagnosing-bugs', 'codebase-design'],
+  coder: ['implement', 'tdd', 'diagnosing-bugs', 'codebase-design', 'code-janitor'],
   custom: [],
   orchestrator: [
     'ask-matt',
@@ -13,9 +13,10 @@ const recommendedProfiles: Record<SkillProfileName, string[]> = {
     'to-goal',
     'goal-crafter',
     'wayfinder',
+    'code-janitor',
   ],
-  reviewer: ['code-review', 'domain-modeling', 'resolving-merge-conflicts'],
-  tester: ['tdd', 'diagnosing-bugs', 'research'],
+  reviewer: ['code-review', 'domain-modeling', 'resolving-merge-conflicts', 'code-janitor'],
+  tester: ['tdd', 'diagnosing-bugs', 'research', 'code-janitor'],
 }
 
 export const defaultSkillPackSelection = (manifest: SkillPackManifest) => {
@@ -27,7 +28,9 @@ export const defaultSkillPackSelection = (manifest: SkillPackManifest) => {
     ])
   ) as SkillProfiles
   return {
-    nativeExposure: ['to-goal', 'to-spec', 'to-tickets'].filter((name) => available.has(name)),
+    nativeExposure: ['to-goal', 'to-spec', 'to-tickets', 'code-janitor'].filter((name) =>
+      available.has(name)
+    ),
     profiles,
   }
 }

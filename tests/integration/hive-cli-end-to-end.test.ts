@@ -325,7 +325,12 @@ describe('hive cli end to end', () => {
       expect(existsSync(join(homeDir, '.config', 'hive', 'runtime.sqlite'))).toBe(true)
       expect(
         JSON.parse(readFileSync(join(workspacePath, '.hive', 'skill-packs.lock.json'), 'utf8'))
-      ).toMatchObject({ packs: [{ release_id: fixture.release.id }] })
+      ).toMatchObject({
+        packs: [
+          { name: 'code-janitor', release_id: fixture.janitorRelease.id },
+          { name: 'matt', release_id: fixture.release.id },
+        ],
+      })
     } finally {
       processHandle.kill('SIGTERM')
       await new Promise<void>((resolve) => processHandle.once('exit', () => resolve()))

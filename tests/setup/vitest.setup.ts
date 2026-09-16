@@ -7,7 +7,7 @@ import { afterEach, vi } from 'vitest'
 // exercise the real HTTP -> SQLite -> cache -> filesystem -> PTY flow.
 vi.mock('../../src/server/default-workspace-skill-pack.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/server/default-workspace-skill-pack.js')>()),
-  prepareDefaultWorkspaceSkillPack: async () => async () => {},
+  prepareDefaultWorkspaceSkillPacks: async () => async () => {},
 }))
 
 // node-pty's ConPTY cleanup helper calls AttachConsole from a forked process.
