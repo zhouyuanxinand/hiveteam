@@ -10,8 +10,12 @@ export const createRecordingAgentManager = () => {
   >()
   let sequence = 0
   let startCount = 0
+  const inputSequences = new Map<string, number>()
+  const sizes = new Map<string, { cols: number; rows: number }>()
 
   const manager: AgentManager = {
+    getInputSequence: (runId) => inputSequences.get(runId) ?? 0,
+    getTerminalSize: (runId) => sizes.get(runId) ?? { cols: 80, rows: 24 },
     getOutputBus: () => outputBus,
     getRun: (runId) => {
       const run = runs.get(runId)
@@ -22,8 +26,12 @@ export const createRecordingAgentManager = () => {
     removeRun: (runId) => {
       runs.delete(runId)
       exitHandlers.delete(runId)
+      inputSequences.delete(runId)
+      sizes.delete(runId)
     },
-    resizeRun: () => {},
+    resizeRun: (runId, cols, rows) => {
+      sizes.set(runId, { cols, rows })
+    },
     resumeRun: () => {},
     startAgent: async (input) => {
       startCount += 1
@@ -54,6 +62,7 @@ export const createRecordingAgentManager = () => {
       const run = runs.get(runId)
       if (!run) throw new Error(`Run not found: ${runId}`)
       const chunk = input.toString()
+      inputSequences.set(runId, (inputSequences.get(runId) ?? 0) + 1)
       runs.set(runId, { ...run, output: run.output + chunk })
       outputBus.publish(runId, chunk)
     },

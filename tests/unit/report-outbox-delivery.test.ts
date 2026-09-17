@@ -100,9 +100,10 @@ describe('report outbox delivery', () => {
       workspaceId,
       orchestratorId,
       expect.stringContaining('[Hive 系统消息：来自 @Alice 的汇报]'),
-      { requireActiveRun: true }
+      expect.objectContaining({ requireActiveRun: true })
     )
     expect(reportOutbox.pendingCount(workspaceId, orchestratorId)).toBe(0)
+    await ops.close()
     db.close()
   })
 
@@ -178,6 +179,7 @@ describe('report outbox delivery', () => {
     ops.drainReportOutbox(workspaceId, orchestratorId)
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(reportOutbox.pendingCount(workspaceId, orchestratorId)).toBe(0)
+    await ops.close()
     db.close()
   })
 })

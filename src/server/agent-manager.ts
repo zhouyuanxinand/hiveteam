@@ -25,6 +25,8 @@ interface AgentRunSnapshot {
 }
 
 interface AgentRunRecord extends AgentRunSnapshot {
+  inputSequence: number
+  terminalSize: { cols: number; rows: number }
   process: {
     isStopped: () => boolean
     pause: () => void
@@ -38,6 +40,8 @@ interface AgentRunRecord extends AgentRunSnapshot {
 }
 
 interface AgentManager {
+  getInputSequence: (runId: string) => number
+  getTerminalSize: (runId: string) => { cols: number; rows: number }
   getOutputBus: () => PtyOutputBus
   pauseRun: (runId: string) => void
   resizeRun: (runId: string, cols: number, rows: number) => void
@@ -53,6 +57,11 @@ interface AgentManager {
 
 const createRunId = () => randomUUID()
 const WINDOWS_PTY_RELEASE_SETTLE_MS = 500
+// Focus and terminal capability replies are not edits to the composer. Any
+// other input (including mixed reply + text chunks) invalidates auto-submit.
+const TERMINAL_REPLIES =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: recognize non-editing terminal protocol replies.
+  /^(?:\x1b\[[IO]|\x1b\[\d+;\d+R|\x1b\[[?>]?[\d;]*c|\x1b\](?:10|11);[^\x07\x1b]*(?:\x07|\x1b\\))+$/u
 const isClosedPtyResizeError = (error: unknown) =>
   /cannot resize a pty that has already exited|pty seems to have been killed already|pty is not active|already exited/i.test(
     error instanceof Error ? error.message : String(error)
@@ -106,6 +115,8 @@ export const createAgentManager = ({
       runExitResolvers.set(runId, resolveRunExit)
 
       const run: AgentRunRecord = {
+        inputSequence: 0,
+        terminalSize: { cols: 80, rows: 24 },
         runId,
         agentId: input.agentId,
         pid: null,
@@ -172,6 +183,7 @@ export const createAgentManager = ({
       if (run.status === 'exited' || run.status === 'error' || run.process.isStopped()) return
       try {
         run.process.resize(cols, rows)
+        run.terminalSize = { cols, rows }
       } catch (error) {
         if (!isClosedPtyResizeError(error)) throw error
       }
@@ -182,7 +194,16 @@ export const createAgentManager = ({
     },
 
     writeInput(runId, text) {
-      getRunRecord(runId).process.write(text)
+      const run = getRunRecord(runId)
+      if (!TERMINAL_REPLIES.test(text.toString())) run.inputSequence += 1
+      run.process.write(text)
+    },
+
+    getInputSequence(runId) {
+      return getRunRecord(runId).inputSequence
+    },
+    getTerminalSize(runId) {
+      return { ...getRunRecord(runId).terminalSize }
     },
 
     getRun(runId) {

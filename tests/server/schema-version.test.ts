@@ -229,6 +229,8 @@ describe('schema version', () => {
     )
     expect(reportOutboxColumns).toEqual(
       new Set([
+        'receipt_id',
+        'delivery_checkpoint',
         'id',
         'workspace_id',
         'target_agent_id',
@@ -333,13 +335,13 @@ describe('schema version', () => {
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(33)).toEqual({
       version: 33,
     })
-    for (const version of [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]) {
+    for (const version of [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]) {
       expect(
         db.prepare('SELECT version FROM schema_version WHERE version = ?').get(version)
       ).toEqual({ version })
     }
     expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
-      version: 46,
+      version: 47,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })

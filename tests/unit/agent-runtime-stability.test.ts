@@ -58,6 +58,8 @@ describe('agent runtime stability (unit)', () => {
           runId: 'run-1',
           status: 'running',
         }),
+        getInputSequence: () => 0,
+        getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,
         pauseRun: () => {},
         removeRun: () => {},

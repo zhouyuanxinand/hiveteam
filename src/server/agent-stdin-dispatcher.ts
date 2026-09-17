@@ -4,8 +4,10 @@ import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { WorkspaceLanguage } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
+import type { AgentSessionStorePort } from './agent-runtime-ports.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { workerClarificationGuidance } from './clarification-guidance.js'
+import { deliverCodexReport } from './codex-report-delivery.js'
 import {
   buildWorkerReminderTail,
   getOrchestratorReminderTail,
@@ -22,9 +24,12 @@ import {
   sanitizePromptData,
   wrapUntrustedPromptData,
 } from './prompt-safety.js'
+import type { SystemMessageDeliveryOptions } from './report-delivery-receipt.js'
+import { normalizeExecutableToken } from './startup-command-parser.js'
 
 interface AgentStdinDispatcherInput {
   agentManager: AgentManager | undefined
+  sessionStore?: AgentSessionStorePort
   getDispatchMemoryDigest?: (workspaceId: string, agentId: string, task: string) => string
   getLaunchConfig: (workspaceId: string, agentId: string) => AgentLaunchConfigInput | undefined
   getWorkspaceId: (agentId: string) => string | undefined
@@ -181,6 +186,7 @@ export const buildWorkerFeedbackPayload = (
 
 export const createAgentStdinDispatcher = ({
   agentManager,
+  sessionStore,
   getDispatchMemoryDigest,
   getLaunchConfig,
   getWorkspaceId,
@@ -231,7 +237,7 @@ export const createAgentStdinDispatcher = ({
     workspaceId: string,
     agentId: string,
     text: string,
-    input: { requireActiveRun?: boolean } = {}
+    input: SystemMessageDeliveryOptions = {}
   ): Promise<void> => {
     const run = findActiveAgentRun(workspaceId, agentId)
     if (!run) {
@@ -244,6 +250,24 @@ export const createAgentStdinDispatcher = ({
     try {
       const config = getLaunchConfig(workspaceId, agentId)
       if (agentManager && config) {
+        if (
+          input.receipt &&
+          normalizeExecutableToken(config.interactiveCommand ?? config.command) === 'codex'
+        ) {
+          if (!sessionStore)
+            return Promise.reject(
+              new Error('Codex session store is unavailable; report remains queued.')
+            )
+          return deliverCodexReport({
+            agentManager,
+            agentId,
+            workspaceId,
+            runId: run.runId,
+            text,
+            receipt: input.receipt,
+            sessions: sessionStore,
+          })
+        }
         return createAwaitablePostStartInputWriter(
           agentManager,
           config.interactiveCommand ?? config.command
@@ -368,7 +392,7 @@ export const createAgentStdinDispatcher = ({
       workspaceId: string,
       agentId: string,
       text: string,
-      input: { requireActiveRun?: boolean } = {}
+      input: SystemMessageDeliveryOptions = {}
     ) {
       return deliverToActiveAgentRun(workspaceId, agentId, text, input)
     },
