@@ -1,6 +1,7 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { IDecoration, Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ConversationTurn } from '../../../src/shared/agent-conversation.js'
 import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
@@ -9,6 +10,7 @@ import type {
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
 import { createTerminalClient, type TerminalConnectionStatus } from './terminal-client.js'
+import { createTerminalProcessFold } from './terminal-process-fold.js'
 import { utf8ByteLength } from './utf8.js'
 import {
   attachAlternateScreenWheelFallback,
@@ -67,6 +69,15 @@ export const useTerminalRun = (
   const refreshRef = useRef<(() => void) | null>(null)
   const focusRef = useRef<(() => void) | null>(null)
   const retryRef = useRef<(() => Promise<TerminalSessionRetryStatus>) | null>(null)
+  const processFoldRef = useRef<ReturnType<typeof createTerminalProcessFold> | null>(null)
+  const latestProcess = useRef<{ turn: ConversationTurn | undefined; label: string }>({
+    turn: undefined,
+    label: '',
+  })
+  const updateProcess = useCallback((turn: ConversationTurn | undefined, label: string) => {
+    latestProcess.current = { turn, label }
+    processFoldRef.current?.update(turn, label)
+  }, [])
   const [recovery, setRecovery] = useState<TerminalSessionRecovery | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<TerminalConnectionStatus>('connecting')
   const [connectionVersion, setConnectionVersion] = useState(0)
@@ -158,6 +169,8 @@ export const useTerminalRun = (
       nextFitAddon.fit()
       terminal = nextTerminal
       fitAddon = nextFitAddon
+      processFoldRef.current = createTerminalProcessFold(nextTerminal, containerRef.current)
+      processFoldRef.current.update(latestProcess.current.turn, latestProcess.current.label)
       const userInputAccent = readTerminalColor('--accent', '#60a5fa')
       const userInputBackground = readTerminalColor('--bg-2', '#1d2b45')
 
@@ -355,6 +368,7 @@ export const useTerminalRun = (
       }
       const resize = () => {
         if (terminalExited || !containerRef.current || !isContainerResizable()) return
+        processFoldRef.current?.resize()
         refreshTerminal()
         const { pixelHeight, pixelWidth } = getContainerPixels()
         client?.resize(terminal?.cols ?? 80, terminal?.rows ?? 24, pixelWidth, pixelHeight)
@@ -391,12 +405,15 @@ export const useTerminalRun = (
           if (!disposed) setConnectionStatus(next)
         },
         onOutput(chunk, acknowledge) {
+          processFoldRef.current?.beforeOutput()
           nextTerminal.write(highlightUserInputOutput(chunk), () => {
             scheduleUserInputDecorations()
+            processFoldRef.current?.afterOutput()
             acknowledge(utf8ByteLength(chunk))
           })
         },
         onRestore(snapshot) {
+          processFoldRef.current?.beforeOutput()
           return new Promise<void>((resolve) => {
             nextTerminal.write(highlightUserInputOutput(snapshot), () => {
               if (!disposed) {
@@ -404,6 +421,7 @@ export const useTerminalRun = (
                 scheduleUserInputDecorations()
                 refreshTerminal()
                 focusTerminal()
+                processFoldRef.current?.afterOutput()
               }
               resolve()
             })
@@ -438,6 +456,8 @@ export const useTerminalRun = (
       refreshRef.current = null
       focusRef.current = null
       retryRef.current = null
+      processFoldRef.current?.dispose()
+      processFoldRef.current = null
       if (onWindowResize) window.removeEventListener('resize', onWindowResize)
       if (onThemeChange) window.removeEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       resizeObserver?.disconnect()
@@ -479,5 +499,6 @@ export const useTerminalRun = (
     retrySession,
     connectionStatus,
     reconnect,
+    updateProcess,
   }
 }

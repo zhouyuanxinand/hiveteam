@@ -4,6 +4,7 @@ import { isUiLanguage, UI_LANGUAGE_STORAGE_KEY, type UiLanguage } from './uiLang
 
 const enMessages = {
   'terminal.loadingHistory': 'Loading terminal history…',
+  'terminal.expandProcess': 'Show this turn’s process',
   ...deliveryEn,
   'worktree.create': 'Use an isolated working directory',
   'worktree.createHint':
@@ -886,6 +887,7 @@ export type TranslationKey = keyof typeof enMessages
 
 const zhMessages: Record<TranslationKey, string> = {
   'terminal.loadingHistory': '正在载入终端历史…',
+  'terminal.expandProcess': '展开本轮过程',
   ...deliveryZh,
   'worktree.create': '使用隔离工作目录',
   'worktree.createHint':

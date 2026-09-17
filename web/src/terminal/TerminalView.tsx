@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { SessionRecoveryBanner } from './SessionRecoveryBanner.js'
+import { TerminalProcessState } from './TerminalProcessState.js'
 import { retainParkedTerminal } from './terminal-retention.js'
 import { useTerminalRun } from './useTerminalRun.js'
 import type { TerminalWheelInputProfile } from './wheelFallback.js'
@@ -16,6 +17,7 @@ const STATUS_KEYS: Record<string, TranslationKey> = {
 }
 
 interface TerminalViewProps {
+  owner?: { workspaceId: string; agentId: string }
   inputProfile?: TerminalWheelInputProfile
   runId: string
   title: string
@@ -221,7 +223,12 @@ const useStablePortalHost = (runId: string, target: HTMLElement | null): HTMLEle
   return activated ? host : null
 }
 
-export const TerminalView = ({ inputProfile = 'default', runId, title }: TerminalViewProps) => {
+export const TerminalView = ({
+  inputProfile = 'default',
+  runId,
+  title,
+  owner,
+}: TerminalViewProps) => {
   const portalTarget = usePortalTarget(runId)
   const host = useStablePortalHost(runId, portalTarget)
 
@@ -232,12 +239,19 @@ export const TerminalView = ({ inputProfile = 'default', runId, title }: Termina
       runId={runId}
       title={title}
       visible={portalTarget !== null}
+      {...(owner ? { owner } : {})}
     />,
     host
   )
 }
 
-const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: TerminalPtyViewProps) => {
+const TerminalPtyView = ({
+  inputProfile,
+  runId,
+  title: _title,
+  visible,
+  owner,
+}: TerminalPtyViewProps) => {
   const { t } = useI18n()
   const {
     containerRef,
@@ -249,6 +263,7 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: Termin
     retrySession,
     connectionStatus,
     reconnect,
+    updateProcess,
   } = useTerminalRun(runId, inputProfile)
   const statusKey = STATUS_KEYS[status]
   const retryOriginalSession = useCallback(async () => {
@@ -296,6 +311,9 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: Termin
 
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
+      {visible && owner ? (
+        <TerminalProcessState {...owner} runId={runId} update={updateProcess} />
+      ) : null}
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
       {connectionStatus === 'connecting' ? (
         <p role="status" className="shrink-0 px-4 py-2 text-sm text-sec">

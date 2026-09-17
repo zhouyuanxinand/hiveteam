@@ -31,6 +31,9 @@ export const WorkspaceTerminalPanels = ({
           key={`${run.agent_id}:${run.thread_id ?? run.run_id}`}
           runId={run.run_id}
           title={`${run.agent_name} (${run.status})`}
+          {...(run.agent_id === `${workspaceId}:shell`
+            ? {}
+            : { owner: { workspaceId, agentId: run.agent_id } })}
         />
       ))}
     </section>
