@@ -7,6 +7,7 @@ import type {
   WorkspaceLanguage,
   WorkspaceSummary,
 } from '../shared/types.js'
+import { createAgentConversationReader } from './agent-conversation-reader.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
@@ -35,6 +36,7 @@ import {
   createRuntimeStoreLifecycle,
   createRuntimeStoreServices,
 } from './runtime-store-helpers.js'
+import { getCodexHome } from './session-capture-codex.js'
 import type { SettingsStore } from './settings-store.js'
 import {
   createTeamMemoryDreamScheduler,
@@ -80,6 +82,10 @@ export interface LocalRetentionDiagnostics {
 }
 
 interface RuntimeStore {
+  readAgentConversation: (
+    workspaceId: string,
+    agentId: string
+  ) => Promise<import('../shared/agent-conversation.js').AgentConversation>
   verifications: VerificationRuntime
   worktrees: WorkerWorktreeRuntime
   integrations: DispatchIntegrationRuntime
@@ -303,6 +309,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     agentRuntime: services.agentRuntime,
   })
   const skillPackResolver = services.skillPackResolver
+  const readConversation = createAgentConversationReader()
   const skills = createWorkspaceSkillManager({
     getCommandPresetId: (workspaceId, agentId) => {
       const config = services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId)
@@ -579,6 +586,23 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     deliveryQueue,
     branches,
     worktreeResources,
+    async readAgentConversation(workspaceId, agentId) {
+      if (!services.workspaceStore.hasAgent(workspaceId, agentId))
+        throw new HttpError(404, 'Agent not found in workspace')
+      const context = services.agentSessionStore.getCaptureContext(workspaceId, agentId)
+      const config = services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId)
+      const preset = config?.commandPresetId
+        ? services.settings.getCommandPreset(config.commandPresetId)
+        : undefined
+      const capture = context?.capture ?? config?.sessionIdCapture ?? preset?.sessionIdCapture
+      const sessionId = services.agentSessionStore.getLastSessionId(workspaceId, agentId)
+      if (capture?.source !== 'codex_session_jsonl_dir')
+        return { status: 'unsupported', session_id: null, turns: [], truncated: false }
+      if (!sessionId) return { status: 'pending', session_id: null, turns: [], truncated: false }
+      const cwd =
+        context?.cwd ?? services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path
+      return readConversation(getCodexHome(capture.pattern), sessionId, cwd)
+    },
     getDispatchWorkspacePath,
     git: services.git,
     createWorkspace: (path, name, language) => {

@@ -9,6 +9,7 @@ import type {
   WorkerRole,
 } from './route-types.js'
 import { activityRoutes } from './routes-activity.js'
+import { agentConversationRoutes } from './routes-agent-conversation.js'
 import { deliveryQueueRoutes } from './routes-delivery-queue.js'
 import { dispatchRoutes } from './routes-dispatches.js'
 import { externalGoalRoutes } from './routes-external-goals.js'
@@ -39,6 +40,7 @@ import { worktreeResourceRoutes } from './routes-worktree-resources.js'
 
 const routes: RouteDefinition[] = [
   ...activityRoutes,
+  ...agentConversationRoutes,
   ...workspaceRoutes,
   ...workspaceReviewRoutes,
   ...workspaceMemoryRoutes,

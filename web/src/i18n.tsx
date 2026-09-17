@@ -3,6 +3,7 @@ import { deliveryEn, deliveryZh } from './activity/delivery-messages.js'
 import { isUiLanguage, UI_LANGUAGE_STORAGE_KEY, type UiLanguage } from './uiLanguage.js'
 
 const enMessages = {
+  'terminal.loadingHistory': 'Loading terminal history…',
   ...deliveryEn,
   'worktree.create': 'Use an isolated working directory',
   'worktree.createHint':
@@ -884,6 +885,7 @@ const enMessages = {
 export type TranslationKey = keyof typeof enMessages
 
 const zhMessages: Record<TranslationKey, string> = {
+  'terminal.loadingHistory': '正在载入终端历史…',
   ...deliveryZh,
   'worktree.create': '使用隔离工作目录',
   'worktree.createHint':

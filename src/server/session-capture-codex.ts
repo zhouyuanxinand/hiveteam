@@ -102,8 +102,7 @@ const sessionMatchesDiscriminator = (
   return includesAny(readCodexSessionPrefix(filePath), discriminator.contentIncludes)
 }
 
-const parseCodexSession = (filePath: string, discriminator?: CodexSessionCaptureDiscriminator) => {
-  if (!sessionMatchesDiscriminator(filePath, discriminator)) return null
+const parseCodexSession = (filePath: string) => {
   const firstLine = readCodexSessionFirstLine(filePath) ?? ''
   const parsed = JSON.parse(firstLine) as unknown
   if (!parsed || typeof parsed !== 'object' || !('payload' in parsed)) return null
@@ -117,14 +116,19 @@ const parseCodexSession = (filePath: string, discriminator?: CodexSessionCapture
 const listSessionIds = (
   cwd: string,
   codexHome = getDefaultCodexHome(),
-  discriminator?: CodexSessionCaptureDiscriminator
+  discriminator?: CodexSessionCaptureDiscriminator,
+  candidates?: ReadonlySet<string>
 ) => {
   const sessionsRoot = join(codexHome, 'sessions')
   return walkSessionFiles(sessionsRoot)
     .flatMap((filePath) => {
       try {
-        const session = parseCodexSession(filePath, discriminator)
-        return session?.cwd === cwd ? [session.id] : []
+        const session = parseCodexSession(filePath)
+        if (!session || session.cwd !== cwd || (candidates && !candidates.has(session.id)))
+          return []
+        // The identity prefix is much larger than a session header. Only read it
+        // for candidates in this workspace, never every historical conversation.
+        return sessionMatchesDiscriminator(filePath, discriminator) ? [session.id] : []
       } catch {
         return []
       }
@@ -137,7 +141,10 @@ export const hasCodexSession = (
   sessionId: string,
   pattern?: string,
   discriminator?: CodexSessionCaptureDiscriminator
-) => listSessionIds(cwd, getCodexHome(pattern), discriminator).includes(sessionId)
+) =>
+  listSessionIds(cwd, getCodexHome(pattern), discriminator, new Set([sessionId])).includes(
+    sessionId
+  )
 
 export const snapshotCodexSessionIds = (
   cwd: string,
@@ -162,7 +169,9 @@ export const captureCodexSessionId = async (
     ...(discriminator?.contentIncludes
       ? {
           filterSessionIds: (sessionIds: string[]) => {
-            const matchingIds = new Set(listSessionIds(cwd, codexHome, discriminator))
+            const matchingIds = new Set(
+              listSessionIds(cwd, codexHome, discriminator, new Set(sessionIds))
+            )
             return sessionIds.filter((id) => matchingIds.has(id))
           },
         }

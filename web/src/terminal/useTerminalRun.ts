@@ -306,7 +306,7 @@ export const useTerminalRun = (
       const isContainerResizable = (): boolean => {
         const container = containerRef.current
         if (!container?.isConnected) return false
-        return !container.closest('[data-terminal-host-parked="true"]')
+        return !container.closest('[data-terminal-host-parked="true"], [hidden]')
       }
       const getContainerPixels = (): { pixelHeight?: number; pixelWidth?: number } => {
         if (!containerRef.current) return {}

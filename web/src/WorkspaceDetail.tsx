@@ -344,6 +344,7 @@ export const WorkspaceDetail = ({
         >
           <div className="min-h-0 flex-1">
             <OrchestratorPane
+              workspaceId={workspace.id}
               state={orchestrator.state}
               onStop={orchestrator.stop}
               onRemoveWorkspace={() => {

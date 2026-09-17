@@ -5,6 +5,7 @@ import type { TeamListItem } from '../../../src/shared/types.js'
 import { useI18n } from '../i18n.js'
 import { useReviewCopy } from '../review/review-copy.js'
 import { WorkspaceComposer } from '../review/WorkspaceComposer.js'
+import { AgentTerminalSurface } from '../terminal/AgentTerminalSurface.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { CliAgentAvatar } from './CliAgentAvatar.js'
 import { getRolePresentation } from './role-presentation.js'
@@ -129,7 +130,7 @@ export const WorkerModal = ({
                 <button
                   type="button"
                   onClick={() => onOpenModelPicker?.(worker)}
-                  className="icon-btn icon-btn--tertiary absolute top-4 left-4 z-10"
+                  className="icon-btn icon-btn--tertiary mb-2 self-start"
                   data-testid="worker-model-picker"
                 >
                   <SlidersHorizontal size={13} aria-hidden /> {t('worker.changeModel')}
@@ -152,11 +153,13 @@ export const WorkerModal = ({
                 className="flex min-h-0 flex-1 rounded-lg border"
                 style={{ background: 'var(--bg-crust)', borderColor: 'var(--border)' }}
               >
-                {ptyRunning ? (
-                  <div
-                    id={`worker-pty-${runId}`}
-                    className="flex h-full w-full"
-                    data-pty-slot="worker"
+                {runId ? (
+                  <AgentTerminalSurface
+                    key={runId}
+                    workspaceId={workspaceId}
+                    agentId={worker.id}
+                    runId={runId}
+                    slot="worker"
                   />
                 ) : (
                   <div className="m-auto flex max-w-[400px] flex-col items-center gap-3 px-6 text-center">
