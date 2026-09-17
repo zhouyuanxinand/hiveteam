@@ -12,6 +12,11 @@ import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startTestServer } from '../helpers/test-server.js'
 
+// These flow tests isolate terminal rendering; real parser coverage lives in terminal-theme.test.
+vi.mock('../../web/src/terminal/input-highlights.js', () => ({
+  createInputHighlights: () => ({ dispose() {}, refresh() {} }),
+}))
+
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     cols = 80

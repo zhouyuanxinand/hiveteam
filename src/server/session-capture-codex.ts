@@ -1,20 +1,16 @@
-import { closeSync, existsSync, openSync, readdirSync, readSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { captureSessionIdWithCoordinator } from './claude-session-coordinator.js'
+import { listCodexSessionIds } from './codex-session-index.js'
 
-const CODEX_SESSION_FILE = /^rollout-.*\.jsonl$/i
-const CODEX_HEADER_READ_CHUNK_BYTES = 4096
-const CODEX_HEADER_MAX_BYTES = 64 * 1024
-const CODEX_DISCRIMINATOR_MAX_BYTES = 256 * 1024
+export { readCodexSessionFirstLine } from './codex-session-index.js'
 
 export interface CodexSessionCaptureDiscriminator {
   contentIncludes?: string | readonly string[]
 }
-
 const getDefaultCodexHome = () => process.env.CODEX_HOME ?? join(homedir(), '.codex')
-
 const expandHome = (path: string) =>
   path === '~' || path.startsWith('~/') ? join(homedir(), path.slice(2)) : path
 
@@ -24,112 +20,7 @@ export const getCodexHome = (pattern?: string) => {
   if (markerIndex === -1) return getDefaultCodexHome()
   const rawRoot = pattern.slice(0, markerIndex)
   if (rawRoot === '~/.codex' || rawRoot === '~/.codex/') return getDefaultCodexHome()
-  const root = expandHome(rawRoot)
-  return root || getDefaultCodexHome()
-}
-
-const walkSessionFiles = (dir: string): string[] => {
-  try {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(dir, entry.name)
-      if (entry.isDirectory()) return walkSessionFiles(path)
-      return entry.isFile() && CODEX_SESSION_FILE.test(entry.name) ? [path] : []
-    })
-  } catch {
-    return []
-  }
-}
-
-export const readCodexSessionFirstLine = (
-  filePath: string,
-  maxBytes = CODEX_HEADER_MAX_BYTES
-): string | null => {
-  const fd = openSync(filePath, 'r')
-  try {
-    const chunks: Buffer[] = []
-    let totalBytes = 0
-    let position = 0
-    let reachedLineEnd = false
-
-    while (totalBytes < maxBytes) {
-      const bytesToRead = Math.min(CODEX_HEADER_READ_CHUNK_BYTES, maxBytes - totalBytes)
-      const buffer = Buffer.allocUnsafe(bytesToRead)
-      const bytesRead = readSync(fd, buffer, 0, bytesToRead, position)
-      if (bytesRead === 0) {
-        reachedLineEnd = true
-        break
-      }
-
-      const slice = buffer.subarray(0, bytesRead)
-      const newlineIndex = slice.indexOf(0x0a)
-      if (newlineIndex >= 0) {
-        chunks.push(slice.subarray(0, newlineIndex))
-        reachedLineEnd = true
-        break
-      }
-
-      chunks.push(slice)
-      totalBytes += bytesRead
-      position += bytesRead
-    }
-
-    if (!reachedLineEnd) return null
-    return Buffer.concat(chunks).toString('utf8').replace(/\r$/, '')
-  } finally {
-    closeSync(fd)
-  }
-}
-
-const readCodexSessionPrefix = (filePath: string, maxBytes = CODEX_DISCRIMINATOR_MAX_BYTES) => {
-  const fd = openSync(filePath, 'r')
-  try {
-    const buffer = Buffer.allocUnsafe(maxBytes)
-    const bytesRead = readSync(fd, buffer, 0, maxBytes, 0)
-    return buffer.subarray(0, bytesRead).toString('utf8')
-  } finally {
-    closeSync(fd)
-  }
-}
-
-const includesAny = (content: string, values: string | readonly string[]) =>
-  (Array.isArray(values) ? values : [values]).some((value) => content.includes(value))
-
-const sessionMatchesDiscriminator = (
-  filePath: string,
-  discriminator?: CodexSessionCaptureDiscriminator
-) => {
-  if (!discriminator?.contentIncludes) return true
-  return includesAny(readCodexSessionPrefix(filePath), discriminator.contentIncludes)
-}
-
-const parseCodexSession = (filePath: string, discriminator?: CodexSessionCaptureDiscriminator) => {
-  if (!sessionMatchesDiscriminator(filePath, discriminator)) return null
-  const firstLine = readCodexSessionFirstLine(filePath) ?? ''
-  const parsed = JSON.parse(firstLine) as unknown
-  if (!parsed || typeof parsed !== 'object' || !('payload' in parsed)) return null
-  const payload = parsed.payload
-  if (!payload || typeof payload !== 'object') return null
-  const id = 'id' in payload && typeof payload.id === 'string' ? payload.id : null
-  const cwd = 'cwd' in payload && typeof payload.cwd === 'string' ? payload.cwd : null
-  return id && cwd ? { cwd, id } : null
-}
-
-const listSessionIds = (
-  cwd: string,
-  codexHome = getDefaultCodexHome(),
-  discriminator?: CodexSessionCaptureDiscriminator
-) => {
-  const sessionsRoot = join(codexHome, 'sessions')
-  return walkSessionFiles(sessionsRoot)
-    .flatMap((filePath) => {
-      try {
-        const session = parseCodexSession(filePath, discriminator)
-        return session?.cwd === cwd ? [session.id] : []
-      } catch {
-        return []
-      }
-    })
-    .sort((left, right) => left.localeCompare(right))
+  return expandHome(rawRoot) || getDefaultCodexHome()
 }
 
 export const hasCodexSession = (
@@ -137,13 +28,19 @@ export const hasCodexSession = (
   sessionId: string,
   pattern?: string,
   discriminator?: CodexSessionCaptureDiscriminator
-) => listSessionIds(cwd, getCodexHome(pattern), discriminator).includes(sessionId)
+) =>
+  listCodexSessionIds(
+    getCodexHome(pattern),
+    cwd,
+    discriminator?.contentIncludes,
+    new Set([sessionId])
+  ).includes(sessionId)
 
 export const snapshotCodexSessionIds = (
   cwd: string,
   codexHome = getDefaultCodexHome(),
   discriminator?: CodexSessionCaptureDiscriminator
-) => new Set(listSessionIds(cwd, codexHome, discriminator))
+) => new Set(listCodexSessionIds(codexHome, cwd, discriminator?.contentIncludes))
 
 export const captureCodexSessionId = async (
   cwd: string,
@@ -158,13 +55,11 @@ export const captureCodexSessionId = async (
   await captureSessionIdWithCoordinator({
     intervalMs,
     knownSessionIds,
-    listSessionIds: () => listSessionIds(cwd, codexHome),
+    listSessionIds: () => listCodexSessionIds(codexHome, cwd),
     ...(discriminator?.contentIncludes
       ? {
-          filterSessionIds: (sessionIds: string[]) => {
-            const matchingIds = new Set(listSessionIds(cwd, codexHome, discriminator))
-            return sessionIds.filter((id) => matchingIds.has(id))
-          },
+          filterSessionIds: (sessionIds: string[]) =>
+            listCodexSessionIds(codexHome, cwd, discriminator.contentIncludes, new Set(sessionIds)),
         }
       : {}),
     onCapture,
@@ -176,6 +71,5 @@ export const captureCodexSessionId = async (
 
 export const isCodexSessionWriterActive = (sessionId: string, pattern?: string) =>
   existsSync(join(getCodexHome(pattern), 'thread-writer-locks', `${sessionId}.lock`))
-
 export const codexSessionStoreExists = (codexHome = getDefaultCodexHome()) =>
   existsSync(join(codexHome, 'sessions'))

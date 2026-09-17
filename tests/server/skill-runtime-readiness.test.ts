@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, describe, expect, test } from 'vitest'
-
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import * as resolvers from '../../src/server/skill-pack-resolver.js'
 import type { TeamSkillRuntimeError } from '../../src/server/team-skill-runtime.js'
 import { createRecordingAgentManager } from '../helpers/recording-agent-manager.js'
 
@@ -70,12 +70,63 @@ const bindPack = async (
 
 afterEach(async () => {
   await Promise.all(stores.splice(0).map((store) => store.close()))
+  vi.restoreAllMocks()
   for (const directory of tempDirs.splice(0)) {
     rmSync(directory, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 })
   }
 })
 
 describe('Skill runtime readiness', () => {
+  test(
+    'shares one integrity inspection within launch but detects tampering on the next launch',
+    async () => {
+      const dataDir = mkdtempSync(join(tmpdir(), 'hive-skill-launch-scope-'))
+      tempDirs.push(dataDir)
+      const workspacePath = join(dataDir, 'workspace')
+      const sourcePath = join(dataDir, 'source')
+      mkdirSync(workspacePath, { recursive: true })
+      writeSkill(sourcePath)
+      const createResolver = resolvers.createSkillPackResolver
+      let inspections = 0
+      vi.spyOn(resolvers, 'createSkillPackResolver').mockImplementation((input) => {
+        const resolver = createResolver(input)
+        const inspect = resolver.inspectRelease
+        resolver.inspectRelease = async (release) => {
+          inspections++
+          return inspect(release)
+        }
+        return resolver
+      })
+      const recording = createRecordingAgentManager()
+      const store = createRuntimeStore({ agentManager: recording.manager, dataDir })
+      stores.push(store)
+      const workspace = store.createWorkspace(workspacePath, 'Scope')
+      const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
+      store.configureAgentLaunch(workspace.id, worker.id, {
+        command: 'fixture-agent',
+        commandPresetId: 'codex',
+        sessionIdCapture: { source: 'stdout_regex', pattern: 'SESSION=(.+)' },
+      })
+      const release = await bindPack(store, workspace.id, sourcePath, ['tdd'])
+      inspections = 0
+      const run = await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+      expect(run.status).toBe('running')
+      store.stopAgentRun(run.runId)
+      const launchInspections = inspections
+      writeFileSync(
+        join(dataDir, 'skill-packs', 'cache', release.cacheKey, 'skills', 'tdd', 'SKILL.md'),
+        'tampered'
+      )
+      await expect(
+        store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+      ).rejects.toMatchObject({ code: 'cache_drift' })
+      expect(recording.getStartCount()).toBe(1)
+      expect(store.getAgent(workspace.id, worker.id).status).toBe('stopped')
+      expect(launchInspections).toBe(1)
+    },
+    TEST_TIMEOUT_MS
+  )
+
   test(
     'blocks PTY spawn when the immutable release cache has drifted',
     async () => {

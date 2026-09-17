@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Check, Download, LoaderCircle, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-
+import type { ScenarioLaunchMember } from '../../../src/shared/team-scenario-launch.js'
 import type { TeamListItem } from '../../../src/shared/types.js'
 import {
   launchTeamScenario,
@@ -45,12 +45,16 @@ export const TeamScenarioDialog = ({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [missing, setMissing] = useState<TeamScenarioCatalog['presets']>([])
+  const [progress, setProgress] = useState<ScenarioLaunchMember[]>([])
+  const [completed, setCompleted] = useState(false)
 
   useEffect(() => {
     if (!open) return
     let active = true
     setLoading(true)
     setError(null)
+    setProgress([])
+    setCompleted(false)
     void listTeamScenarios()
       .then((next) => {
         if (!active) return
@@ -84,13 +88,18 @@ export const TeamScenarioDialog = ({
     setBusy(true)
     setError(null)
     setMissing([])
+    setProgress([])
     try {
       const result = await launchTeamScenario(workspaceId, selectedScenario.id, {
         autostart,
         commandPresetId: presetId,
+        onProgress: setProgress,
       })
       onWorkersChanged(result.workers)
-      onClose()
+      if (result.started.some((item) => !item.ok)) {
+        setCompleted(true)
+        setError(t('scenario.partialFailure'))
+      } else onClose()
     } catch (launchError: unknown) {
       if (launchError instanceof TeamScenarioLaunchError) {
         setMissing(launchError.missing)
@@ -104,12 +113,12 @@ export const TeamScenarioDialog = ({
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
+    <Dialog.Root open={open} onOpenChange={(next) => !next && !busy && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="app-overlay fixed inset-0 z-40" />
         <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
           <Dialog.Content
-            className="dialog-scale-pop elev-2 pointer-events-auto flex max-h-[calc(100vh-32px)] w-[620px] max-w-full flex-col overflow-hidden rounded-lg border"
+            className="dialog-scale-pop elev-2 pointer-events-auto flex max-h-[calc(100vh-32px)] min-w-0 w-full max-w-[620px] flex-col overflow-hidden rounded-lg border"
             style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border-bright)' }}
             data-testid="team-scenario-dialog"
           >
@@ -129,7 +138,12 @@ export const TeamScenarioDialog = ({
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
-                <button type="button" className="icon-btn" aria-label={t('common.close')}>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={t('common.close')}
+                  disabled={busy}
+                >
                   <X size={16} aria-hidden />
                 </button>
               </Dialog.Close>
@@ -160,6 +174,7 @@ export const TeamScenarioDialog = ({
                             type="button"
                             aria-pressed={selected}
                             onClick={() => setScenarioId(scenario.id)}
+                            disabled={busy || completed}
                             className="rounded border p-3 text-left transition-colors hover:bg-3"
                             style={{
                               background: selected
@@ -194,6 +209,7 @@ export const TeamScenarioDialog = ({
                     <select
                       id="team-scenario-preset"
                       value={presetId}
+                      disabled={busy || completed}
                       onChange={(event) => setPresetId(event.target.value)}
                       className="w-full rounded border px-3 py-2 text-sm text-pri"
                       style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}
@@ -227,6 +243,7 @@ export const TeamScenarioDialog = ({
                       <input
                         type="checkbox"
                         checked={autostart}
+                        disabled={busy || completed}
                         onChange={(event) => setAutostart(event.target.checked)}
                       />
                       {t('scenario.autostart')}
@@ -238,6 +255,35 @@ export const TeamScenarioDialog = ({
                     </p>
                   </section>
                 </>
+              ) : null}
+
+              {progress.length > 0 ? (
+                <section className="mt-4 text-sm text-pri" aria-label={t('scenario.progressTitle')}>
+                  <p role="status" className="mb-2 text-sec">
+                    {t('scenario.progress', {
+                      count: progress.filter(
+                        (member) => !['queued', 'starting'].includes(member.state)
+                      ).length,
+                      total: progress.length,
+                    })}
+                  </p>
+                  <ul className="space-y-2">
+                    {progress.map((member) => (
+                      <li
+                        key={member.id}
+                        className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1"
+                      >
+                        <span className="min-w-0 break-words">{member.name}</span>
+                        <span className="text-sec">{t(`scenario.state.${member.state}`)}</span>
+                        {member.error ? (
+                          <p className="w-full break-words text-[var(--text-danger)]">
+                            {member.error}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ) : null}
 
               {error ? (
@@ -262,13 +308,15 @@ export const TeamScenarioDialog = ({
               className="flex shrink-0 justify-end gap-2 border-t px-5 py-3"
               style={{ borderColor: 'var(--border)' }}
             >
-              <button type="button" className="icon-btn" onClick={onClose}>
-                {t('common.cancel')}
+              <button type="button" className="icon-btn" onClick={onClose} disabled={busy}>
+                {t(completed ? 'common.close' : 'common.cancel')}
               </button>
               <button
                 type="button"
                 className="icon-btn icon-btn--primary"
-                disabled={busy || loading || !selectedScenario || !selectedPreset?.available}
+                disabled={
+                  busy || completed || loading || !selectedScenario || !selectedPreset?.available
+                }
                 onClick={() => void handleLaunch()}
                 data-testid="team-scenario-launch"
               >
