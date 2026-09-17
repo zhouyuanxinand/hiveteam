@@ -1,6 +1,7 @@
 import { Copy, Crown, LoaderCircle, Play, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { useI18n } from '../i18n.js'
+import { AgentTerminalSurface } from '../terminal/AgentTerminalSurface.js'
 import { EmptyState } from '../ui/EmptyState.js'
 import { Tooltip } from '../ui/Tooltip.js'
 
@@ -11,6 +12,7 @@ export type OrchestratorPaneState =
   | { kind: 'failed'; error: string }
 
 type OrchestratorPaneProps = {
+  workspaceId: string
   state: OrchestratorPaneState
   /** Kept for API stability; M6-B will surface stop via the ⌘K palette. */
   onStop: () => void
@@ -139,6 +141,7 @@ const FailedBody = ({
 }
 
 export const OrchestratorPane = ({
+  workspaceId,
   state,
   onRemoveWorkspace,
   onRestart,
@@ -153,10 +156,12 @@ export const OrchestratorPane = ({
     data-testid="orchestrator-terminal-slot"
   >
     {state.kind === 'running' ? (
-      <div
-        id={`orch-pty-${state.runId}`}
-        className="flex h-full w-full"
-        data-pty-slot="orchestrator"
+      <AgentTerminalSurface
+        key={state.runId}
+        workspaceId={workspaceId}
+        agentId={`${workspaceId}:orchestrator`}
+        runId={state.runId}
+        slot="orch"
       />
     ) : state.kind === 'failed' ? (
       <FailedBody error={state.error} onRemoveWorkspace={onRemoveWorkspace} onRestart={onRestart} />

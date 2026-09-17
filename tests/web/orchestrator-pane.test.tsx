@@ -19,6 +19,7 @@ const renderPane = (state: OrchestratorPaneState) => {
   const onRemoveWorkspace = vi.fn()
   render(
     <OrchestratorPane
+      workspaceId="workspace-test"
       state={state}
       onStop={onStop}
       onStart={onStart}

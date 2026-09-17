@@ -184,6 +184,7 @@ vi.mock('@xterm/addon-web-links', () => ({
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   MockWebSocket.instances = []
   MockResizeObserver.instances = []
   latestCustomKeyHandler = undefined
@@ -534,6 +535,37 @@ describe('TerminalView', () => {
     expect(ioSocket?.sent).toContain('\u001b[13;2u')
   })
 
+  test('reopens a member with its already restored terminal after a normal pause', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    const slot = addPortalSlot('run-reopen')
+    render(<TerminalView runId="run-reopen" title="Alice" />)
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2))
+    const [io, control] = MockWebSocket.instances
+    control?.onmessage?.({
+      data: JSON.stringify({ type: 'restore', snapshot: 'answer already shown' }),
+    })
+    const restoredElement = slot.querySelector('[data-testid="terminal-run-reopen"]')
+    expect(restoredElement).not.toBeNull()
+    slot.remove()
+    await waitFor(() =>
+      expect(
+        document
+          .querySelector('[data-terminal-host-run-id="run-reopen"]')
+          ?.getAttribute('data-terminal-host-parked')
+      ).toBe('true')
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+    })
+    const reopened = addPortalSlot('run-reopen')
+    await waitFor(() =>
+      expect(reopened.querySelector('[data-testid="terminal-run-reopen"]')).toBe(restoredElement)
+    )
+    latestOnDataHandler?.('reply without waiting for a second snapshot')
+    expect(io?.sent).toContain('reply without waiting for a second snapshot')
+    expect(terminalWrites).toContain('answer already shown')
+  })
+
   test('disposes the terminal session when TerminalView unmounts', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket as never)
     const slot = addPortalSlot('run-unmount')
@@ -559,6 +591,30 @@ describe('TerminalView', () => {
     expect(terminalDisposeCount).toBe(1)
   })
 
+  test('retains only three recently hidden terminals and evicts the oldest history', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    for (const id of ['cache-a', 'cache-b', 'cache-c', 'cache-d']) {
+      const slot = addPortalSlot(id)
+      render(<TerminalView runId={id} title={id} />)
+      await waitFor(() =>
+        expect(slot.querySelector(`[data-testid="terminal-${id}"]`)).not.toBeNull()
+      )
+      slot.remove()
+      await waitFor(() =>
+        expect(
+          document
+            .querySelector(`[data-terminal-host-run-id="${id}"]`)
+            ?.getAttribute('data-terminal-host-parked')
+        ).toBe('true')
+      )
+    }
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="terminal-cache-a"]')).toBeNull()
+    )
+    for (const id of ['cache-b', 'cache-c', 'cache-d'])
+      expect(document.querySelector(`[data-testid="terminal-${id}"]`)).not.toBeNull()
+  })
+
   test('disposes a parked terminal when no portal slot returns', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket as never)
     const slot = addPortalSlot('run-abandoned')
@@ -570,21 +626,19 @@ describe('TerminalView', () => {
       expect(MockWebSocket.instances).toHaveLength(2)
     })
 
-    slot.remove()
-
-    await waitFor(() => {
-      expect(document.querySelector('[data-terminal-host-run-id="run-abandoned"]')).not.toBeNull()
+    const realSetTimeout = setTimeout
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    await act(async () => {
+      slot.remove()
+      await new Promise((resolve) => realSetTimeout(resolve, 40))
     })
-
-    await waitFor(
-      () => {
-        expect(document.querySelector('[data-terminal-host-run-id="run-abandoned"]')).toBeNull()
-        expect(document.getElementById('hive-terminal-parking-lot')).toBeNull()
-        expect(websocketCloseCount).toBe(2)
-        expect(terminalDisposeCount).toBe(1)
-      },
-      { timeout: 1500 }
-    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_001)
+    })
+    expect(document.querySelector('[data-terminal-host-run-id="run-abandoned"]')).toBeNull()
+    expect(document.getElementById('hive-terminal-parking-lot')).toBeNull()
+    expect(websocketCloseCount).toBe(2)
+    expect(terminalDisposeCount).toBe(1)
   })
 
   test('buffers live output until the restore snapshot is written', async () => {

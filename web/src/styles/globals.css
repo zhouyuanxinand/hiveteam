@@ -298,6 +298,19 @@ html, body {
 .bg-2 { background: var(--bg-2); }
 .bg-3 { background: var(--bg-3); }
 .bg-crust { background: var(--bg-crust); }
+
+.conversation-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.conversation-toolbar button[aria-pressed='true'] { background: var(--bg-3); color: var(--text-primary); }
+.conversation-scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; background: var(--bg-0); }
+.conversation-turn { max-width: 75ch; margin: 0 auto 24px; overflow-wrap: anywhere; }
+.conversation-prompt { white-space: pre-wrap; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; }
+.conversation-turn details { margin-bottom: 16px; color: var(--text-secondary); }
+.conversation-turn summary { cursor: pointer; padding: 8px 0; font-size: 13px; }
+.conversation-turn summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conversation-process { border: 1px solid var(--border); padding: 12px; border-radius: 8px; }
+.conversation-process p { white-space: pre-wrap; margin: 8px 0; font-size: 13px; }
+.conversation-notice { margin-bottom: 12px; color: var(--text-secondary); }
+.agent-terminal-surface > [hidden] { display: none; }
 .text-pri { color: var(--text-primary); }
 .text-sec { color: var(--text-secondary); }
 .text-ter { color: var(--text-tertiary); }

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { SessionRecoveryBanner } from './SessionRecoveryBanner.js'
+import { retainParkedTerminal } from './terminal-retention.js'
 import { useTerminalRun } from './useTerminalRun.js'
 import type { TerminalWheelInputProfile } from './wheelFallback.js'
 
@@ -25,7 +26,6 @@ interface TerminalPtyViewProps extends TerminalViewProps {
 }
 
 const TERMINAL_PARKING_LOT_ID = 'hive-terminal-parking-lot'
-const PARKED_TERMINAL_DISPOSE_DELAY_MS = 500
 
 const candidateIds = (runId: string): string[] => [
   `worker-pty-${runId}`,
@@ -154,12 +154,12 @@ const usePortalTarget = (runId: string): HTMLElement | null => {
 const useStablePortalHost = (runId: string, target: HTMLElement | null): HTMLElement | null => {
   const [activated, setActivated] = useState(false)
   const [host, setHost] = useState<HTMLElement | null>(null)
-  const disposeTimerRef = useRef<number | undefined>(undefined)
+  const disposeTimerRef = useRef<(() => void) | undefined>(undefined)
   const hostRef = useRef<HTMLElement | null>(null)
 
   const clearDisposeTimer = useCallback(() => {
     if (disposeTimerRef.current === undefined) return
-    window.clearTimeout(disposeTimerRef.current)
+    disposeTimerRef.current()
     disposeTimerRef.current = undefined
   }, [])
 
@@ -186,12 +186,12 @@ const useStablePortalHost = (runId: string, target: HTMLElement | null): HTMLEle
     }
     if (!activated || disposeTimerRef.current !== undefined) return
 
-    disposeTimerRef.current = window.setTimeout(() => {
+    disposeTimerRef.current = retainParkedTerminal(runId, () => {
       disposeTimerRef.current = undefined
       setActivated(false)
-    }, PARKED_TERMINAL_DISPOSE_DELAY_MS)
+    })
     return clearDisposeTimer
-  }, [activated, clearDisposeTimer, target])
+  }, [activated, clearDisposeTimer, target, runId])
 
   useLayoutEffect(() => {
     const node = hostRef.current
@@ -297,6 +297,11 @@ const TerminalPtyView = ({ inputProfile, runId, title: _title, visible }: Termin
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
+      {connectionStatus === 'connecting' ? (
+        <p role="status" className="shrink-0 px-4 py-2 text-sm text-sec">
+          {t('terminal.loadingHistory')}
+        </p>
+      ) : null}
       {connectionStatus === 'disconnected' && status !== 'stopped' ? (
         <div
           role="status"
