@@ -5,6 +5,11 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { TerminalView } from '../../web/src/terminal/TerminalView.js'
 
+// Real parser/decoration coverage lives in terminal-theme.test.tsx.
+vi.mock('../../web/src/terminal/input-highlights.js', () => ({
+  createInputHighlights: () => ({ dispose() {}, refresh() {} }),
+}))
+
 let latestCustomKeyHandler: ((event: KeyboardEvent) => boolean) | undefined
 let latestCustomWheelHandler: ((event: WheelEvent) => boolean) | undefined
 let latestOnBinaryHandler: ((chunk: string) => void) | undefined

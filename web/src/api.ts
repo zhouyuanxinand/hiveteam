@@ -17,6 +17,11 @@ import type {
   TeamMemoryScope,
   TeamMemoryStatus,
 } from '../../src/shared/team-memory.js'
+import type {
+  ScenarioLaunchMember,
+  ScenarioLaunchPayload,
+  ScenarioStartResult,
+} from '../../src/shared/team-scenario-launch.js'
 import type { TeamScenarioDefinition } from '../../src/shared/team-scenarios.js'
 import type {
   AgentSummary,
@@ -28,6 +33,7 @@ import type {
   WorkspaceSummary,
 } from '../../src/shared/types.js'
 import type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
+import { readScenarioLaunchStream } from './api-team-scenario-stream.js'
 
 export type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
 
@@ -1180,8 +1186,17 @@ export const listTeamScenarios = async (): Promise<TeamScenarioCatalog> => {
 export const launchTeamScenario = async (
   workspaceId: string,
   scenarioId: string,
-  input: { autostart?: boolean; commandPresetId?: string } = {}
-): Promise<{ created: string[]; reused: string[]; workers: TeamListItem[] }> => {
+  input: {
+    autostart?: boolean
+    commandPresetId?: string
+    onProgress?: (members: ScenarioLaunchMember[]) => void
+  } = {}
+): Promise<{
+  created: string[]
+  reused: string[]
+  started: ScenarioStartResult[]
+  workers: TeamListItem[]
+}> => {
   const response = await apiFetch(
     `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/team-scenarios/${encodeURIComponent(scenarioId)}`,
     {
@@ -1189,7 +1204,10 @@ export const launchTeamScenario = async (
         ...(input.autostart !== undefined ? { autostart: input.autostart } : {}),
         ...(input.commandPresetId ? { command_preset_id: input.commandPresetId } : {}),
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(input.onProgress ? { accept: 'application/x-ndjson' } : {}),
+      },
       method: 'POST',
     }
   )
@@ -1213,14 +1231,14 @@ export const launchTeamScenario = async (
       missing
     )
   }
-  const payload = (await response.json()) as {
-    created: string[]
-    reused: string[]
-    workers: TeamListItemPayload[]
-  }
+  const payload: ScenarioLaunchPayload =
+    input.onProgress && response.headers.get('content-type')?.includes('application/x-ndjson')
+      ? await readScenarioLaunchStream(response, input.onProgress)
+      : await response.json()
   return {
     created: payload.created,
     reused: payload.reused,
+    started: payload.started,
     workers: payload.workers.map(fromPayload),
   }
 }

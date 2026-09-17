@@ -73,6 +73,8 @@ interface ResolvedProfileSkill {
   releasePath: string
 }
 
+type ValidatedReleases = Map<string, { release: SkillPackRelease; releasePath: string }>
+
 const digestText = (value: string) =>
   `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`
 
@@ -233,9 +235,9 @@ export const createTeamSkillRuntime = ({
   const resolveReferences = async (
     configuration: WorkspaceSkillPackConfiguration,
     lock: WorkspaceSkillPackLock,
-    references: string[]
+    references: string[],
+    resolvedReleases: ValidatedReleases = new Map()
   ): Promise<ResolvedProfileSkill[]> => {
-    const resolvedReleases = new Map<string, { release: SkillPackRelease; releasePath: string }>()
     const resolvedSkills: ResolvedProfileSkill[] = []
     for (const reference of references) {
       const segments = reference.split('/')
@@ -314,13 +316,18 @@ export const createTeamSkillRuntime = ({
     )
   }
 
-  const resolveProfile = async (workspaceId: string, agentId: string) => {
+  const resolveProfile = async (
+    workspaceId: string,
+    agentId: string,
+    validated?: ValidatedReleases
+  ) => {
     const agent = getAgent(workspaceId, agentId)
     const state = await readState(workspaceId)
     const skills = await resolveReferences(
       state.configuration,
       state.lock,
-      state.configuration.profiles[agent.role]
+      state.configuration.profiles[agent.role],
+      validated
     )
     return { agent, skills, state }
   }
@@ -411,7 +418,8 @@ export const createTeamSkillRuntime = ({
   const verifyNativePlacements = async (
     workspaceId: string,
     commandPresetId: string | null,
-    state: Awaited<ReturnType<typeof readState>>
+    state: Awaited<ReturnType<typeof readState>>,
+    validated?: ValidatedReleases
   ): Promise<Pick<SkillLaunchReadiness, 'nativeDiscovery' | 'nativeError'>> => {
     if (commandPresetId !== 'codex' || state.configuration.nativeExposure.length === 0) {
       return { nativeDiscovery: 'prompt_only', nativeError: null }
@@ -426,7 +434,8 @@ export const createTeamSkillRuntime = ({
       const expected = await resolveReferences(
         state.configuration,
         state.lock,
-        state.configuration.nativeExposure
+        state.configuration.nativeExposure,
+        validated
       )
       const placements = listActivePlacements(workspaceId)
       for (const skill of expected) {
@@ -468,10 +477,18 @@ export const createTeamSkillRuntime = ({
     commandPresetId: string | null
     workspaceId: string
   }): Promise<SkillLaunchReadiness> => {
-    const profile = await resolveProfile(input.workspaceId, input.agentId)
+    // Share integrity work only within this launch and this configuration
+    // snapshot. The next launch must validate the files again.
+    const validated: ValidatedReleases = new Map()
+    const profile = await resolveProfile(input.workspaceId, input.agentId, validated)
     return {
       catalog: profile.skills.map((skill) => skill.available),
-      ...(await verifyNativePlacements(input.workspaceId, input.commandPresetId, profile.state)),
+      ...(await verifyNativePlacements(
+        input.workspaceId,
+        input.commandPresetId,
+        profile.state,
+        validated
+      )),
     }
   }
 

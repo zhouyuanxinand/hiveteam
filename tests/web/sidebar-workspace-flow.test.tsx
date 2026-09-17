@@ -31,6 +31,11 @@ class MockFitAddon {
   dispose() {}
 }
 
+// These flow tests isolate terminal rendering; real parser coverage lives in terminal-theme.test.
+vi.mock('../../web/src/terminal/input-highlights.js', () => ({
+  createInputHighlights: () => ({ dispose() {}, refresh() {} }),
+}))
+
 vi.mock('@xterm/xterm', () => ({ Terminal: MockTerminal }))
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: MockFitAddon }))
 

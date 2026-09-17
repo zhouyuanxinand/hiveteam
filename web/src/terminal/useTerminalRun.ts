@@ -1,5 +1,5 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
-import type { IDecoration, Terminal as XtermTerminal } from '@xterm/xterm'
+import type { Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   TerminalSessionRecovery,
@@ -7,8 +7,10 @@ import type {
 } from '../../../src/shared/terminal-recovery.js'
 
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
+import { createInputHighlights } from './input-highlights.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
 import { createTerminalClient, type TerminalConnectionStatus } from './terminal-client.js'
+import { readTerminalAppearance } from './terminal-theme.js'
 import { utf8ByteLength } from './utf8.js'
 import {
   attachAlternateScreenWheelFallback,
@@ -19,18 +21,6 @@ const LEGACY_MOUSE_REPORT_PATTERN = new RegExp(
   `${String.fromCharCode(0x1b)}\\[M([\\s\\S])([\\s\\S])([\\s\\S])`,
   'g'
 )
-
-const USER_INPUT_LINE_PATTERN = /^\s*[›❯]\s+\S/
-const USER_INPUT_DECORATION_SCAN_LINES = 2_000
-const USER_INPUT_DISPLAY_PATTERN = /(^|[\r\n])([ \t]*[›❯][^\r\n]*)/g
-
-// This is intentionally applied only to bytes being rendered by xterm. The
-// original chunk is still acknowledged and sent over the PTY unchanged.
-const highlightUserInputOutput = (chunk: string): string =>
-  chunk.replace(
-    USER_INPUT_DISPLAY_PATTERN,
-    (_match, lineStart: string, line: string) => `${lineStart}\x1b[38;2;96;165;250m${line}\x1b[0m`
-  )
 
 const legacyMouseReportToSgr = (
   report: string,
@@ -110,7 +100,7 @@ export const useTerminalRun = (
     let restored = false
     let terminalExited = false
     let userInputDecorationFrame: number | undefined
-    const userInputDecorations: IDecoration[] = []
+    let inputHighlights: ReturnType<typeof createInputHighlights> | undefined
     const isComposingRef = { current: false }
 
     void Promise.all([
@@ -121,24 +111,6 @@ export const useTerminalRun = (
     ]).then(([xtermModule, fitModule, unicode11Module, clipboardModule]) => {
       if (disposed || !containerRef.current) return
 
-      // Read xterm background from CSS so it stays in sync if the palette
-      // shifts. Falls back to bg-crust's literal value if computed style is
-      // unavailable (jsdom). Without this, xterm's canvas sat at #0f0f11 and
-      // the wrapping container at #1b1b1b, so unfilled rows showed a seam.
-      const readTerminalTheme = () => {
-        const rootStyles =
-          typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
-        return {
-          background: rootStyles?.getPropertyValue('--bg-crust').trim() || '#0e0e0e',
-          foreground: rootStyles?.getPropertyValue('--text-primary').trim() || '#ebebeb',
-        }
-      }
-      const readTerminalColor = (name: string, fallback: string) => {
-        const rootStyles =
-          typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
-        const value = rootStyles?.getPropertyValue(name).trim()
-        return value && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback
-      }
       const nextTerminal = new xtermModule.Terminal({
         allowProposedApi: true,
         convertEol: false,
@@ -147,7 +119,8 @@ export const useTerminalRun = (
         letterSpacing: 0,
         lineHeight: 1,
         scrollback: 10_000,
-        theme: readTerminalTheme(),
+        minimumContrastRatio: 4.5,
+        theme: readTerminalAppearance().theme,
       })
       const nextFitAddon = new fitModule.FitAddon()
       nextTerminal.loadAddon(nextFitAddon)
@@ -158,58 +131,13 @@ export const useTerminalRun = (
       nextFitAddon.fit()
       terminal = nextTerminal
       fitAddon = nextFitAddon
-      const userInputAccent = readTerminalColor('--accent', '#60a5fa')
-      const userInputBackground = readTerminalColor('--bg-2', '#1d2b45')
-
-      const decorateUserInputRows = () => {
-        userInputDecorationFrame = undefined
-        if (
-          disposed ||
-          terminal !== nextTerminal ||
-          typeof nextTerminal.registerDecoration !== 'function' ||
-          nextTerminal.buffer.active.type === 'alternate'
-        ) {
-          return
-        }
-
-        const buffer = nextTerminal.buffer.active
-        const cursorLine = buffer.baseY + buffer.cursorY
-        const firstLine = Math.max(0, buffer.length - USER_INPUT_DECORATION_SCAN_LINES)
-        const lastLine = Math.min(buffer.length - 1, cursorLine + nextTerminal.rows + 1)
-
-        for (let line = firstLine; line <= lastLine; line += 1) {
-          const text = buffer.getLine(line)?.translateToString(true) ?? ''
-          if (!USER_INPUT_LINE_PATTERN.test(text)) continue
-          if (
-            userInputDecorations.some(
-              (decoration) => !decoration.marker.isDisposed && decoration.marker.line === line
-            )
-          ) {
-            continue
-          }
-
-          const marker = nextTerminal.registerMarker(line - cursorLine)
-          const decoration = nextTerminal.registerDecoration({
-            backgroundColor: userInputBackground,
-            foregroundColor: userInputAccent,
-            height: 1,
-            layer: 'bottom',
-            marker,
-            overviewRulerOptions: { color: userInputAccent, position: 'left' },
-            width: Math.max(1, nextTerminal.cols),
-            x: 0,
-          })
-          if (decoration) userInputDecorations.push(decoration)
-          else marker.dispose()
-        }
-
-        for (const decoration of userInputDecorations) {
-          if (decoration.marker.isDisposed) decoration.dispose()
-        }
-      }
+      inputHighlights = createInputHighlights(nextTerminal)
       const scheduleUserInputDecorations = () => {
         if (userInputDecorationFrame !== undefined) return
-        const decorate = () => decorateUserInputRows()
+        const decorate = () => {
+          userInputDecorationFrame = undefined
+          if (!disposed) inputHighlights?.refresh()
+        }
         if (typeof window.requestAnimationFrame === 'function') {
           userInputDecorationFrame = window.requestAnimationFrame(decorate)
         } else {
@@ -217,7 +145,8 @@ export const useTerminalRun = (
         }
       }
       onThemeChange = () => {
-        nextTerminal.options.theme = readTerminalTheme()
+        nextTerminal.options.theme = readTerminalAppearance().theme
+        inputHighlights?.refresh()
       }
       window.addEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       wheelFallbackDispose = attachAlternateScreenWheelFallback({
@@ -320,6 +249,7 @@ export const useTerminalRun = (
       const refreshTerminal = () => {
         if (!containerRef.current || !isContainerResizable()) return
         fitAddon?.fit()
+        scheduleUserInputDecorations()
         if (terminal && terminal.rows > 0 && typeof terminal.refresh === 'function') {
           // xterm can be initialized while its portal host is parked in the
           // hidden parking lot. Fitting alone does not always repaint the
@@ -391,14 +321,14 @@ export const useTerminalRun = (
           if (!disposed) setConnectionStatus(next)
         },
         onOutput(chunk, acknowledge) {
-          nextTerminal.write(highlightUserInputOutput(chunk), () => {
+          nextTerminal.write(chunk, () => {
             scheduleUserInputDecorations()
             acknowledge(utf8ByteLength(chunk))
           })
         },
         onRestore(snapshot) {
           return new Promise<void>((resolve) => {
-            nextTerminal.write(highlightUserInputOutput(snapshot), () => {
+            nextTerminal.write(snapshot, () => {
               if (!disposed) {
                 restored = true
                 scheduleUserInputDecorations()
@@ -449,7 +379,7 @@ export const useTerminalRun = (
           window.clearTimeout(userInputDecorationFrame)
         }
       }
-      for (const decoration of userInputDecorations) decoration.dispose()
+      inputHighlights?.dispose()
       wheelFallbackDispose?.()
       if (helperTextarea && onCompositionStart) {
         helperTextarea.removeEventListener('compositionstart', onCompositionStart, {

@@ -1,3 +1,8 @@
+import type {
+  ScenarioLaunchEvent,
+  ScenarioLaunchMember,
+  ScenarioStartResult,
+} from '../shared/team-scenario-launch.js'
 import { getTeamScenario, TEAM_SCENARIOS } from '../shared/team-scenarios.js'
 import { resolveCommandPath } from './agent-command-resolver.js'
 import { resolveCommandPresetLaunchConfig } from './agent-launch-resolver.js'
@@ -124,12 +129,8 @@ export const teamScenarioRoutes: RouteDefinition[] = [
           .agents.filter((agent) => agent.role !== 'orchestrator')
           .map((agent) => agent.name)
       )
-      const started: Array<{
-        error: string | null
-        id: string
-        ok: boolean
-        run_id: string | null
-      }> = []
+      const started: ScenarioStartResult[] = []
+      const members: ScenarioLaunchMember[] = []
       try {
         for (const member of scenario.members) {
           const existing = store
@@ -142,6 +143,14 @@ export const teamScenarioRoutes: RouteDefinition[] = [
             )
           if (existing) {
             reused.push(existing.id)
+            members.push({
+              id: existing.id,
+              name: existing.name,
+              role: member.role,
+              state: 'reused',
+              error: null,
+              duration_ms: null,
+            })
             continue
           }
           const name = buildScenarioWorkerName(member, usedNames)
@@ -154,23 +163,14 @@ export const teamScenarioRoutes: RouteDefinition[] = [
           createdIds.push(worker.id)
           created.push(worker.id)
           store.configureAgentLaunch(workspaceId, worker.id, launchConfig)
-          if (body.autostart !== false) {
-            const result = await autostartAgent(
-              store,
-              workspaceId,
-              worker.id,
-              getRuntimePort(request),
-              {
-                missingConfigError: 'No worker launch config available',
-              }
-            )
-            started.push({
-              error: result.error,
-              id: worker.id,
-              ok: result.ok,
-              run_id: result.run_id,
-            })
-          }
+          members.push({
+            id: worker.id,
+            name: worker.name,
+            role: member.role,
+            state: body.autostart === false ? 'created' : 'queued',
+            error: null,
+            duration_ms: null,
+          })
         }
       } catch (error) {
         for (const workerId of createdIds) {
@@ -183,16 +183,67 @@ export const teamScenarioRoutes: RouteDefinition[] = [
         throw error
       }
 
-      sendJson(response, 201, {
-        command_preset_id: preset.id,
-        created,
-        reused,
-        scenario: serializeScenario(scenario),
-        started,
-        workers: enrichTeamList(workspaceId, store, store.listWorkers(workspaceId)).map(
-          serializeTeamListItem
-        ),
-      })
+      // JSON remains the default contract. The UI opts into progress on this
+      // same request; disconnecting the view does not cancel persisted members.
+      const streaming = request.headers.accept === 'application/x-ndjson'
+      const emit = (event: ScenarioLaunchEvent) => {
+        if (streaming && !response.destroyed && !response.writableEnded)
+          response.write(`${JSON.stringify(event)}\n`)
+      }
+      if (streaming) {
+        response.writeHead(201, {
+          'content-type': 'application/x-ndjson; charset=utf-8',
+          'cache-control': 'no-store',
+        })
+        emit({ type: 'progress', members })
+      }
+      try {
+        const queue = members.filter((member) => member.state === 'queued')
+        const launchNext = async () => {
+          for (let member = queue.shift(); member; member = queue.shift()) {
+            member.state = 'starting'
+            emit({ type: 'progress', members })
+            const begin = performance.now()
+            const result = await autostartAgent(
+              store,
+              workspaceId,
+              member.id,
+              getRuntimePort(request),
+              {
+                missingConfigError: 'No worker launch config available',
+              }
+            )
+            member.state = result.ok ? 'started' : 'failed'
+            member.error = result.error
+            member.duration_ms = Math.round(performance.now() - begin)
+            started.push({ id: member.id, ...result })
+            emit({ type: 'progress', members })
+          }
+        }
+        // Bound CPU/IO contention, while overlapping the independent early-exit
+        // observation windows. A failed start does not roll back other members.
+        await Promise.all([launchNext(), launchNext()])
+        const result = {
+          command_preset_id: preset.id,
+          created,
+          reused,
+          scenario: serializeScenario(scenario),
+          started: created.flatMap((id) => started.filter((item) => item.id === id)),
+          workers: enrichTeamList(workspaceId, store, store.listWorkers(workspaceId)).map(
+            serializeTeamListItem
+          ),
+        }
+        if (streaming) {
+          emit({ type: 'result', result })
+          response.end()
+        } else sendJson(response, 201, result)
+      } catch (error) {
+        if (!streaming) throw error
+        // Headers are already sent. Forward the cause on the same stream,
+        // rather than attempting a second HTTP response or reporting success.
+        emit({ type: 'error', error: error instanceof Error ? error.message : String(error) })
+        response.end()
+      }
     }
   ),
 ]
