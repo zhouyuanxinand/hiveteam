@@ -2,6 +2,11 @@ import { useI18n } from '../i18n.js'
 
 const en = {
   answer: 'Your reply',
+  supplementaryReply: 'Supplementary reply / plan feedback',
+  supplementaryHint:
+    'Sent to the same Orchestrator above. Use the terminal for commands and permission prompts.',
+  supplementaryPlaceholder: 'Add details or feedback on the plan…',
+  replyDraft: 'Draft retained',
   replyTo: 'Reply to',
   memberOnly: 'Sent only to this member, not to Orchestrator.',
   clarification:
@@ -66,6 +71,10 @@ const en = {
 }
 const zh: typeof en = {
   answer: '自由回答',
+  supplementaryReply: '补充回答 / 方案反馈',
+  supplementaryHint: '补充内容发送给上方同一个 Orchestrator；命令和权限确认请在终端操作。',
+  supplementaryPlaceholder: '填写补充说明或方案反馈…',
+  replyDraft: '有草稿',
   replyTo: '回答给',
   memberOnly: '仅发送给这位成员，不转发给 Orchestrator。',
   clarification: '需求澄清在成员窗口进行，Orchestrator 等待最终结论。',

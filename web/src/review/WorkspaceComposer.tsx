@@ -1,5 +1,5 @@
-import { FileText, Send } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { ChevronDown, ChevronRight, FileText, Send } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReviewSubmission } from '../../../src/shared/workspace-review.js'
 import { reviewRequest } from './review-api.js'
 import { useReviewCopy } from './review-copy.js'
@@ -62,15 +62,21 @@ const RecipientComposer = ({
 }) => {
   const copy = useReviewCopy()
   const labelId = useId()
+  const answerRef = useRef<HTMLTextAreaElement>(null)
+  const [expanded, setExpanded] = useState(!!recipient)
   const key = `hive:answer:${workspaceId}${recipient ? `:${recipient.id}` : ''}`
   const [initial] = useState(() => readDraft(key))
   const [draft, setDraft] = useState(initial.draft)
   const [storageError, setStorageError] = useState(initial.failed)
+  const hasDraft = !!(draft.text.trim() || draft.question.trim())
   const delivery = useReviewSubmission(
     workspaceId,
     null,
     initial.draft.attempted ? initial.draft.request_id : null
   )
+  useEffect(() => {
+    if (expanded && !recipient) answerRef.current?.focus()
+  }, [expanded, recipient])
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(draft))
@@ -101,17 +107,36 @@ const RecipientComposer = ({
     )
   }
   return (
-    <form
-      className="workspace-composer"
-      onSubmit={(event) => {
-        event.preventDefault()
-        submit()
-      }}
-    >
+    <section className="workspace-composer">
       <div className="review-toolbar">
-        <label id={labelId} htmlFor={`${labelId}-answer`} className="font-medium">
-          {recipient ? `${copy.replyTo} ${recipient.name}` : copy.answer}
-        </label>
+        {recipient ? (
+          <label htmlFor={`${labelId}-answer`} className="font-medium">
+            {copy.replyTo} {recipient.name}
+          </label>
+        ) : (
+          <div className="review-actions">
+            <button
+              type="button"
+              className="icon-btn icon-btn--link workspace-composer-toggle"
+              aria-expanded={expanded}
+              aria-controls={`${labelId}-form`}
+              aria-describedby={!expanded && hasDraft ? `${labelId}-draft` : undefined}
+              onClick={() => setExpanded((value) => !value)}
+            >
+              {expanded ? (
+                <ChevronDown size={14} aria-hidden />
+              ) : (
+                <ChevronRight size={14} aria-hidden />
+              )}
+              {copy.supplementaryReply}
+            </button>
+            {!expanded && hasDraft ? (
+              <span id={`${labelId}-draft`} className="text-xs text-sec">
+                {copy.replyDraft}
+              </span>
+            ) : null}
+          </div>
+        )}
         {onOpenPlans ? (
           <button type="button" className="icon-btn" onClick={onOpenPlans}>
             <FileText size={15} aria-hidden />
@@ -119,52 +144,64 @@ const RecipientComposer = ({
           </button>
         ) : null}
       </div>
-      {recipient ? <p className="text-xs text-sec">{copy.memberOnly}</p> : null}
-      <details>
-        <summary className="text-sec text-xs">{copy.question}</summary>
-        <input
-          aria-label={copy.question}
-          value={draft.question}
-          maxLength={1000}
-          disabled={delivery.busy}
-          onChange={(event) => change({ question: event.target.value })}
-          className="review-input mt-2"
-        />
-      </details>
-      <textarea
-        id={`${labelId}-answer`}
-        aria-describedby={`${labelId}-hint`}
-        className="review-input"
-        rows={3}
-        value={draft.text}
-        maxLength={4000}
-        placeholder={copy.placeholder}
-        disabled={delivery.busy}
-        onChange={(event) => change({ text: event.target.value })}
-        onKeyDown={(event) => {
-          if (
-            (event.ctrlKey || event.metaKey) &&
-            event.key === 'Enter' &&
-            !event.nativeEvent.isComposing
-          ) {
-            event.preventDefault()
-            submit()
-          }
+      <form
+        id={`${labelId}-form`}
+        hidden={!expanded}
+        className="workspace-composer-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
         }}
-      />
-      <div className="review-toolbar">
-        <p id={`${labelId}-hint`} className="text-xs text-sec">
-          {copy.answerHint}
-        </p>
-        <button
-          className="icon-btn icon-btn--primary"
-          type="submit"
-          disabled={!draft.text.trim() || delivery.busy}
-        >
-          <Send size={14} aria-hidden />
-          {delivery.busy ? copy.sendingButton : copy.send}
-        </button>
-      </div>
+      >
+        <p className="text-xs text-sec">{recipient ? copy.memberOnly : copy.supplementaryHint}</p>
+        <details>
+          <summary className="text-sec text-xs">{copy.question}</summary>
+          <input
+            aria-label={copy.question}
+            value={draft.question}
+            maxLength={1000}
+            disabled={delivery.busy}
+            onChange={(event) => change({ question: event.target.value })}
+            className="review-input mt-2"
+          />
+        </details>
+        <textarea
+          ref={answerRef}
+          id={`${labelId}-answer`}
+          aria-label={recipient ? undefined : copy.answer}
+          aria-describedby={`${labelId}-hint`}
+          className="review-input"
+          rows={3}
+          value={draft.text}
+          maxLength={4000}
+          placeholder={recipient ? copy.placeholder : copy.supplementaryPlaceholder}
+          disabled={delivery.busy}
+          onChange={(event) => change({ text: event.target.value })}
+          onKeyDown={(event) => {
+            if (
+              (event.ctrlKey || event.metaKey) &&
+              event.key === 'Enter' &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault()
+              submit()
+            }
+          }}
+        />
+        <div className="review-toolbar">
+          <p id={`${labelId}-hint`} className="text-xs text-sec">
+            {copy.answerHint}
+          </p>
+          <button
+            className="icon-btn icon-btn--primary"
+            type="submit"
+            disabled={!draft.text.trim() || delivery.busy}
+          >
+            <Send size={14} aria-hidden />
+            {delivery.busy ? copy.sendingButton : copy.send}
+          </button>
+        </div>
+      </form>
       {storageError ? (
         <p role="alert" className="review-error">
           {copy.storageError}
@@ -178,6 +215,6 @@ const RecipientComposer = ({
           if (delivery.requestId) void delivery.check(delivery.requestId)
         }}
       />
-    </form>
+    </section>
   )
 }
