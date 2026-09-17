@@ -51,6 +51,7 @@ export const createAgentRuntime = (
     agentManager ? syncPersistedRun(run, agentManager.getRun(run.runId), agentRunStore) : run
   const stdinDispatcher = createAgentStdinDispatcher({
     agentManager,
+    sessionStore,
     ...(memoryDigestProvider ? { getDispatchMemoryDigest: memoryDigestProvider.forDispatch } : {}),
     getLaunchConfig: launchCache.peek,
     getWorkspaceId: launchCache.getWorkspaceId,

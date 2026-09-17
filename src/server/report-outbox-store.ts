@@ -1,11 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import type { Database } from 'better-sqlite3'
+import type { ReportDeliveryCheckpoint } from './report-delivery-receipt.js'
 
 /**
  * Durable delivery queue for reports that could not be written into a live
- * Orchestrator PTY. A dispatch id is unique, so a worker report is replayed at
- * most once after its terminal accepts the input.
+ * Orchestrator. Codex checkpoints retain the same receipt across attempts so
+ * retrying an uncertain submission does not paste the report again.
  */
 export interface ReportOutboxEntry {
+  checkpoint: ReportDeliveryCheckpoint | null
+  receiptId: string
   createdAt: number
   deliveryAttemptCount: number
   deliveredAt: number | null
@@ -26,6 +30,8 @@ interface EnqueueInput {
 }
 
 interface ReportOutboxRow {
+  delivery_checkpoint: string | null
+  receipt_id: string
   created_at: number
   delivery_attempts: number
   delivered_at: number | null
@@ -39,6 +45,8 @@ interface ReportOutboxRow {
 }
 
 const toEntry = (row: ReportOutboxRow): ReportOutboxEntry => ({
+  checkpoint: row.delivery_checkpoint ? JSON.parse(row.delivery_checkpoint) : null,
+  receiptId: row.receipt_id,
   createdAt: row.created_at,
   deliveryAttemptCount: row.delivery_attempts,
   deliveredAt: row.delivered_at,
@@ -56,12 +64,12 @@ export const createReportOutboxStore = (db: Database) => {
   // every statement here is prepared once instead of on each call.
   const enqueueStmt = db.prepare(
     `INSERT OR IGNORE INTO report_outbox
-      (workspace_id, target_agent_id, dispatch_id, payload, created_at)
-     VALUES (?, ?, ?, ?, ?)`
+      (workspace_id, target_agent_id, dispatch_id, payload, created_at, receipt_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
   )
   const listPendingStmt = db.prepare(
     `SELECT id, workspace_id, target_agent_id, dispatch_id, payload, created_at, delivered_at,
-            delivery_attempts, last_delivery_attempt_at, last_delivery_error
+            delivery_attempts, last_delivery_attempt_at, last_delivery_error, receipt_id, delivery_checkpoint
        FROM report_outbox
        WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL
        ORDER BY created_at ASC, id ASC`
@@ -70,6 +78,9 @@ export const createReportOutboxStore = (db: Database) => {
     `UPDATE report_outbox
      SET delivered_at = ?, last_delivery_error = NULL
      WHERE id = ? AND delivered_at IS NULL`
+  )
+  const checkpointStmt = db.prepare(
+    'UPDATE report_outbox SET delivery_checkpoint = ? WHERE id = ? AND receipt_id = ? AND delivered_at IS NULL'
   )
   const markDeliveryAttemptStmt = db.prepare(
     `UPDATE report_outbox
@@ -111,7 +122,8 @@ export const createReportOutboxStore = (db: Database) => {
       input.targetAgentId,
       input.dispatchId,
       input.payload,
-      Date.now()
+      Date.now(),
+      randomUUID()
     )
   }
 
@@ -147,6 +159,10 @@ export const createReportOutboxStore = (db: Database) => {
     (pendingCountStmt.get(workspaceId, targetAgentId) as { count: number }).count
 
   return {
+    saveCheckpoint(id: number, receiptId: string, checkpoint: ReportDeliveryCheckpoint) {
+      if (checkpointStmt.run(JSON.stringify(checkpoint), id, receiptId).changes !== 1)
+        throw new Error('Report delivery was cancelled or superseded; input was not sent.')
+    },
     deletePendingForDispatch,
     deleteWorkerEntries,
     deleteWorkspaceEntries,

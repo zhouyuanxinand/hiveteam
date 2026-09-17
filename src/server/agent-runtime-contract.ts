@@ -5,6 +5,7 @@ import type { PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import type { AgentTokenRegistry } from './agent-tokens.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import type { SystemMessageDeliveryOptions } from './report-delivery-receipt.js'
 
 interface StartAgentOptions {
   autoResume?: boolean
@@ -40,14 +41,14 @@ export interface AgentRuntime {
   waitForAgentRunExit?: (runId: string) => Promise<void>
   validateAgentToken: AgentTokenRegistry['validate']
   /**
-   * Resolves only after a live terminal accepted the opaque system message.
-   * Report outbox entries use this acknowledgement before becoming delivered.
+   * Codex reports with a receipt resolve only after native user-message
+   * confirmation. Other CLI adapters retain their terminal-submit contract.
    */
   deliverSystemMessageToAgent: (
     workspaceId: string,
     agentId: string,
     text: string,
-    input?: { requireActiveRun?: boolean }
+    input?: SystemMessageDeliveryOptions
   ) => Promise<void>
   writeReportPrompt: (
     workspaceId: string,

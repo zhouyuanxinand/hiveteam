@@ -174,8 +174,9 @@ export const createTeamOperations = ({
   }
 
   /**
-   * Leave entries pending until the terminal input writer has pasted and
-   * submitted them. A stopped Orchestrator is normal here: its next `team
+   * Leave entries pending until delivery is acknowledged. Codex requires a
+   * tagged native user-message receipt, not just a successful PTY write.
+   * A stopped Orchestrator is normal here: its next `team
    * list` call will retry the same durable entry.
    *
    * Failed entries retry with exponential backoff so a persistently
@@ -203,7 +204,9 @@ export const createTeamOperations = ({
     const now = Date.now()
     let attempted = 0
     let firstSyncError: string | null = null
-    for (const entry of reportOutbox.listPending(workspaceId, targetAgentId)) {
+    // A terminal has one composer. Later reports must not merge with a paste
+    // whose receipt is still pending, even when multiple workers finish at once.
+    for (const entry of reportOutbox.listPending(workspaceId, targetAgentId).slice(0, 1)) {
       if (drainingReportOutboxIds.has(entry.id)) continue
       if (
         entry.lastDeliveryAttemptAt !== null &&
@@ -214,13 +217,21 @@ export const createTeamOperations = ({
       drainingReportOutboxIds.add(entry.id)
       attempted += 1
       try {
+        let delivered = false
         reportOutbox.markDeliveryAttempt(entry.id)
         const delivery = agentRuntime
           .deliverSystemMessageToAgent(workspaceId, targetAgentId, entry.payload, {
             requireActiveRun: true,
+            receipt: {
+              id: entry.receiptId,
+              checkpoint: entry.checkpoint,
+              save: (checkpoint) =>
+                reportOutbox.saveCheckpoint(entry.id, entry.receiptId, checkpoint),
+            },
           })
           .then(() => {
             reportOutbox.markDelivered(entry.id)
+            delivered = true
           })
           .catch((error: unknown) => {
             reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
@@ -228,6 +239,7 @@ export const createTeamOperations = ({
           })
           .finally(() => {
             drainingReportOutboxIds.delete(entry.id)
+            if (delivered) drainReportOutbox(workspaceId, targetAgentId)
           })
         void trackReportDelivery(delivery)
       } catch (error) {
