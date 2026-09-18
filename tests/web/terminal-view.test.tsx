@@ -108,6 +108,9 @@ vi.mock('@xterm/xterm', () => ({
       latestOnDataHandler = handler
       return { dispose() {} }
     }
+    onScroll() {
+      return { dispose() {} }
+    }
     open(element: HTMLElement) {
       terminalLoadEvents.push('open')
       terminalOpenCount += 1

@@ -26,6 +26,9 @@ vi.mock('@xterm/xterm', () => ({
     onData() {
       return { dispose() {} }
     }
+    onScroll() {
+      return { dispose() {} }
+    }
     open() {}
     write(_chunk?: string, callback?: () => void) {
       callback?.()
