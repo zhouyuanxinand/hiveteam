@@ -1,7 +1,6 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ConversationTurn } from '../../../src/shared/agent-conversation.js'
 import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
@@ -11,7 +10,7 @@ import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { createInputHighlights } from './input-highlights.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
 import { createTerminalClient, type TerminalConnectionStatus } from './terminal-client.js'
-import { createTerminalProcessFold } from './terminal-process-fold.js'
+import { createTerminalProcessFold, type TerminalProcessLabels } from './terminal-process-fold.js'
 import { readTerminalAppearance } from './terminal-theme.js'
 import { utf8ByteLength } from './utf8.js'
 import {
@@ -60,13 +59,10 @@ export const useTerminalRun = (
   const focusRef = useRef<(() => void) | null>(null)
   const retryRef = useRef<(() => Promise<TerminalSessionRetryStatus>) | null>(null)
   const processFoldRef = useRef<ReturnType<typeof createTerminalProcessFold> | null>(null)
-  const latestProcess = useRef<{ turn: ConversationTurn | undefined; label: string }>({
-    turn: undefined,
-    label: '',
-  })
-  const updateProcess = useCallback((turn: ConversationTurn | undefined, label: string) => {
-    latestProcess.current = { turn, label }
-    processFoldRef.current?.update(turn, label)
+  const latestProcess = useRef<TerminalProcessLabels | undefined>(undefined)
+  const updateProcess = useCallback((labels: TerminalProcessLabels | undefined) => {
+    latestProcess.current = labels
+    processFoldRef.current?.setLabels(labels)
   }, [])
   const [recovery, setRecovery] = useState<TerminalSessionRecovery | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<TerminalConnectionStatus>('connecting')
@@ -144,7 +140,7 @@ export const useTerminalRun = (
       fitAddon = nextFitAddon
       inputHighlights = createInputHighlights(nextTerminal)
       processFoldRef.current = createTerminalProcessFold(nextTerminal, containerRef.current)
-      processFoldRef.current.update(latestProcess.current.turn, latestProcess.current.label)
+      processFoldRef.current.setLabels(latestProcess.current)
       const scheduleUserInputDecorations = () => {
         if (userInputDecorationFrame !== undefined) return
         const decorate = () => {
@@ -160,6 +156,7 @@ export const useTerminalRun = (
       onThemeChange = () => {
         nextTerminal.options.theme = readTerminalAppearance().theme
         inputHighlights?.refresh()
+        processFoldRef.current?.resize()
       }
       window.addEventListener(UI_THEME_CHANGE_EVENT, onThemeChange)
       wheelFallbackDispose = attachAlternateScreenWheelFallback({
@@ -223,6 +220,12 @@ export const useTerminalRun = (
 
       if (typeof nextTerminal.attachCustomKeyEventHandler === 'function') {
         nextTerminal.attachCustomKeyEventHandler((event) => {
+          if (
+            processFoldRef.current?.hasSelection() &&
+            (event.ctrlKey || event.metaKey) &&
+            event.key.toLowerCase() === 'c'
+          )
+            return false
           const action = resolveTerminalShortcut(event)
           switch (action.kind) {
             case 'send':
@@ -263,6 +266,7 @@ export const useTerminalRun = (
         if (!containerRef.current || !isContainerResizable()) return
         fitAddon?.fit()
         scheduleUserInputDecorations()
+        processFoldRef.current?.resize()
         if (terminal && terminal.rows > 0 && typeof terminal.refresh === 'function') {
           // xterm can be initialized while its portal host is parked in the
           // hidden parking lot. Fitting alone does not always repaint the
@@ -275,6 +279,7 @@ export const useTerminalRun = (
         const container = containerRef.current
         const activeElement = document.activeElement
         if (!restored || !terminal || !container || !isContainerResizable()) return
+        if (activeElement?.closest('.terminal-process-history')) return
 
         // Only reclaim focus when this terminal was already active or nothing
         // else owns it. This keeps a restored terminal from stealing focus
@@ -298,7 +303,6 @@ export const useTerminalRun = (
       }
       const resize = () => {
         if (terminalExited || !containerRef.current || !isContainerResizable()) return
-        processFoldRef.current?.resize()
         refreshTerminal()
         const { pixelHeight, pixelWidth } = getContainerPixels()
         client?.resize(terminal?.cols ?? 80, terminal?.rows ?? 24, pixelWidth, pixelHeight)
@@ -335,7 +339,6 @@ export const useTerminalRun = (
           if (!disposed) setConnectionStatus(next)
         },
         onOutput(chunk, acknowledge) {
-          processFoldRef.current?.beforeOutput()
           nextTerminal.write(chunk, () => {
             scheduleUserInputDecorations()
             processFoldRef.current?.afterOutput()
@@ -343,7 +346,6 @@ export const useTerminalRun = (
           })
         },
         onRestore(snapshot) {
-          processFoldRef.current?.beforeOutput()
           return new Promise<void>((resolve) => {
             nextTerminal.write(snapshot, () => {
               if (!disposed) {
