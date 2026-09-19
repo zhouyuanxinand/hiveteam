@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { SessionRecoveryBanner } from './SessionRecoveryBanner.js'
-import { TerminalProcessState } from './TerminalProcessState.js'
 import { retainParkedTerminal } from './terminal-retention.js'
 import { useTerminalRun } from './useTerminalRun.js'
 import type { TerminalWheelInputProfile } from './wheelFallback.js'
@@ -265,6 +264,16 @@ const TerminalPtyView = ({
     reconnect,
     updateProcess,
   } = useTerminalRun(runId, inputProfile)
+  const historyLabel = t('terminal.messageHistory')
+  const callLabel = t('terminal.internalCall')
+  const linesLabel = t('terminal.internalCallLines')
+  const hasOwner = owner !== undefined
+  useEffect(() => {
+    updateProcess(
+      hasOwner ? { history: historyLabel, internalCall: callLabel, lines: linesLabel } : undefined
+    )
+    return () => updateProcess(undefined)
+  }, [hasOwner, historyLabel, callLabel, linesLabel, updateProcess])
   const statusKey = STATUS_KEYS[status]
   const retryOriginalSession = useCallback(async () => {
     const result = await retrySession()
@@ -311,9 +320,6 @@ const TerminalPtyView = ({
 
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
-      {visible && owner ? (
-        <TerminalProcessState {...owner} runId={runId} update={updateProcess} />
-      ) : null}
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
       {connectionStatus === 'connecting' ? (
         <p role="status" className="shrink-0 px-4 py-2 text-sm text-sec">

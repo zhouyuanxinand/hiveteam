@@ -82,7 +82,15 @@ vi.mock('@xterm/xterm', () => ({
     private customWheelHandler: ((event: WheelEvent) => boolean) | undefined
     unicode = { activeVersion: '' }
     get buffer() {
-      return { active: { type: terminalBufferType } }
+      return {
+        active: {
+          type: terminalBufferType,
+          baseY: 0,
+          viewportY: 0,
+          cursorY: 0,
+          getLine: () => undefined,
+        },
+      }
     }
     get modes() {
       return {

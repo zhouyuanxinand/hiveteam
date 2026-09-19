@@ -1,112 +1,81 @@
 import type { Terminal } from '@xterm/xterm'
-import type { ConversationTurn } from '../../../src/shared/agent-conversation.js'
-import { findTerminalProcessBounds } from './terminal-process-bounds.js'
+import { readTerminalProcessHistory } from './terminal-process-bounds.js'
+import { createTerminalProcessHistory } from './terminal-process-history.js'
+import { readTerminalAppearance } from './terminal-theme.js'
 
-/** Crop the finished viewport only. Never splice xterm's buffer, replay bytes, or inject input. */
+export interface TerminalProcessLabels {
+  history: string
+  internalCall: string
+  lines: string
+}
+
+/** Read-only disclosure over scrollback. The original xterm owns every input byte,
+ * cursor, native confirmation and history record; its buffer is never rewritten.
+ */
 export const createTerminalProcessFold = (terminal: Terminal, container: HTMLElement) => {
-  let turn: ConversationTurn | undefined
-  let label = ''
-  let suppressed: string | undefined
-  let folded: ReturnType<typeof findTerminalProcessBounds> = null
+  const history = createTerminalProcessHistory(container)
+  let labels: TerminalProcessLabels | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
-  let programmaticScroll = false
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.className = 'terminal-process-fold'
-  button.hidden = true
-  button.setAttribute('aria-expanded', 'false')
-  container.appendChild(button)
+  let disposed = false
 
-  const reveal = (suppress = false) => {
-    clearTimeout(timer)
-    if (suppress) suppressed = turn?.id
-    folded = null
+  const revealNative = () => {
+    history.hide()
     delete container.dataset.processCollapsed
-    container.style.removeProperty('--terminal-process-offset')
-    button.hidden = true
+    container.style.removeProperty('--terminal-history-height')
   }
-  const fold = () => {
-    if (!turn || turn.status !== 'complete' || suppressed === turn.id || folded) return
-    const buffer = terminal.buffer.active
-    if (terminal.hasSelection() || buffer.viewportY !== buffer.baseY) return
-    const bounds = findTerminalProcessBounds(buffer, turn)
+  const render = () => {
+    clearTimeout(timer)
+    timer = undefined
+    if (disposed) return
+    const snapshot = labels ? readTerminalProcessHistory(terminal.buffer.active) : null
     const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen')
     if (
-      !bounds ||
+      !labels ||
+      !snapshot ||
       !screen?.clientHeight ||
       container.closest('[hidden], [data-terminal-host-parked="true"]')
-    )
+    ) {
+      revealNative()
       return
-    if (bounds.answerRow < buffer.baseY) {
-      programmaticScroll = true
-      terminal.scrollToLine(bounds.answerRow)
-      programmaticScroll = false
     }
-    const offset =
-      (Math.max(0, bounds.answerRow - buffer.viewportY) * screen.clientHeight) / terminal.rows
-    container.style.setProperty('--terminal-process-offset', `${offset}px`)
+    if (history.hasSelection() || terminal.hasSelection()) return
+    const height =
+      (terminal.element?.offsetTop ?? 0) +
+      screen.offsetTop +
+      ((snapshot.composerRow - terminal.buffer.active.viewportY) * screen.clientHeight) /
+        terminal.rows
+    container.style.setProperty('--terminal-history-height', `${height}px`)
+    const appearance = readTerminalAppearance()
+    container.style.setProperty('--terminal-message-accent', appearance.inputForeground)
+    container.style.setProperty(
+      '--terminal-message-selection',
+      appearance.theme.selectionBackground
+    )
+    history.render(snapshot.blocks, labels)
     container.dataset.processCollapsed = 'true'
-    button.textContent = label
-    button.hidden = false
-    folded = bounds
   }
   const schedule = () => {
-    clearTimeout(timer)
-    timer = setTimeout(fold, 200)
+    if (!disposed && timer === undefined) timer = setTimeout(render, 32)
   }
-  const input = () => {
-    if (folded) terminal.scrollToBottom()
-    reveal(true)
-  }
-  const keydown = (event: KeyboardEvent) => {
-    if (event.target === button) return
-    if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      event.key.toLowerCase() === 'c' &&
-      terminal.hasSelection()
-    )
-      return
-    input()
-  }
-  const expand = () => {
-    const row = folded?.promptRow
-    reveal(true)
-    if (row !== undefined) terminal.scrollToLine(row)
-    terminal.focus()
-  }
-  const wheel = () => reveal(true)
-  button.addEventListener('click', expand)
-  container.addEventListener('keydown', keydown, true)
-  container.addEventListener('compositionstart', input, true)
-  container.addEventListener('paste', input, true)
-  container.addEventListener('wheel', wheel, { capture: true, passive: true })
-  const scroll = terminal.onScroll(() => {
-    if (!programmaticScroll && folded) reveal(true)
-  })
+  const scroll = terminal.onScroll(schedule)
+  document.addEventListener('selectionchange', schedule)
+
   return {
-    update(next: ConversationTurn | undefined, nextLabel: string) {
-      if (turn?.id !== next?.id || next?.status !== 'complete') reveal()
-      turn = next
-      label = nextLabel
-      button.textContent = label
+    setLabels(next: TerminalProcessLabels | undefined) {
+      labels = next
+      if (!next) revealNative()
       schedule()
     },
-    beforeOutput: () => reveal(),
-    afterOutput: schedule,
-    resize: () => {
-      reveal()
-      schedule()
-    },
+    afterOutput: render,
+    resize: schedule,
+    hasSelection: history.hasSelection,
     dispose() {
-      reveal()
+      disposed = true
+      clearTimeout(timer)
       scroll.dispose()
-      button.removeEventListener('click', expand)
-      container.removeEventListener('keydown', keydown, true)
-      container.removeEventListener('compositionstart', input, true)
-      container.removeEventListener('paste', input, true)
-      container.removeEventListener('wheel', wheel, true)
-      button.remove()
+      document.removeEventListener('selectionchange', schedule)
+      revealNative()
+      history.dispose()
     },
   }
 }

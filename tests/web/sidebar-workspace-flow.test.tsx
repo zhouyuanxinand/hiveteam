@@ -14,6 +14,9 @@ import { ToastProvider } from '../../web/src/ui/useToast.js'
 import { startTestServer } from '../helpers/test-server.js'
 
 class MockTerminal {
+  buffer = {
+    active: { type: 'normal', baseY: 0, viewportY: 0, cursorY: 0, getLine: () => undefined },
+  }
   unicode = { activeVersion: '' }
   loadAddon() {}
   onData() {

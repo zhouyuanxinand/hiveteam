@@ -19,6 +19,9 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     cols = 80
     rows = 24
+    buffer = {
+      active: { type: 'normal', baseY: 0, viewportY: 0, cursorY: 0, getLine: () => undefined },
+    }
     unicode = { activeVersion: '' }
     loadAddon() {}
     onData() {
