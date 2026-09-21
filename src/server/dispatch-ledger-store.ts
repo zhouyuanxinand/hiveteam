@@ -191,6 +191,7 @@ export const createDispatchLedgerStore = (db: Database) => {
     'DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?'
   )
   const deleteDispatchStmt = db.prepare('DELETE FROM dispatches WHERE id = ?')
+  const deleteArchiveStmt = db.prepare('DELETE FROM dispatch_archives WHERE dispatch_id = ?')
   const markSubmittedStmt = db.prepare(
     `UPDATE dispatches
      SET status = ?, submitted_at = ?
@@ -256,6 +257,9 @@ export const createDispatchLedgerStore = (db: Database) => {
      WHERE dispatch_id IN (SELECT id FROM dispatches WHERE workspace_id = ?)`
   )
   const deleteWorkspaceDispatchesStmt = db.prepare('DELETE FROM dispatches WHERE workspace_id = ?')
+  const deleteWorkspaceArchivesStmt = db.prepare(
+    'DELETE FROM dispatch_archives WHERE dispatch_id IN (SELECT id FROM dispatches WHERE workspace_id = ?)'
+  )
   const deleteWorkerFailuresStmt = db.prepare(
     `DELETE FROM dispatch_delivery_failures
      WHERE dispatch_id IN (
@@ -264,6 +268,9 @@ export const createDispatchLedgerStore = (db: Database) => {
   )
   const deleteWorkerDispatchesStmt = db.prepare(
     'DELETE FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?'
+  )
+  const deleteWorkerArchivesStmt = db.prepare(
+    'DELETE FROM dispatch_archives WHERE dispatch_id IN (SELECT id FROM dispatches WHERE workspace_id = ? AND to_agent_id = ?)'
   )
   const countPendingByWorkerStmt = db.prepare(
     `SELECT d.to_agent_id AS worker_id, COUNT(*) AS pending
@@ -346,6 +353,7 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const deleteDispatch = (dispatchId: string) => {
     db.transaction(() => {
+      deleteArchiveStmt.run(dispatchId)
       deleteFailureStmt.run(dispatchId)
       deleteDispatchStmt.run(dispatchId)
     })()
@@ -494,6 +502,7 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const deleteWorkspaceDispatches = (workspaceId: string) => {
     db.transaction(() => {
+      deleteWorkspaceArchivesStmt.run(workspaceId)
       deleteWorkspaceFailuresStmt.run(workspaceId)
       deleteWorkspaceDispatchesStmt.run(workspaceId)
     })()
@@ -501,6 +510,7 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const deleteWorkerDispatches = (workspaceId: string, workerId: string) => {
     db.transaction(() => {
+      deleteWorkerArchivesStmt.run(workspaceId, workerId)
       deleteWorkerFailuresStmt.run(workspaceId, workerId)
       deleteWorkerDispatchesStmt.run(workspaceId, workerId)
     })()

@@ -14,7 +14,14 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentStdinDispatcher } from './agent-stdin-dispatcher.js'
 import { createAgentTokenRegistry } from './agent-tokens.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
+import type { ExecutionPolicyRuntime } from './execution-policy-runtime.js'
 import { createLiveRunRegistry } from './live-run-registry.js'
+import { createManagedExecution, type ManagedExecution } from './managed-execution.js'
+import {
+  type ResourceBudgetStore,
+  ResourceLimitError,
+  ResourceReservationError,
+} from './resource-budget-store.js'
 import { createNoopRestartPolicy, type RestartPolicy } from './restart-policy.js'
 import type { TeamMemoryDigestProvider } from './team-memory-digest.js'
 import type { TeamSkillRuntime } from './team-skill-runtime.js'
@@ -34,12 +41,18 @@ export const createAgentRuntime = (
     workspace: WorkspaceSummary,
     agentId: string,
     launch: (workspace: WorkspaceSummary) => Promise<LiveAgentRun>
-  ) => Promise<LiveAgentRun>
+  ) => Promise<LiveAgentRun>,
+  executionPolicies?: Pick<ExecutionPolicyRuntime, 'prepare'>,
+  resources?: ResourceBudgetStore
 ): AgentRuntime => {
   const registry = createLiveRunRegistry()
   const launchCache = createAgentLaunchCache(agentRunStore)
   const tokenRegistry = createAgentTokenRegistry()
   const startPromises = new Map<string, Promise<LiveAgentRun>>()
+  const pendingExecutions = new Map<
+    string,
+    { abort: AbortController; execution: ManagedExecution }
+  >()
   let closing = false
   const requireManager = () => {
     if (!agentManager) throw new Error('Agent manager is required for PTY terminal operations')
@@ -71,11 +84,16 @@ export const createAgentRuntime = (
     ...(memoryDigestProvider ? { getStartupMemoryDigest: memoryDigestProvider.forStartup } : {}),
     assertSkillLaunchReady: teamSkillRuntime.assertLaunchReady,
     restartPolicy,
+    executionPolicies,
   })
 
   return {
     async close() {
       closing = true
+      for (const pending of pendingExecutions.values()) {
+        pending.abort.abort()
+        pending.execution.cancelBeforeSpawn()
+      }
       await Promise.allSettled([...startPromises.values()])
       await closeAgentRuntime(agentManager, registry, syncRun, agentRunStore.checkpointShutdownRuns)
     },
@@ -122,6 +140,8 @@ export const createAgentRuntime = (
     },
     async startAgent(workspace, agentId, input) {
       if (closing) throw new Error('Agent runtime is closing')
+      if (!resources)
+        throw new ResourceReservationError('Execution admission is required to start a member.')
       launchCache.setWorkspaceId(agentId, workspace.id)
       const key = `${workspace.id}:${agentId}`
       const activeRun = getActiveRunByAgent(
@@ -134,17 +154,52 @@ export const createAgentRuntime = (
       if (activeRun) return activeRun
       const pendingStart = startPromises.get(key)
       if (pendingStart) return pendingStart
+      const abort = new AbortController()
+      const reservation = resources.reserve({
+        workspaceId: workspace.id,
+        executionKey: `agent:${agentId}`,
+        kind: agentId === `${workspace.id}:orchestrator` ? 'orchestrator' : 'worker',
+        agentId,
+      })
+      if (reservation.state !== 'reserved')
+        throw new ResourceLimitError('recovery_pending', resources.getSnapshot())
+      const execution = createManagedExecution(resources, reservation, abort.signal)
+      pendingExecutions.set(key, { abort, execution })
       const launch = (launchWorkspace: WorkspaceSummary) =>
-        startLiveRun(launchWorkspace, agentId, launchCache.get(workspace.id, agentId), input)
-      const startPromise = (
-        withLaunchWorkspace ? withLaunchWorkspace(workspace, agentId, launch) : launch(workspace)
-      ).finally(() => {
+        startLiveRun(launchWorkspace, agentId, launchCache.get(workspace.id, agentId), {
+          ...input,
+          execution,
+        })
+      const startPromise = (async () => {
+        try {
+          return await (withLaunchWorkspace
+            ? withLaunchWorkspace(workspace, agentId, launch)
+            : launch(workspace))
+        } finally {
+          execution.cancelBeforeSpawn()
+        }
+      })().finally(() => {
+        pendingExecutions.delete(key)
         if (startPromises.get(key) === startPromise) {
           startPromises.delete(key)
         }
       })
       startPromises.set(key, startPromise)
       return startPromise
+    },
+    cancelPendingStart(workspaceId, agentId) {
+      const pending = pendingExecutions.get(`${workspaceId}:${agentId}`)
+      if (!pending) return false
+      pending.abort.abort()
+      pending.execution.cancelBeforeSpawn()
+      return true
+    },
+    cancelAllPendingStarts() {
+      closing = true
+      for (const pending of pendingExecutions.values()) {
+        pending.abort.abort()
+        pending.execution.cancelBeforeSpawn()
+      }
     },
     stopAgentRun(runId) {
       stopLiveRun(agentManager, registry, syncRun, runId)
@@ -171,9 +226,10 @@ export const createAgentRuntime = (
       workerDescription,
       text,
       language,
-      skillActivation
+      skillActivation,
+      deliveryOptions
     ) {
-      stdinDispatcher.writeSendPrompt(
+      return stdinDispatcher.writeSendPrompt(
         workspaceId,
         workerId,
         dispatchId,
@@ -181,7 +237,8 @@ export const createAgentRuntime = (
         workerDescription,
         text,
         language,
-        skillActivation
+        skillActivation,
+        deliveryOptions
       )
     },
     writeCancelPrompt(workspaceId, workerId, dispatchId, reason, input = {}) {

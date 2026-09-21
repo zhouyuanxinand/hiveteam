@@ -4,7 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
+import { getUiCookie } from '../helpers/ui-session.js'
 
 let server: Awaited<ReturnType<typeof startTestServer>>
 let cookie = ''
@@ -27,8 +28,7 @@ beforeEach(async () => {
   mkdirSync(join(outsideRoot, 'secret'), { recursive: true })
 
   server = await startTestServer()
-  const session = await fetch(`${server.baseUrl}/api/ui/session`)
-  cookie = session.headers.get('set-cookie') ?? ''
+  cookie = await getUiCookie(server.baseUrl)
 })
 
 afterEach(async () => {

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -49,6 +49,23 @@ describe('user input recovery', () => {
         }
       )
       expect(configResponse.status).toBe(204)
+
+      const policyPath = `${baseUrl}/api/ui/workspaces/${workspace.id}/agents/${orchestratorId}/execution-policy`
+      const policyResponse = await fetch(policyPath, { headers: { cookie: uiCookie } })
+      expect(policyResponse.status).toBe(200)
+      const policy = await policyResponse.json()
+      const approved = await fetch(policyPath, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', cookie: uiCookie },
+        body: JSON.stringify({
+          profile: 'trusted_unsafe',
+          expected_cli_fingerprint: policy.cli_fingerprint,
+          expected_cli_version: policy.cli_version,
+          policy_revision: policy.policy_revision,
+          acknowledge_unsafe: true,
+        }),
+      })
+      expect(approved.status).toBe(200)
 
       const startResponse = await fetch(
         `${baseUrl}/api/workspaces/${workspace.id}/agents/${orchestratorId}/start`,

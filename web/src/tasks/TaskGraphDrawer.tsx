@@ -36,6 +36,8 @@ const MAX_VISUAL_DEPTH = 3
 type TaskGraphDrawerProps = {
   content: string
   hasConflict: boolean
+  remoteContent?: string | null
+  error?: string | null
   onClose: () => void
   onContentChange: (value: string) => void
   onKeepLocal: () => void
@@ -580,6 +582,8 @@ const getTaskSummary = (tasks: ParsedTask[]) => {
 export const TaskGraphDrawer = ({
   content,
   hasConflict,
+  remoteContent,
+  error,
   onClose,
   onContentChange,
   onKeepLocal,
@@ -710,10 +714,21 @@ export const TaskGraphDrawer = ({
         </div>
       ) : null}
       <div className="flex-1 scroll-y px-3 py-3 text-sm">
+        {error ? (
+          <p role="alert" className="dispatch-report-error">
+            {error}
+          </p>
+        ) : null}
+        {hasConflict && !rawMode ? (
+          <button className="icon-btn" type="button" onClick={() => setRawMode(true)}>
+            {t('tasks.raw.conflictTitle')} · {t('tasks.action.viewSource')}
+          </button>
+        ) : null}
         {rawMode ? (
           <TaskGraphRawEditor
             content={content}
             hasConflict={hasConflict}
+            remoteContent={remoteContent}
             onContentChange={onContentChange}
             onKeepLocal={onKeepLocal}
             onReload={onReload}

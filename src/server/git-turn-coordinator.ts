@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { GitWorkspaceService } from './git-workspace-service.js'
 import { hasInteractivePromptReady } from './post-start-input-writer.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
+import { withoutRemoteActionContext } from './remote-action-context.js'
 import type { WorkspaceStore } from './workspace-store-contract.js'
 
 const OUTPUT_TAIL_LIMIT = 64 * 1024
@@ -100,8 +101,8 @@ export const createGitTurnCoordinator = (input: {
     turn.ending = true
     clearSettleTimer(turn)
     const queuedSnapshot = run.snapshotChain.then(
-      () => runSnapshot(run, turn),
-      () => runSnapshot(run, turn)
+      () => withoutRemoteActionContext(() => runSnapshot(run, turn)),
+      () => withoutRemoteActionContext(() => runSnapshot(run, turn))
     )
     run.snapshotChain = queuedSnapshot.catch(() => {})
     void queuedSnapshot.finally(() => {
@@ -126,7 +127,9 @@ export const createGitTurnCoordinator = (input: {
     run.activeTurn = turn
     run.outputTail = ''
     void run.snapshotChain
-      .then(() => input.git.getStatus(run.workspaceId, run.workspacePath))
+      .then(() =>
+        withoutRemoteActionContext(() => input.git.getStatus(run.workspaceId, run.workspacePath))
+      )
       .then((status) => {
         if (run.activeTurn !== turn) return
         if (!status.autoSnapshotEnabled || status.state !== 'ready') {

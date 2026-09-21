@@ -1,5 +1,6 @@
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { AgentSessionContext } from './agent-session-context.js'
+import type { NativeSessionStore } from './native-session-store.js'
 
 type PersistedRunStatus = PersistedAgentRun['status']
 
@@ -34,6 +35,7 @@ export interface AgentRunStorePort {
 }
 
 export interface AgentSessionStorePort {
+  native?: NativeSessionStore
   getCaptureContext: (workspaceId: string, agentId: string) => AgentSessionContext | undefined
   saveCaptureContext: (workspaceId: string, agentId: string, context: AgentSessionContext) => void
   clearLastSessionId: (workspaceId: string, agentId: string) => void

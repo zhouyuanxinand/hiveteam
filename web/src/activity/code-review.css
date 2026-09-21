@@ -1,0 +1,48 @@
+.code-review-panel, .code-review-panel form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.code-review-panel h3, .code-review-panel h4 {
+  font-weight: 600;
+}
+.code-review-panel {
+  font-size: 14px;
+}
+.code-review-panel section, .code-review-panel details, .code-review-panel form {
+  min-width: 0;
+  margin-block-start: 8px;
+}
+.code-review-panel p, .code-review-version {
+  overflow-wrap: anywhere;
+}
+.code-review-summary {
+  white-space: pre-wrap;
+  max-width: 70ch;
+}
+.code-review-panel textarea, .code-review-panel select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+.code-review-panel textarea {
+  resize: vertical;
+}
+.code-review-panel select:focus-visible {
+  outline: 2px solid var(--text-secondary);
+  outline-offset: 3px;
+}
+@media (max-width: 640px) {
+  .code-review-panel {
+    font-size: 16px;
+  }
+  .code-review-panel :is(button, select, textarea) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}

@@ -39,5 +39,7 @@ jobs:
         if: runner.os != 'Windows'
       - run: pnpm test:windows
         if: runner.os == 'Windows'
+      - run: node tests/manual/run-windows-conpty.mjs
+        if: runner.os == 'Windows'
       - run: pnpm pack:check
       - run: pnpm pack:smoke

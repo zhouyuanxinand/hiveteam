@@ -7,11 +7,12 @@ import { join } from 'node:path'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import WebSocket from 'ws'
+import { tasksSnapshot } from '../../src/server/tasks-file.js'
 
 import { AppProviders } from '../../web/src/AppProviders.js'
 import { useTasksFile } from '../../web/src/tasks/useTasksFile.js'
 import { WorkspaceTaskDrawer } from '../../web/src/tasks/WorkspaceTaskDrawer.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 let cleanupServer: (() => Promise<void>) | undefined
 const nativeFetch = globalThis.fetch
@@ -75,7 +76,11 @@ beforeEach(async () => {
   const server = await startTestServer()
   cleanupServer = server.close
   baseUrl = server.baseUrl
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     uiCookie = response.headers.get('set-cookie') ?? ''
   })
   workspacePath = mkdtempSync(join(tmpdir(), 'hive-tasks-flow-'))
@@ -94,7 +99,10 @@ beforeEach(async () => {
   await nativeFetch(`${server.baseUrl}/api/workspaces/${workspace.id}/tasks`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ content: '- [ ] implement login\n' }),
+    body: JSON.stringify({
+      content: '- [ ] implement login\n',
+      expected_version: tasksSnapshot('').version,
+    }),
   })
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     const value =
@@ -134,12 +142,55 @@ const enterRawEditor = async (expectedInitialValue: string) => {
 }
 
 describe('tasks flow driven from the Task Graph drawer', () => {
+  test('an HTTP save conflict preserves the draft and requires a reviewed merge before retry', async () => {
+    renderTaskDrawer()
+    await enterRawEditor('- [ ] implement login\n')
+    const currentFetch = globalThis.fetch
+    let raced = false
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PUT' && !raced) {
+        raced = true
+        const competing = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', cookie: uiCookie },
+          body: JSON.stringify({
+            content: '- [ ] peer change\n',
+            expected_version: tasksSnapshot('- [ ] implement login\n').version,
+          }),
+        })
+        expect(competing.status).toBe(200)
+      }
+      return currentFetch(input, init)
+    })
+    fireEvent.change(screen.getByLabelText('Tasks Markdown'), {
+      target: { value: '- [ ] my draft\n' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save tasks' }))
+    await screen.findByText('File changed externally')
+    expect(screen.getByLabelText('Tasks Markdown')).toHaveValue('- [ ] my draft\n')
+    expect(screen.getByRole('button', { name: 'Save tasks' })).toBeDisabled()
+    expect(screen.getByText('- [ ] peer change')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Tasks Markdown'), {
+      target: { value: '- [ ] peer change\n- [ ] my draft\n' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'I reviewed the merge; retry with this version' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save tasks' }))
+    await waitFor(async () => {
+      const saved = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
+        headers: { cookie: uiCookie },
+      })
+      expect(await saved.json()).toMatchObject({ content: '- [ ] peer change\n- [ ] my draft\n' })
+    })
+  })
   test('dormant task graph drawer still renders a readable summary and nested task tree', async () => {
     await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie: uiCookie },
       body: JSON.stringify({
         content: '- [ ] implement login @Alice\n  - [x] wire submit\n- [x] review docs @Bob\n',
+        expected_version: tasksSnapshot('- [ ] implement login\n').version,
       }),
     })
 
@@ -172,7 +223,7 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       const saved = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
         headers: { cookie: uiCookie },
       })
-      await expect(saved.json()).resolves.toEqual({ content: '- [x] implement login\n' })
+      await expect(saved.json()).resolves.toMatchObject({ content: '- [x] implement login\n' })
     })
 
     // After toggle, the task moves into the "completed" section, which
@@ -198,10 +249,12 @@ describe('tasks flow driven from the Task Graph drawer', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Tasks Markdown')).toHaveValue('- [x] implement login\n')
     })
-    const savedResponse = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
-      headers: { cookie: uiCookie },
+    await waitFor(async () => {
+      const savedResponse = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
+        headers: { cookie: uiCookie },
+      })
+      expect(await savedResponse.json()).toMatchObject({ content: '- [x] implement login\n' })
     })
-    await expect(savedResponse.json()).resolves.toEqual({ content: '- [x] implement login\n' })
   })
 
   test('raw editor shows conflict banner when .hive/tasks.md changes externally during dirty edit', async () => {
@@ -218,7 +271,9 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       expect(screen.getByText('File changed externally')).toBeInTheDocument()
       expect(screen.getByLabelText('Tasks Markdown')).toHaveValue('- [ ] local draft\n')
       expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Keep local' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'I reviewed the merge; retry with this version' })
+      ).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
@@ -256,7 +311,7 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       const saved = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
         headers: { cookie: uiCookie },
       })
-      await expect(saved.json()).resolves.toEqual({ content: '- [ ] implement SSO\n' })
+      await expect(saved.json()).resolves.toMatchObject({ content: '- [ ] implement SSO\n' })
     })
   })
 
@@ -266,6 +321,7 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       headers: { 'content-type': 'application/json', cookie: uiCookie },
       body: JSON.stringify({
         content: '- [ ] keep this one\n- [ ] delete this one\n',
+        expected_version: tasksSnapshot('- [ ] implement login\n').version,
       }),
     })
 
@@ -280,7 +336,7 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       const saved = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
         headers: { cookie: uiCookie },
       })
-      await expect(saved.json()).resolves.toEqual({ content: '- [ ] keep this one\n' })
+      await expect(saved.json()).resolves.toMatchObject({ content: '- [ ] keep this one\n' })
     })
   })
 
@@ -298,7 +354,7 @@ describe('tasks flow driven from the Task Graph drawer', () => {
       const saved = await nativeFetch(`${baseUrl}/api/workspaces/${workspaceId}/tasks`, {
         headers: { cookie: uiCookie },
       })
-      await expect(saved.json()).resolves.toEqual({
+      await expect(saved.json()).resolves.toMatchObject({
         content: '- [ ] implement login\n  - [ ] wire login form\n',
       })
     })

@@ -2,10 +2,13 @@ import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { installedRuntimeAcceptance, verifyInstalledRestart } from './pack-runtime-acceptance.mjs'
+import { requestUiBootstrap } from './ui-launcher.mjs'
 
 const root = process.cwd()
 const tempDir = mkdtempSync(join(tmpdir(), 'hive-pack-smoke-'))
 let packedFile
+let acceptanceReceipt
 const binLinkName = (name) => (process.platform === 'win32' ? `${name}.cmd` : name)
 const runtimeStartTimeoutMs = process.platform === 'win32' ? 60_000 : 5_000
 // A cold npm cache can take longer than a minute to install native runtime
@@ -167,10 +170,8 @@ try {
   const child = spawn(runtimeCommand.file, runtimeCommand.args, {
     env: withActiveNodeEnv({
       HIVE_DATA_DIR: join(tempDir, 'data'),
-      HIVE_ORCHESTRATOR_COMMAND: internalTeamLauncher,
-      HIVE_ORCHESTRATOR_ARGS_JSON: JSON.stringify(['list']),
     }),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   })
   let stdout = ''
   let stderr = ''
@@ -198,7 +199,11 @@ try {
       throw new Error('Packaged runtime did not serve the bundled web UI')
     }
 
-    const sessionResponse = await fetch(`http://127.0.0.1:${port}/api/ui/session`)
+    const sessionResponse = await fetch(`http://127.0.0.1:${port}/api/ui/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bootstrap_token: await requestUiBootstrap(child) }),
+    })
     const cookie = sessionResponse.headers.get('set-cookie')?.split(';')[0]
     if (!sessionResponse.ok || !cookie) {
       throw new Error(`Packaged runtime session returned ${sessionResponse.status}`)
@@ -206,7 +211,8 @@ try {
 
     const workspaceResponse = await fetch(`http://127.0.0.1:${port}/api/workspaces`, {
       body: JSON.stringify({
-        autostart_orchestrator: true,
+        autostart_orchestrator: false,
+        initialization_mode: 'basic',
         name: 'Pack Smoke',
         path: tempDir,
       }),
@@ -220,12 +226,57 @@ try {
       throw new Error(`Packaged runtime workspace create returned ${workspaceResponse.status}`)
     }
     const workspace = await workspaceResponse.json()
-    if (workspace.orchestrator_start?.ok !== true) {
-      throw new Error(
-        `Packaged internal team launcher failed: ${workspace.orchestrator_start?.error ?? 'unknown'}`
-      )
+    const agentId = `${workspace.id}:orchestrator`
+    const configure = await fetch(
+      `http://127.0.0.1:${port}/api/workspaces/${workspace.id}/agents/${encodeURIComponent(agentId)}/config`,
+      {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ command: internalTeamLauncher, args: ['list'] }),
+      }
+    )
+    if (!configure.ok)
+      throw new Error(`Packaged team shim configuration failed: ${configure.status}`)
+    const policyUrl = `http://127.0.0.1:${port}/api/ui/workspaces/${workspace.id}/agents/${encodeURIComponent(agentId)}/execution-policy`
+    const policyResponse = await fetch(policyUrl, { headers: { cookie } })
+    if (!policyResponse.ok)
+      throw new Error(`Packaged policy preview returned ${policyResponse.status}`)
+    const policy = await policyResponse.json()
+    // The fixture intentionally runs the packaged team executable as an agent.
+    // Authorize that exact executable through the real local management boundary.
+    const grant = await fetch(policyUrl, {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        profile: 'trusted_unsafe',
+        expected_cli_fingerprint: policy.cli_fingerprint,
+        expected_cli_version: policy.cli_version,
+        policy_revision: policy.policy_revision,
+        acknowledge_unsafe: true,
+      }),
+    })
+    if (!grant.ok) throw new Error(`Packaged fixture authorization returned ${grant.status}`)
+    const start = await fetch(
+      `http://127.0.0.1:${port}/api/workspaces/${workspace.id}/agents/${encodeURIComponent(agentId)}/start`,
+      {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      }
+    )
+    if (!start.ok) {
+      throw new Error(`Packaged internal team launcher failed: ${await start.text()}`)
     }
     logPhase('runtime responded')
+    acceptanceReceipt = await installedRuntimeAcceptance({
+      baseUrl: `http://127.0.0.1:${port}`,
+      cookie,
+      packageRoot,
+      tempDir,
+      workspace,
+      bootstrap: () => requestUiBootstrap(child),
+      root,
+    })
   } finally {
     logPhase('stopping packaged runtime')
     await stopChild(child)
@@ -233,6 +284,32 @@ try {
 
   if (stderr) {
     console.warn(stderr.trim())
+  }
+  const restarted = spawn(runtimeCommand.file, runtimeCommand.args, {
+    env: withActiveNodeEnv({ HIVE_DATA_DIR: join(tempDir, 'data') }),
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  })
+  let restartOutput = ''
+  restarted.stdout.on('data', (chunk) => {
+    restartOutput += chunk.toString()
+  })
+  restarted.stderr.on('data', (chunk) => process.stderr.write(chunk))
+  try {
+    const port = await waitFor(
+      () => restartOutput.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)?.[1],
+      runtimeStartTimeoutMs
+    )
+    const response = await fetch(`http://127.0.0.1:${port}/api/ui/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bootstrap_token: await requestUiBootstrap(restarted) }),
+    })
+    const cookie = response.headers.get('set-cookie')?.split(';')[0]
+    if (!cookie || !acceptanceReceipt)
+      throw new Error('Restart did not establish a local UI session')
+    await verifyInstalledRestart(`http://127.0.0.1:${port}`, cookie, acceptanceReceipt)
+  } finally {
+    await stopChild(restarted)
   }
 } finally {
   logPhase('cleaning temporary files')

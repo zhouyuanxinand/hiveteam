@@ -17,7 +17,7 @@ export const FirstRunWizard = ({
   onAddWorkspace,
   onTryDemo,
 }: FirstRunWizardProps) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [slideIdx, setSlideIdx] = useState(0)
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -127,6 +127,11 @@ export const FirstRunWizard = ({
                 <div className="flex flex-col gap-3 py-2">
                   <h2 className="text-lg font-semibold text-pri">{t('firstRun.getStarted')}</h2>
                   <p className="text-sm text-sec">{t('firstRun.optionDesc')}</p>
+                  <p className="text-xs text-sec">
+                    {language === 'zh'
+                      ? '推荐先创建基础工作区：不下载技能包，创建后检查 CLI，再启动第一个真实任务。'
+                      : 'Start with a basic workspace: no skill-pack download. Check the CLI after creation, then start your first real task.'}
+                  </p>
                   <div className="mt-2 flex flex-col gap-2">
                     <button
                       type="button"

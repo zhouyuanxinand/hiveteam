@@ -1,3 +1,27 @@
+.workspace-detail { container: workspace / inline-size; }
+.memory-context-panel { padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.memory-context-panel details { margin-top: 10px; }
+.memory-context-panel summary { cursor: pointer; padding-block: 6px; }
+.memory-context-panel pre { white-space: pre-wrap; max-height: 300px; overflow: auto; }
+.memory-context-panel input { width: 100px; padding: 6px; background: var(--bg-2); border: 1px solid var(--border); }
+.memory-context-panel :is(summary, input, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.workspace-delivery-region { flex: 0 0 auto; min-width: 0; }
+.workspace-section-links { display: none; flex: 0 0 auto; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); }
+.workspace-section-links button { padding: 8px 12px; color: var(--text-secondary); border-radius: 6px; cursor: pointer; }
+.workspace-section-links button:hover { background: var(--bg-3); color: var(--text-primary); }
+.workspace-section-links button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@container workspace (max-width: 860px) {
+  .workspace-section-links { display: flex; }
+  .workspace-pane-split { flex-direction: column; overflow-y: auto; }
+  .workspace-pane-split .orchestrator-pane-shell { width: 100% !important; min-width: 0; flex: 0 0 max(300px, 45vh); }
+  .workspace-pane-split .workers-pane-shell { flex: 1 0 auto; }
+  .workers-pane-header__row { flex-wrap: wrap; }
+  .workers-pane-header__row > span { white-space: nowrap; }
+  .workers-pane-header__actions { flex: 1 0 100%; margin-left: 0; flex-wrap: wrap; }
+  .workers-pane-auto-resume { flex-basis: 100%; }
+  .workers-pane-action { flex-shrink: 0; white-space: nowrap; }
+  .workspace-pane-split .pane-splitter { display: none; }
+}
 .workspace-delivery {
   flex: 0 0 auto;
   min-width: 0;
@@ -6,6 +30,10 @@
   border-bottom: 1px solid var(--border-bright);
   font-size: 12px;
 }
+.workspace-onboarding { flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--border); padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
+.workspace-onboarding > summary { cursor: pointer; color: var(--text-primary); }
+.workspace-onboarding-body { max-height: 40vh; overflow-y: auto; padding-block: 8px; }
+.workspace-onboarding :is(button, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .workspace-delivery-bar { display: flex; align-items: center; padding: 6px 12px; gap: 12px; }
 .workspace-delivery-toggle {
   display: flex;
@@ -21,6 +49,11 @@
 .workspace-delivery-toggle > span { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .workspace-delivery-toggle svg[data-open="false"] { transform: rotate(-90deg); }
 .workspace-delivery-content { max-height: min(45vh, 360px); overflow: auto; padding: 4px 16px 14px; }
+.delivery-history-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-block: 8px; }
+.delivery-history-controls label { display: grid; gap: 4px; min-width: 0; }
+.delivery-history-controls :is(input, select, button) { max-width: 100%; background: var(--bg-2); color: var(--text-primary); border: 1px solid var(--border-bright); border-radius: 6px; padding: 6px 8px; }
+.delivery-history-controls button:disabled { opacity: .5; }
+.delivery-history-controls :is(input, select, button):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .workspace-delivery-item { border-top: 1px solid var(--border-bright); padding: 8px 0; }
 .workspace-delivery-item > summary { display: flex; align-items: baseline; gap: 12px; cursor: pointer; padding: 4px 0; }
 .delivery-summary-chevron { flex-shrink: 0; }
@@ -129,3 +162,7 @@
   .delivery-queue-row-heading { align-items: flex-start; }
   .delivery-queue-pagination { gap: 6px; }
 }
+.memory-context-panel fieldset { display: grid; gap: 10px; margin-block: 12px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.memory-context-panel label { overflow-wrap: anywhere; }
+.memory-context-panel input:not([type=checkbox]) { display: block; width: 100%; min-width: 0; }
+.retention-records { max-height: 240px; overflow: auto; display: grid; gap: 8px; }

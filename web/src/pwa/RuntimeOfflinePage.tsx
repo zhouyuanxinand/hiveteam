@@ -1,12 +1,14 @@
-import { Loader2, PlayCircle, RefreshCw, ServerCrash } from 'lucide-react'
+import { KeyRound, Loader2, PlayCircle, RefreshCw, ServerCrash } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '../i18n.js'
+import { initializeUiSession } from '../ui-session.js'
 import { silentReload } from '../useBeforeUnloadGuard.js'
 
 const RECONNECT_INTERVAL_MS = 3000
 
 interface RuntimeOfflinePageProps {
+  sessionRequired?: boolean
   /**
    * Engage demo mode without leaving this view. Daemon-offline is exactly when
    * users most want to evaluate Hive without installing a CLI, so we surface a
@@ -17,11 +19,14 @@ interface RuntimeOfflinePageProps {
 
 /**
  * Full-screen replacement for the workspace content area when the Hive runtime
- * is unreachable at bootstrap. Pings `/api/version` on a 3s timer and reloads
- * the page when the daemon comes back, so the user doesn't have to manually
- * refresh after starting `hive` in their terminal.
+ * is unreachable or its UI session has expired at bootstrap. The session probe
+ * only checks existing authorization; the trusted launcher must restore it.
+ * Reload after recovery to fetch workspace data through the normal bootstrap.
  */
-export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) => {
+export const RuntimeOfflinePage = ({
+  onTryDemo,
+  sessionRequired = false,
+}: RuntimeOfflinePageProps = {}) => {
   const { t } = useI18n()
   const [retrying, setRetrying] = useState(false)
   const aliveRef = useRef(true)
@@ -37,18 +42,22 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
 
   const probe = useCallback(async (): Promise<boolean> => {
     try {
+      if (sessionRequired) {
+        await initializeUiSession()
+        return true
+      }
       const response = await fetch('/api/version', { credentials: 'include' })
       return response.ok
     } catch {
       return false
     }
-  }, [])
+  }, [sessionRequired])
 
   useEffect(() => {
     aliveRef.current = true
     const interval = window.setInterval(async () => {
       if (!aliveRef.current) return
-      if (await probe()) reload()
+      if ((await probe()) && aliveRef.current) reload()
     }, RECONNECT_INTERVAL_MS)
     return () => {
       aliveRef.current = false
@@ -59,7 +68,7 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
   const handleRetry = async () => {
     setRetrying(true)
     try {
-      if (await probe()) {
+      if ((await probe()) && aliveRef.current) {
         reload()
         return
       }
@@ -72,7 +81,10 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center p-8" data-testid="runtime-offline-page">
+    <div
+      className="flex flex-1 items-center justify-center p-8"
+      data-testid={sessionRequired ? 'ui-session-required-page' : 'runtime-offline-page'}
+    >
       <div
         className="elev-1 flex max-w-md flex-col items-center gap-3 rounded border p-6 text-center"
         style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border)' }}
@@ -81,10 +93,18 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
           className="flex h-12 w-12 items-center justify-center rounded-full"
           style={{ background: 'var(--bg-3)', color: 'var(--status-orange)' }}
         >
-          <ServerCrash size={24} aria-hidden />
+          {sessionRequired ? (
+            <KeyRound size={24} aria-hidden />
+          ) : (
+            <ServerCrash size={24} aria-hidden />
+          )}
         </div>
-        <div className="font-semibold text-pri">{t('pwa.runtimeOffline.title')}</div>
-        <div className="text-sec text-sm leading-relaxed">{t('pwa.runtimeOffline.body')}</div>
+        <div className="font-semibold text-pri">
+          {t(sessionRequired ? 'pwa.sessionRequired.title' : 'pwa.runtimeOffline.title')}
+        </div>
+        <div className="text-sec text-sm leading-relaxed">
+          {t(sessionRequired ? 'pwa.sessionRequired.body' : 'pwa.runtimeOffline.body')}
+        </div>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
@@ -100,7 +120,9 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
             ) : (
               <RefreshCw size={12} aria-hidden />
             )}
-            {retrying ? t('pwa.runtimeOffline.retrying') : t('pwa.runtimeOffline.retry')}
+            {retrying
+              ? t('pwa.runtimeOffline.retrying')
+              : t(sessionRequired ? 'pwa.sessionRequired.retry' : 'pwa.runtimeOffline.retry')}
           </button>
           {onTryDemo ? (
             <button
@@ -114,7 +136,13 @@ export const RuntimeOfflinePage = ({ onTryDemo }: RuntimeOfflinePageProps = {}) 
             </button>
           ) : null}
         </div>
-        <div className="text-ter text-xs">{t('pwa.runtimeOffline.autoReconnect')}</div>
+        <div className="text-ter text-xs">
+          {t(
+            sessionRequired
+              ? 'pwa.sessionRequired.autoReconnect'
+              : 'pwa.runtimeOffline.autoReconnect'
+          )}
+        </div>
       </div>
     </div>
   )

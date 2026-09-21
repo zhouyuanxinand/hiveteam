@@ -2,6 +2,20 @@ import '@testing-library/jest-dom/vitest'
 
 import { afterEach, vi } from 'vitest'
 
+// Model the trusted launcher in tests; no server auth path is mocked or weakened.
+vi.mock('../../src/server/app.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/server/app.js')>()
+  const { registerUiLauncher } = await import('../helpers/ui-session.js')
+  return {
+    ...original,
+    createApp: (...args: Parameters<typeof original.createApp>) => {
+      const app = original.createApp(...args)
+      registerUiLauncher(app.server, app.store)
+      return app
+    },
+  }
+})
+
 // Unrelated HTTP/PTY suites isolate default provisioning from GitHub and disk
 // installation. The workspace-default-skill-pack suites unmock this seam and
 // exercise the real HTTP -> SQLite -> cache -> filesystem -> PTY flow.

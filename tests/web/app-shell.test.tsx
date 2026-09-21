@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { App } from '../../web/src/app.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 let cleanupServer: (() => Promise<void>) | undefined
 let sandboxRoot = ''
@@ -33,7 +33,11 @@ beforeEach(async () => {
   cleanupServer = server.close
   baseUrl = server.baseUrl
   cookie = ''
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
   fetchCalls = []

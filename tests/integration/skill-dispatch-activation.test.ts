@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { normalizePtyText } from '../helpers/platform-cli.js'
 
 const tempDirs: string[] = []
@@ -99,6 +99,7 @@ describe('dispatch Skill activation', () => {
     await waitFor(() =>
       expect(store.getActiveRunByAgentId(workspace.id, worker.id)).toBeUndefined()
     )
+    await waitFor(() => expect(store.resources.getSnapshot().occupancy.global).toBe(0))
 
     const dispatch = await store.dispatchTaskByWorkerName(
       workspace.id,

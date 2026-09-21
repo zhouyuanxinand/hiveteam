@@ -3,9 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
-
-import { runHiveCommand } from '../../src/cli/hive.js'
 import { runTeamCommand } from '../../src/cli/team.js'
+import { runAuthorizedTestHiveCommand as runHiveCommand } from '../helpers/authorized-hive.js'
 import { normalizePtyText } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

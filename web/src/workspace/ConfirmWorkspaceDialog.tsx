@@ -40,7 +40,10 @@ export const ConfirmWorkspaceDialog = ({
   onCreate,
   onOpenServerBrowse,
 }: ConfirmWorkspaceDialogProps) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
+  const zh = language === 'zh'
+  const [initializationMode, setInitializationMode] = useState<'basic' | 'packs'>('basic')
+  const [autostart, setAutostart] = useState(false)
   const initialPath = probe?.path ?? ''
   const initialName = probe?.suggested_name ?? basenameOf(initialPath)
   const [name, setName] = useState(initialName)
@@ -70,13 +73,13 @@ export const ConfirmWorkspaceDialog = ({
     !creating &&
     name.trim().length > 0 &&
     resolvedPath.length > 0 &&
-    !presetsLoading &&
-    !genericPresetNeedsStartup &&
-    !selectedPresetUnavailable
+    (!autostart || (!presetsLoading && !genericPresetNeedsStartup && !selectedPresetUnavailable))
 
   const handleCreate = () => {
     if (!canCreate) return
     onCreate({
+      initializationMode,
+      autostartOrchestrator: autostart,
       commandPresetId: commandPresetId || null,
       name: name.trim(),
       path: resolvedPath,
@@ -95,7 +98,7 @@ export const ConfirmWorkspaceDialog = ({
           <Dialog.Content
             aria-busy={creating}
             data-testid="confirm-workspace-dialog"
-            className="dialog-scale-pop elev-2 pointer-events-auto flex w-[480px] max-w-full flex-col rounded-lg border"
+            className="dialog-scale-pop elev-2 pointer-events-auto flex max-h-[calc(100dvh-32px)] w-[480px] max-w-full flex-col overflow-y-auto rounded-lg border"
             style={{
               background: 'var(--bg-elevated)',
               borderColor: 'var(--border-bright)',
@@ -212,6 +215,45 @@ export const ConfirmWorkspaceDialog = ({
                 startupCommand={startupCommand}
                 value={commandPresetId}
               />
+              <label className="flex flex-col gap-2 text-sm">
+                {zh ? '工作区初始化' : 'Workspace initialization'}
+                <select
+                  className="input"
+                  value={initializationMode}
+                  onChange={(event) =>
+                    setInitializationMode(event.target.value as 'basic' | 'packs')
+                  }
+                >
+                  <option value="basic">
+                    {zh ? '基础模式（可离线创建）' : 'Basic workspace (offline creation)'}
+                  </option>
+                  <option value="packs">
+                    {zh
+                      ? '安装默认团队技能包（需要网络或缓存）'
+                      : 'Install default skill packs (network or cache required)'}
+                  </option>
+                </select>
+                <span className="text-xs text-sec">
+                  {zh
+                    ? '基础模式不会安装默认技能包。已有技能与文件保留，之后可从顶部“团队技能”扩展。'
+                    : 'Basic mode skips default packs and preserves existing skills and files. Add packs later from Team Skills in the top bar.'}
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={autostart}
+                  onChange={(event) => setAutostart(event.target.checked)}
+                />
+                {zh
+                  ? '创建后尝试启动 Orchestrator'
+                  : 'Try starting the Orchestrator after creation'}
+              </label>
+              <p className="text-xs text-sec">
+                {zh
+                  ? '可以先创建再检查 CLI。找到命令不代表已登录或满足执行权限；创建后可查看启动检查并发起第一个任务。'
+                  : 'You can create first and check the CLI next. Finding a command does not verify login or execution permissions. Startup checks and your first task are available in the workspace.'}
+              </p>
 
               <button
                 type="button"

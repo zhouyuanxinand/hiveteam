@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, expect, test } from 'vitest'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 let server: Awaited<ReturnType<typeof startTestServer>>

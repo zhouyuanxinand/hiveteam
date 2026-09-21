@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import type { WorkspaceSummary } from '../shared/types.js'
 import type { AgentManager } from './agent-manager.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import { createManagedExecution, type ManagedExecution } from './managed-execution.js'
+import { recheckRemoteAction } from './remote-action-context.js'
+import { type ResourceBudgetStore, ResourceReservationError } from './resource-budget-store.js'
 
 const WORKSPACE_SHELL_SUFFIX = ':shell'
 const WORKSPACE_SHELL_LABEL = 'Shell'
@@ -39,12 +43,26 @@ export const resolveWorkspaceShellLaunch = (
   return { command, args: shouldUseLoginShell(command) ? ['-l'] : [] }
 }
 
-export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefined) => {
+export const createWorkspaceShellRuntime = (
+  agentManager: AgentManager | undefined,
+  resources?: ResourceBudgetStore
+) => {
   const labelsByRunId = new Map<string, string>()
   const workspaceIdsByRunId = new Map<string, string>()
   const runIdsByWorkspaceId = new Map<string, string[]>()
   const startedAtByRunId = new Map<string, number>()
   const exitCleanupTimersByRunId = new Map<string, ReturnType<typeof setTimeout>>()
+  const pendingStarts = new Map<
+    string,
+    {
+      workspaceId: string
+      abort: AbortController
+      execution: ManagedExecution
+      promise: Promise<LiveAgentRun>
+    }
+  >()
+  const pendingCloses = new Set<Promise<void>>()
+  let closing = false
 
   const requireManager = () => {
     if (!agentManager) throw new Error('Agent manager is required for workspace shell terminals')
@@ -141,13 +159,24 @@ export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefin
   }
 
   const closeRun = (runId: string) => {
-    requestCloseRun(runId)
-    forgetShellRun(runId)
+    const pending = closeRunAndWait(runId).finally(() => pendingCloses.delete(pending))
+    pendingCloses.add(pending)
+    void pending.catch((error: unknown) =>
+      console.error('[hive] workspace shell close failed', error)
+    )
+    detachRun(runId)
   }
 
   return {
     async close() {
+      closing = true
+      for (const pending of pendingStarts.values()) {
+        pending.abort.abort()
+        pending.execution.cancelBeforeSpawn()
+      }
+      await Promise.allSettled([...pendingStarts.values()].map((pending) => pending.promise))
       await Promise.all(Array.from(workspaceIdsByRunId.keys()).map(closeRunAndWait))
+      await Promise.all([...pendingCloses])
       runIdsByWorkspaceId.clear()
       workspaceIdsByRunId.clear()
       startedAtByRunId.clear()
@@ -161,6 +190,14 @@ export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefin
       return true
     },
     async deleteWorkspace(workspaceId: string) {
+      const starts = [...pendingStarts.values()].filter(
+        (pending) => pending.workspaceId === workspaceId
+      )
+      for (const pending of starts) {
+        pending.abort.abort()
+        pending.execution.cancelBeforeSpawn()
+      }
+      await Promise.allSettled(starts.map((pending) => pending.promise))
       await Promise.all(Array.from(runIdsByWorkspaceId.get(workspaceId) ?? []).map(closeRunAndWait))
       runIdsByWorkspaceId.delete(workspaceId)
     },
@@ -198,24 +235,52 @@ export const createWorkspaceShellRuntime = (agentManager: AgentManager | undefin
       if (hasRun(runId)) requireManager().resumeRun(runId)
     },
     async start(workspace: WorkspaceSummary): Promise<LiveAgentRun> {
-      const startedAt = Date.now()
-      const launch = resolveWorkspaceShellLaunch()
-      const run = await requireManager().startAgent({
+      if (closing) throw new ResourceReservationError('Workspace shells are closing.')
+      if (!resources)
+        throw new ResourceReservationError(
+          'Execution admission is required to start a workspace shell.'
+        )
+      const reservation = resources.reserve({
+        workspaceId: workspace.id,
+        executionKey: `shell:${randomUUID()}`,
+        kind: 'workspace_shell',
         agentId: getWorkspaceShellAgentId(workspace.id),
-        args: launch.args,
-        command: launch.command,
-        cwd: workspace.path,
-        env: {
-          COLORTERM: 'truecolor',
-          FORCE_COLOR: '1',
-          NO_COLOR: undefined,
-          TERM: 'xterm-256color',
-          TERM_PROGRAM: 'hive-shell',
-        },
-        onExit: ({ runId }) => handleShellExit(runId),
       })
-      attachRun(workspace.id, run.runId, WORKSPACE_SHELL_LABEL, startedAt)
-      return { ...run, startedAt }
+      const abort = new AbortController()
+      const execution = createManagedExecution(resources, reservation, abort.signal)
+      const pending = (async () => {
+        try {
+          const startedAt = Date.now()
+          const launch = resolveWorkspaceShellLaunch()
+          recheckRemoteAction()
+          const run = await requireManager().startAgent({
+            execution,
+            agentId: getWorkspaceShellAgentId(workspace.id),
+            args: launch.args,
+            command: launch.command,
+            cwd: workspace.path,
+            env: {
+              COLORTERM: 'truecolor',
+              FORCE_COLOR: '1',
+              NO_COLOR: undefined,
+              TERM: 'xterm-256color',
+              TERM_PROGRAM: 'hive-shell',
+            },
+            onExit: ({ runId }) => handleShellExit(runId),
+          })
+          attachRun(workspace.id, run.runId, WORKSPACE_SHELL_LABEL, startedAt)
+          return { ...run, startedAt }
+        } finally {
+          execution.cancelBeforeSpawn()
+        }
+      })().finally(() => pendingStarts.delete(reservation.id))
+      pendingStarts.set(reservation.id, {
+        workspaceId: workspace.id,
+        abort,
+        execution,
+        promise: pending,
+      })
+      return pending
     },
     stopRun(runId: string) {
       if (hasRun(runId)) stopPtyRun(runId)

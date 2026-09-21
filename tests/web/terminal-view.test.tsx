@@ -77,6 +77,7 @@ class MockResizeObserver {
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
+    options = { disableStdin: false }
     cols = 132
     rows = 43
     private customWheelHandler: ((event: WheelEvent) => boolean) | undefined

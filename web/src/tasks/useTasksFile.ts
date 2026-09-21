@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-
+import type { TasksSnapshot } from '../../../src/shared/tasks.js'
 import { getWorkspaceTasks, saveWorkspaceTasks } from '../api.js'
 import {
   appendChildTaskAtLine,
@@ -7,244 +7,163 @@ import {
   toggleTaskLine,
   updateTaskTextAtLine,
 } from './task-markdown.js'
-
-const toTasksSocketUrl = (workspaceId: string) => {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/tasks/${workspaceId}`
-}
-
-const shouldIgnoreRemoteUpdate = (
-  nextContent: string,
-  savedContent: string,
-  currentContent: string
-) => nextContent === savedContent || nextContent === currentContent
+import { TasksConflictError } from './tasks-api.js'
 
 export const useTasksFile = (workspaceId: string | null, demoContent?: string) => {
   const [content, setContent] = useState('')
   const [loaded, setLoaded] = useState(false)
-  const [hasConflict, setHasConflict] = useState(false)
-  const [remoteContent, setRemoteContent] = useState<string | null>(null)
-  const dirtyRef = useRef(false)
-  const savedContentRef = useRef('')
-  const contentRef = useRef('')
-
-  const applyRemoteContent = useCallback((nextContent: string, currentContent: string) => {
-    if (!dirtyRef.current) {
-      savedContentRef.current = nextContent
-      contentRef.current = nextContent
-      setContent(nextContent)
-      setHasConflict(false)
-      setRemoteContent(null)
-      return
-    }
-    if (shouldIgnoreRemoteUpdate(nextContent, savedContentRef.current, currentContent)) {
-      return
-    }
-    setRemoteContent(nextContent)
-    setHasConflict(true)
+  const [remote, setRemote] = useState<TasksSnapshot | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const base = useRef<TasksSnapshot | null>(null)
+  const draft = useRef('')
+  const remoteRef = useRef<TasksSnapshot | null>(null)
+  const writing = useRef(false)
+  const epoch = useRef(0)
+  const changeRemote = useCallback((snapshot: TasksSnapshot | null) => {
+    remoteRef.current = snapshot
+    setRemote(snapshot)
   }, [])
-
+  const receive = useCallback(
+    (snapshot: TasksSnapshot) => {
+      if (base.current?.version === snapshot.version) return
+      if (
+        !base.current ||
+        draft.current === base.current.content ||
+        draft.current === snapshot.content
+      ) {
+        base.current = snapshot
+        draft.current = snapshot.content
+        setContent(snapshot.content)
+        changeRemote(null)
+      } else changeRemote(snapshot)
+    },
+    [changeRemote]
+  )
   useEffect(() => {
-    if (!workspaceId) {
-      setContent('')
-      setLoaded(false)
-      setHasConflict(false)
-      setRemoteContent(null)
-      dirtyRef.current = false
-      savedContentRef.current = ''
-      contentRef.current = ''
-      return
-    }
-    let cancelled = false
+    const current = ++epoch.current
+    base.current = null
+    draft.current = ''
+    writing.current = false
     setContent('')
     setLoaded(false)
-    setHasConflict(false)
-    setRemoteContent(null)
-    dirtyRef.current = false
-    savedContentRef.current = ''
-    contentRef.current = ''
-    void getWorkspaceTasks(workspaceId)
-      .then(({ content: nextContent }) => {
-        if (cancelled) return
-        savedContentRef.current = nextContent
-        dirtyRef.current = false
-        contentRef.current = nextContent
-        setContent(nextContent)
-        setLoaded(true)
-        setHasConflict(false)
-        setRemoteContent(null)
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        savedContentRef.current = ''
-        dirtyRef.current = false
-        contentRef.current = ''
-        setContent('')
-        setLoaded(true)
-        setHasConflict(false)
-        console.error('[hive] swallowed:tasks.initialLoad', error)
-        setRemoteContent(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceId])
-
-  useEffect(() => {
+    changeRemote(null)
+    setError(null)
     if (!workspaceId) return
-    let closed = false
-    const socket = new WebSocket(toTasksSocketUrl(workspaceId))
+    let stopped = false,
+      socketReceived = false
+    void getWorkspaceTasks(workspaceId)
+      .then((snapshot) => {
+        if (stopped || current !== epoch.current || socketReceived) return
+        receive(snapshot)
+        setLoaded(true)
+      })
+      .catch((cause: unknown) => {
+        if (!stopped && !socketReceived)
+          setError(cause instanceof Error ? cause.message : String(cause))
+      })
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const socket = new WebSocket(`${protocol}//${window.location.host}/ws/tasks/${workspaceId}`)
     socket.onmessage = (event) => {
-      if (closed) return
-      const payload = JSON.parse(event.data) as { content?: string; type: string }
-      if (payload.type !== 'tasks-snapshot' && payload.type !== 'tasks-updated') return
-      if (typeof payload.content !== 'string') return
-      applyRemoteContent(payload.content, contentRef.current)
+      if (stopped) return
+      const payload = JSON.parse(event.data) as Partial<TasksSnapshot> & {
+        type: string
+        error?: string
+      }
+      if (payload.type === 'tasks-error') {
+        setError(payload.error ?? 'Tasks could not be read')
+        return
+      }
+      if (
+        (payload.type === 'tasks-snapshot' || payload.type === 'tasks-updated') &&
+        typeof payload.content === 'string' &&
+        typeof payload.version === 'string'
+      ) {
+        socketReceived = true
+        receive({ content: payload.content, version: payload.version })
+        setLoaded(true)
+      }
     }
     return () => {
-      closed = true
+      stopped = true
+      epoch.current++
       socket.close()
     }
-  }, [applyRemoteContent, workspaceId])
-
-  // Demo short-circuit: all hooks have run above; now return static fixture data.
-  // workspaceId is null when demoContent is provided, so no server calls were made.
-  if (demoContent !== undefined) {
-    return {
-      content: demoContent,
-      hasConflict: false,
-      loaded: true,
-      onChange: (_value: string) => {},
-      onKeepLocal: () => {},
-      onReload: () => {},
-      onSave: async () => {},
-      toggleTaskAtLine: async (_lineIndex: number) => {},
-      appendTask: async (_text: string) => {},
-      appendSubtask: async (_parentLine: number, _text: string) => {},
-      updateTaskText: async (_lineIndex: number, _nextText: string) => {},
-      deleteTask: async (_lineIndex: number) => {},
-    }
+  }, [workspaceId, receive, changeRemote])
+  const change = (value: string) => {
+    draft.current = value
+    setContent(value)
   }
-
-  const persistTransform = async (
-    transform: (current: string) => string,
-    operationLabel: string
-  ) => {
-    if (!workspaceId) return
-    const previous = contentRef.current
-    const next = transform(previous)
-    if (next === previous) return
-    savedContentRef.current = next
-    contentRef.current = next
-    dirtyRef.current = false
-    setContent(next)
+  const save = async (value: string) => {
+    if (!workspaceId || demoContent !== undefined) return
+    if (!base.current || writing.current) {
+      const message = 'Wait for the current tasks request to finish; your draft is preserved.'
+      setError(message)
+      throw new Error(message)
+    }
+    const current = epoch.current,
+      expected = base.current.version
+    writing.current = true
+    setError(null)
     try {
-      const response = await saveWorkspaceTasks(workspaceId, { content: next })
-      savedContentRef.current = response.content
-      contentRef.current = response.content
-      setContent(response.content)
-    } catch (error) {
-      savedContentRef.current = previous
-      contentRef.current = previous
-      setContent(previous)
-      console.error(`[hive] swallowed:tasks.${operationLabel}`, error)
-      throw error
+      const saved = await saveWorkspaceTasks(workspaceId, {
+        content: value,
+        expected_version: expected,
+      })
+      if (current !== epoch.current) return
+      if (base.current.version !== expected && base.current.version !== saved.version) return
+      base.current = saved
+      if (remoteRef.current?.version === saved.version) changeRemote(null)
+      if (draft.current === value) change(saved.content)
+    } catch (cause) {
+      if (current === epoch.current) {
+        if (cause instanceof TasksConflictError) changeRemote(cause.current)
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
+      throw cause
+    } finally {
+      if (current === epoch.current) writing.current = false
     }
   }
-
+  const transform = async (operation: (value: string) => string) => {
+    if (!workspaceId || demoContent !== undefined) return
+    const next = operation(draft.current)
+    if (next === draft.current) return
+    change(next)
+    await save(next)
+  }
   return {
-    content,
-    hasConflict,
-    loaded,
-    onChange: (value: string) => {
-      dirtyRef.current = value !== savedContentRef.current
-      contentRef.current = value
-      setContent(value)
-    },
-    onKeepLocal: () => {
-      setHasConflict(false)
-      setRemoteContent(null)
-    },
+    content: demoContent ?? content,
+    loaded: demoContent !== undefined || loaded,
+    hasConflict: demoContent === undefined && remote !== null,
+    remoteContent: remote?.content ?? null,
+    error,
+    onChange: demoContent === undefined ? change : (_value: string) => {},
+    onSave: () => save(draft.current),
     onReload: () => {
-      const nextContent = remoteContent ?? savedContentRef.current
-      savedContentRef.current = nextContent
-      dirtyRef.current = false
-      contentRef.current = nextContent
-      setContent(nextContent)
-      setHasConflict(false)
-      setRemoteContent(null)
+      const snapshot = remoteRef.current ?? base.current
+      if (!snapshot) return
+      base.current = snapshot
+      change(snapshot.content)
+      changeRemote(null)
+      setError(null)
     },
-    onSave: async () => {
-      if (!workspaceId) return
-      const response = await saveWorkspaceTasks(workspaceId, { content })
-      savedContentRef.current = response.content
-      dirtyRef.current = false
-      contentRef.current = response.content
-      setContent(response.content)
-      setHasConflict(false)
-      setRemoteContent(null)
+    // Explicitly acknowledges comparison/merge; the following save still uses a checked version.
+    onKeepLocal: () => {
+      if (remoteRef.current) base.current = remoteRef.current
+      changeRemote(null)
+      setError(null)
     },
-    toggleTaskAtLine: async (lineIndex: number) => {
-      if (!workspaceId) return
-      const previous = contentRef.current
-      const next = toggleTaskLine(previous, lineIndex)
-      if (next === previous) return
-      savedContentRef.current = next
-      contentRef.current = next
-      dirtyRef.current = false
-      setContent(next)
-      try {
-        const response = await saveWorkspaceTasks(workspaceId, { content: next })
-        savedContentRef.current = response.content
-        contentRef.current = response.content
-        setContent(response.content)
-      } catch (error) {
-        savedContentRef.current = previous
-        contentRef.current = previous
-        setContent(previous)
-        throw error
-      }
-    },
-    appendTask: async (text: string) => {
-      const trimmed = text.trim()
-      if (!workspaceId || !trimmed) return
-      const previous = contentRef.current
-      const needsLeadingNewline = previous.length > 0 && !previous.endsWith('\n')
-      const next = `${previous}${needsLeadingNewline ? '\n' : ''}- [ ] ${trimmed}\n`
-      savedContentRef.current = next
-      contentRef.current = next
-      dirtyRef.current = false
-      setContent(next)
-      try {
-        const response = await saveWorkspaceTasks(workspaceId, { content: next })
-        savedContentRef.current = response.content
-        contentRef.current = response.content
-        setContent(response.content)
-      } catch (error) {
-        savedContentRef.current = previous
-        contentRef.current = previous
-        setContent(previous)
-        throw error
-      }
-    },
-    appendSubtask: async (parentLine: number, text: string) => {
-      const trimmed = text.trim()
-      if (!trimmed) return
-      await persistTransform(
-        (current) => appendChildTaskAtLine(current, parentLine, trimmed),
-        'appendSubtask'
-      )
-    },
-    updateTaskText: async (lineIndex: number, nextText: string) => {
-      const trimmed = nextText.trim()
-      if (!trimmed) return
-      await persistTransform(
-        (current) => updateTaskTextAtLine(current, lineIndex, trimmed),
-        'updateTaskText'
-      )
-    },
-    deleteTask: async (lineIndex: number) => {
-      await persistTransform((current) => deleteTaskLine(current, lineIndex), 'deleteTask')
-    },
+    toggleTaskAtLine: (line: number) => transform((value) => toggleTaskLine(value, line)),
+    appendTask: (text: string) =>
+      transform((value) =>
+        text.trim()
+          ? `${value}${value && !value.endsWith('\n') ? '\n' : ''}- [ ] ${text.trim()}\n`
+          : value
+      ),
+    appendSubtask: (line: number, text: string) =>
+      transform((value) => (text.trim() ? appendChildTaskAtLine(value, line, text.trim()) : value)),
+    updateTaskText: (line: number, text: string) =>
+      transform((value) => (text.trim() ? updateTaskTextAtLine(value, line, text.trim()) : value)),
+    deleteTask: (line: number) => transform((value) => deleteTaskLine(value, line)),
   }
 }

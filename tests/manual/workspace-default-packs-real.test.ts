@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test, vi } from 'vitest'
 import { readWorkspaceSkillFiles } from '../../src/server/skill-pack-config.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 vi.unmock('../../src/server/default-workspace-skill-pack.js')

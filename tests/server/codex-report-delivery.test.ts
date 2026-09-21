@@ -8,7 +8,7 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
 import { deliverCodexReport } from '../../src/server/codex-report-delivery.js'
 import { createReportOutboxStore } from '../../src/server/report-outbox-store.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -23,7 +23,7 @@ const waitFor = async (check: () => boolean, timeout = 12_000) => {
   }
 }
 
-const setup = async (ignoredEnters = 1, display = 'collapsed') => {
+const setup = async (ignoredEnters = 1, display = 'collapsed', workerTarget = false) => {
   const dir = mkdtempSync(join(tmpdir(), 'hive-codex-receipt-'))
   const workspacePath = join(dir, 'workspace')
   const sessions = join(dir, 'codex', 'sessions')
@@ -34,9 +34,7 @@ const setup = async (ignoredEnters = 1, display = 'collapsed') => {
   const manager = createAgentManager()
   const store = createRuntimeStore({ agentManager: manager, dataDir: dir })
   const db = new Database(join(dir, 'runtime.sqlite'))
-  let runId: string | undefined
   cleanups.push(async () => {
-    if (runId && manager.getRun(runId).status === 'running') manager.writeInput(runId, '\x03')
     await store.close()
     db.close()
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
@@ -44,7 +42,8 @@ const setup = async (ignoredEnters = 1, display = 'collapsed') => {
   const workspace = store.createWorkspace(workspacePath, 'Receipt regression')
   const orchestratorId = `${workspace.id}:orchestrator`
   const worker = store.addWorker(workspace.id, { name: 'Reviewer', role: 'reviewer' })
-  store.configureAgentLaunch(workspace.id, orchestratorId, {
+  const target = workerTarget ? worker.id : orchestratorId
+  store.configureAgentLaunch(workspace.id, target, {
     command: process.execPath,
     args: [
       resolve('tests/fixtures/codex-report-tui.mjs'),
@@ -57,12 +56,16 @@ const setup = async (ignoredEnters = 1, display = 'collapsed') => {
     interactiveCommand: 'codex',
     sessionIdCapture: { source: 'codex_session_jsonl_dir', pattern: `${sessions}/**/*.jsonl` },
   })
-  runId = (await store.startAgent(workspace.id, orchestratorId, { hivePort: '4010' })).runId
+  const runId = (await store.startAgent(workspace.id, target, { hivePort: '4010' })).runId
   const currentRunId = runId
   await waitFor(() =>
-    Boolean(db.prepare('SELECT 1 FROM agent_sessions WHERE agent_id = ?').get(orchestratorId))
+    Boolean(db.prepare('SELECT 1 FROM agent_sessions WHERE agent_id = ?').get(target))
   )
-  await waitFor(() => manager.getRun(currentRunId).output.includes('APPLICATION_ACCEPTED'))
+  await waitFor(() =>
+    manager
+      .getRun(currentRunId)
+      .output.includes(workerTarget ? 'Ask Codex to do anything' : 'APPLICATION_ACCEPTED')
+  )
   return {
     db,
     dir,
@@ -238,3 +241,44 @@ test('a terminal with no acceptance keeps its report and diagnostic durable inst
   expect(manager.getInputSequence(runId)).toBe(before)
   expect(manager.getRun(runId).output).not.toContain('PASTES=2')
 }, 25_000)
+
+test('dispatches share native receipt delivery and recover the journal acknowledgement after database reopen without new PTY input', async () => {
+  const f = await setup(1, 'collapsed', true)
+  const first = await f.store.dispatchTask(f.workspace.id, f.worker.id, 'NATIVE_DISPATCH_FIRST')
+  const second = await f.store.dispatchTask(f.workspace.id, f.worker.id, 'NATIVE_DISPATCH_SECOND')
+  await waitFor(() => f.store.dispatchDelivery.records.get(second.id)?.state === 'confirmed')
+  expect(f.store.dispatchDelivery.records.get(first.id)).toMatchObject({
+    state: 'confirmed',
+    evidence: 'native_receipt',
+    attempt: 1,
+  })
+  expect(f.store.dispatchDelivery.health.get(first.id)?.start_source).toBe('native_receipt')
+  const messages = readFileSync(f.journal, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .filter((record) => record.payload?.role === 'user')
+    .map((record) => record.payload.content[0].text)
+  expect(messages.filter((text) => text.includes('NATIVE_DISPATCH_FIRST'))).toHaveLength(1)
+  expect(messages.filter((text) => text.includes('NATIVE_DISPATCH_SECOND'))).toHaveLength(1)
+  // Crash window: native acceptance is durable, but the SQLite attempt has no acknowledgement.
+  await f.store.close()
+  f.db
+    .prepare(
+      "UPDATE message_deliveries SET state='attempting',evidence='none',confirmed_at=NULL WHERE id=?"
+    )
+    .run(first.id)
+  const journalBefore = readFileSync(f.journal, 'utf8')
+  const recovered = createRuntimeStore({ agentManager: createAgentManager(), dataDir: f.dir })
+  try {
+    await waitFor(() => recovered.dispatchDelivery.records.get(first.id)?.state === 'confirmed')
+    expect(recovered.dispatchDelivery.records.get(first.id)).toMatchObject({
+      attempt: 1,
+      evidence: 'native_receipt',
+    })
+    expect(readFileSync(f.journal, 'utf8')).toBe(journalBefore)
+    expect(recovered.listWorkers(f.workspace.id)[0]?.pendingTaskCount).toBe(2)
+  } finally {
+    await recovered.close()
+  }
+}, 30_000)

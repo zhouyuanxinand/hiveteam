@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -5,7 +6,8 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { callHiveMcpTool } from '../../src/cli/hive-mcp.js'
 import { HIVE_SUPERVISOR_TOKEN_HEADER } from '../../src/server/external-goal-auth.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
+import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
 
@@ -20,7 +22,8 @@ afterEach(async () => {
 })
 
 const getSupervisorToken = async (baseUrl: string) => {
-  const response = await fetch(`${baseUrl}/api/external-goals/session`)
+  const cookie = await getUiCookie(baseUrl)
+  const response = await fetch(`${baseUrl}/api/external-goals/session`, { headers: { cookie } })
   expect(response.status).toBe(200)
   const body = (await response.json()) as { token: string }
   expect(body.token).toEqual(expect.any(String))
@@ -47,8 +50,18 @@ describe('external Supervisor goals', () => {
     const server = await startTestServer()
     servers.push(server)
 
+    const device = server.store.remote.devices.insert({
+      id: randomUUID(),
+      name: 'Synthetic device',
+      keys: { d2p: new Uint8Array(32).fill(1), p2d: new Uint8Array(32).fill(2) },
+      devicePublicKey: new Uint8Array(32).fill(3),
+    })
+
     const deniedSession = await fetch(`${server.baseUrl}/api/external-goals/session`, {
-      headers: { 'x-hive-remote-secret': server.store.getRemoteTunnelSecret() },
+      headers: {
+        'x-hive-remote-secret': server.store.getRemoteTunnelSecret(),
+        'x-hive-remote-device': device.id,
+      },
     })
     expect(deniedSession.status).toBe(403)
 
@@ -57,6 +70,7 @@ describe('external Supervisor goals', () => {
       headers: {
         [HIVE_SUPERVISOR_TOKEN_HEADER]: token,
         'x-hive-remote-secret': server.store.getRemoteTunnelSecret(),
+        'x-hive-remote-device': device.id,
       },
     })
     expect(deniedController.status).toBe(403)
@@ -209,7 +223,7 @@ describe('external Supervisor goals', () => {
       callHiveMcpTool(
         'hive.inspect_workspace',
         { workspace_id: workspace.id },
-        { baseUrl: server.baseUrl }
+        { baseUrl: server.baseUrl, env: { HIVE_SUPERVISOR_TOKEN: token } }
       )
     ).resolves.toMatchObject({
       orchestrator: expect.objectContaining({ active_run: true, id: orchestratorId }),

@@ -2,17 +2,28 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Check, Play, RefreshCw, Square, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { DispatchVerificationView } from '../../../src/shared/verification.js'
+import type { VerificationProfile } from '../../../src/shared/verification-profile.js'
 import type { DispatchSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { CodeReviewPanel } from './CodeReviewPanel.js'
 import { DispatchIntegrationPanel } from './DispatchIntegrationPanel.js'
 import { DispatchPullRequestPanel } from './DispatchPullRequestPanel.js'
+import { IntegrationCandidatePanel } from './IntegrationCandidatePanel.js'
+import { VerificationLog } from './VerificationLog.js'
+import { VerificationProfiles } from './VerificationProfiles.js'
 import {
   getDispatchVerifications,
   startDispatchVerification,
   updateDispatchVerification,
 } from './verification-api.js'
 
-export type VerificationPanel = 'verification' | 'integration' | 'publication' | 'branch'
+export type VerificationPanel =
+  | 'review'
+  | 'verification'
+  | 'integration'
+  | 'candidate'
+  | 'publication'
+  | 'branch'
 
 import { WorkerBranchPanel } from './WorkerBranchPanel.js'
 
@@ -27,12 +38,13 @@ export const DispatchVerificationDialog = ({
   onChanged: () => void
   initialPanel?: VerificationPanel
 }) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const commandId = useId()
   const [view, setView] = useState<DispatchVerificationView | null>(null)
   const [panel, setPanel] = useState<VerificationPanel>(initialPanel)
   const panelInitialized = useRef(false)
   const [command, setCommand] = useState('')
+  const [profile, setProfile] = useState<VerificationProfile | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -85,6 +97,7 @@ export const DispatchVerificationDialog = ({
           command: command.trim(),
           headSha: view.headSha,
           reportRevision: view.reportRevision,
+          ...(profile ? { profileId: profile.id } : {}),
         })
       } else if (latest) {
         await updateDispatchVerification(
@@ -132,21 +145,35 @@ export const DispatchVerificationDialog = ({
                 </button>
               </Dialog.Close>
             </header>
-            {view?.isolated ? (
+            {view ? (
               <nav className="delivery-step-navigation" aria-label={t('verification.sections')}>
-                {(['verification', 'integration', 'publication', 'branch'] as const).map(
-                  (value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className="icon-btn"
-                      aria-pressed={panel === value}
-                      onClick={() => setPanel(value)}
-                    >
-                      {t(`verification.section.${value}`)}
-                    </button>
-                  )
-                )}
+                {(
+                  [
+                    'review',
+                    'verification',
+                    ...(view.isolated
+                      ? (['integration', 'candidate', 'publication', 'branch'] as const)
+                      : []),
+                  ] as const
+                ).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className="icon-btn"
+                    aria-pressed={panel === value}
+                    onClick={() => setPanel(value)}
+                  >
+                    {value === 'review'
+                      ? language === 'zh'
+                        ? '代码审查'
+                        : 'Code review'
+                      : value === 'candidate'
+                        ? language === 'zh'
+                          ? '组合候选'
+                          : 'Candidate'
+                        : t(`verification.section.${value}`)}
+                  </button>
+                ))}
               </nav>
             ) : null}
             <div className="dispatch-verification-body scroll-y">
@@ -160,7 +187,15 @@ export const DispatchVerificationDialog = ({
                 <p>{t('delivery.loading')}</p>
               ) : (
                 <>
-                  {!view.isolated || panel === 'verification' ? (
+                  {panel === 'review' ? (
+                    <CodeReviewPanel
+                      key={`${dispatch.workspaceId}:${dispatch.id}`}
+                      workspaceId={dispatch.workspaceId}
+                      dispatchId={dispatch.id}
+                      onChanged={onChanged}
+                    />
+                  ) : null}
+                  {panel === 'verification' ? (
                     <>
                       <div className="dispatch-verification-version">
                         <span>
@@ -194,9 +229,19 @@ export const DispatchVerificationDialog = ({
                       ) : !view.canRun &&
                         !!view.headSha &&
                         !view.isDirty &&
-                        latest?.state !== 'running' ? (
+                        latest?.state !== 'running' &&
+                        latest?.state !== 'queued' ? (
                         <p className="dispatch-report-note">{t('verification.workspaceBusy')}</p>
                       ) : null}
+                      <VerificationProfiles
+                        workspaceId={dispatch.workspaceId}
+                        selected={profile}
+                        onSelect={(next) => {
+                          setProfile(next)
+                          if (next) setCommand(next.command)
+                        }}
+                        disabled={busy || latest?.state === 'running' || latest?.state === 'queued'}
+                      />
                       <label htmlFor={commandId}>{t('verification.command')}</label>
                       <textarea
                         id={commandId}
@@ -205,7 +250,12 @@ export const DispatchVerificationDialog = ({
                         maxLength={2000}
                         rows={2}
                         placeholder="pnpm install --frozen-lockfile && pnpm test"
-                        disabled={busy || latest?.state === 'running'}
+                        disabled={
+                          !!profile ||
+                          busy ||
+                          latest?.state === 'running' ||
+                          latest?.state === 'queued'
+                        }
                       />
                       <p className="dispatch-report-note">{t('verification.commandHint')}</p>
                       <button
@@ -231,6 +281,7 @@ export const DispatchVerificationDialog = ({
                             {t('verification.exitCode')} {latest.exitCode ?? '—'}
                           </p>
                           <code className="dispatch-verification-command">{latest.command}</code>
+                          <VerificationLog key={latest.id} run={latest} />
                           {view.staleReason ? (
                             <p role="status">{t(`verification.stale.${view.staleReason}`)}</p>
                           ) : null}
@@ -248,7 +299,7 @@ export const DispatchVerificationDialog = ({
                           {latest.outputTruncated ? (
                             <p className="dispatch-report-note">{t('verification.truncated')}</p>
                           ) : null}
-                          {latest.state === 'running' ? (
+                          {latest.state === 'running' || latest.state === 'queued' ? (
                             <button
                               type="button"
                               className="icon-btn icon-btn--secondary"
@@ -291,6 +342,7 @@ export const DispatchVerificationDialog = ({
                               </summary>
                               <code className="dispatch-verification-command">{run.command}</code>
                               <pre className="dispatch-verification-output">{run.output}</pre>
+                              <VerificationLog run={run} />
                             </details>
                           ))}
                         </details>
@@ -299,6 +351,13 @@ export const DispatchVerificationDialog = ({
                   ) : null}
                   {view.isolated ? (
                     <div key={`${view.headSha}:${latest?.id}:${view.accepted}:${view.isDirty}`}>
+                      {panel === 'candidate' ? (
+                        <IntegrationCandidatePanel
+                          workspaceId={dispatch.workspaceId}
+                          dispatchId={dispatch.id}
+                          onChanged={onChanged}
+                        />
+                      ) : null}
                       {panel === 'integration' ? (
                         <DispatchIntegrationPanel
                           workspaceId={dispatch.workspaceId}

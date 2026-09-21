@@ -160,16 +160,16 @@ describe('parseReportArgs', () => {
       throw new Error('expected parseReportArgs to throw')
     })
 
-    test('--dispatch on a status command points back to team report', () => {
-      try {
-        parseReportArgs(['working', '--dispatch', 'abc'], 'status')
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        expect(message).toContain('team status does not accept --dispatch')
-        expect(message).toContain('Usage: team status')
-        return
-      }
-      throw new Error('expected parseReportArgs to throw')
+    test('task-scoped status accepts structured progress and requires a dispatch', () => {
+      expect(
+        parseReportArgs(['working', '--dispatch', 'abc', '--progress', 'progress'], 'status')
+      ).toMatchObject({ dispatchId: 'abc', progressState: 'progress', result: 'working' })
+      expect(() => parseReportArgs(['working', '--progress', 'progress'], 'status')).toThrow(
+        '--progress requires --dispatch'
+      )
+      expect(() =>
+        parseReportArgs(['working', '--dispatch', 'abc', '--progress', 'progress'], 'report')
+      ).toThrow('only team status supports it')
     })
 
     test('status command missing positional uses status usage line', () => {

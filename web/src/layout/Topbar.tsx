@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 import { useI18n } from '../i18n.js'
 import { NotificationSettingsButton } from '../notifications/NotificationSettingsButton.js'
 import { RemoteAccessButton } from '../remote/RemoteAccessButton.js'
+import { ResourceStatusButton } from '../resources/ResourceStatusButton.js'
+import { SupervisorAccessButton } from '../security/SupervisorAccessButton.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { APP_VERSION } from '../version.js'
 import { ThemeToggle } from './ThemeToggle.js'
@@ -73,10 +75,12 @@ export const Topbar = ({
       </div>
       <div className="topbar-spacer min-w-0 flex-1" />
       <div className="topbar-actions flex min-w-0 items-center gap-1">
+        <RemoteAccessButton />
+        <ResourceStatusButton />
         {hideActions ? null : (
           <>
             {actions}
-            <RemoteAccessButton />
+            <SupervisorAccessButton />
             {onToggleGit ? (
               <Tooltip label={t('git.title')}>
                 <button

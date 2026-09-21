@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<{ close: () => Promise<void> }> = []

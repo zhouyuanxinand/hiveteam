@@ -7,6 +7,7 @@ import {
   listWorkspaces,
   saveActiveWorkspaceId,
 } from './api.js'
+import { UiSessionRequiredError } from './ui-session.js'
 
 const resolveActiveWorkspaceId = (workspaces: WorkspaceSummary[], persistedId: string | null) => {
   if (persistedId && workspaces.some((workspace) => workspace.id === persistedId)) {
@@ -35,7 +36,7 @@ export const useInitializeUiSession = (
       | ((current: WorkspaceSummary[] | null) => WorkspaceSummary[] | null)
   ) => void,
   setActiveWorkspaceId: (value: string | null) => void,
-  onError?: (message: string) => void
+  onError?: (error: Error) => void
 ) => {
   useEffect(() => {
     let cancelled = false
@@ -69,7 +70,13 @@ export const useInitializeUiSession = (
           // making "runtime down" indistinguishable from "no workspaces yet").
           setActiveWorkspaceId(null)
           if (onError) {
-            onError('Could not reach HiveTeam runtime. Refresh once the runtime is back up.')
+            onError(
+              error instanceof UiSessionRequiredError
+                ? error
+                : new Error(
+                    'Could not reach HiveTeam runtime. Refresh once the runtime is back up.'
+                  )
+            )
           }
           console.error('[hive] swallowed:initSession.bootstrap', error)
         }

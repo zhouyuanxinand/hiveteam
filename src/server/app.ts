@@ -4,10 +4,20 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { dirname, extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { ExecutionPolicyError } from './execution-policy-error.js'
 import { type PickFolderResponse, pickFolder } from './fs-pick-folder.js'
 import { HttpError } from './http-errors.js'
 import { assertLocalRequest } from './local-request-guard.js'
 import { openWorkspace } from './open-target-commands.js'
+import { withRemoteActionCheck } from './remote-action-context.js'
+import {
+  authorizeRemoteHttp,
+  executeRemoteHttpInput,
+  recheckRemoteRequest,
+  remoteQueueGrantForRequest,
+} from './remote-http-authorization.js'
+import { authenticateUiRequest, getRequestPrincipal } from './request-principal.js'
+import { ResourceLimitError } from './resource-budget-store.js'
 import type { OpenWorkspaceService } from './route-types.js'
 import { matchRoute } from './routes.js'
 import type { RuntimeStore } from './runtime-store.js'
@@ -142,19 +152,27 @@ export const createApp = ({
 
     try {
       assertLocalRequest(request)
+      authenticateUiRequest(request, store)
 
       const match = matchRoute(method, url.pathname)
       if (match) {
-        await match.handler({
-          request,
-          response,
-          store,
-          tasksFileService,
-          pickFolderService,
-          openWorkspaceService,
-          versionService,
-          params: match.params,
-        })
+        authorizeRemoteHttp(request, response, store, match)
+        await withRemoteActionCheck(
+          () => recheckRemoteRequest(request),
+          () =>
+            match.handler({
+              request,
+              response,
+              store,
+              tasksFileService,
+              pickFolderService,
+              openWorkspaceService,
+              versionService,
+              params: match.params,
+            }),
+          (runId, byteCount, write) => executeRemoteHttpInput(request, runId, byteCount, write),
+          remoteQueueGrantForRequest(request)
+        )
         return
       }
 
@@ -177,16 +195,30 @@ export const createApp = ({
       sendJson(response, 404, { error: 'Not found' })
     } catch (error) {
       if (error instanceof HttpError) {
-        sendJson(response, error.statusCode, { error: error.message })
+        sendJson(response, error.statusCode, {
+          error: error.message,
+          ...('code' in error && typeof error.code === 'string' ? { code: error.code } : {}),
+          ...(error instanceof ExecutionPolicyError
+            ? { missing_capabilities: error.missingCapabilities }
+            : {}),
+          ...(error instanceof ResourceLimitError
+            ? {
+                reason: error.reason,
+                ...(getRequestPrincipal(request)?.kind === 'local_user'
+                  ? { resources: error.snapshot }
+                  : {}),
+              }
+            : {}),
+        })
         return
       }
       const message = error instanceof Error ? error.message : 'Unknown error'
       sendJson(response, 500, { error: message })
     }
   })
-  createTerminalWebSocketServer(server, store, tasksFileService)
+  const terminalServer = createTerminalWebSocketServer(server, store, tasksFileService)
 
-  return { server, store }
+  return { server, store, terminalMetrics: terminalServer.metrics }
 }
 
 export type { CreateAppOptions }

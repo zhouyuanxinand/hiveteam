@@ -5,6 +5,7 @@ import { createRemoteAuditStore } from '../../src/server/remote-audit-store.js'
 import { createRemoteConfigSource } from '../../src/server/remote-config-keys.js'
 import { createRemoteDeviceStore } from '../../src/server/remote-device-store.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
+import { applySchemaVersion49 } from '../../src/server/sqlite-schema-v49.js'
 
 describe('remote persistence', () => {
   test('persists device metadata, key material and revocation state', () => {
@@ -83,7 +84,7 @@ describe('remote persistence', () => {
     db.close()
   })
 
-  test('queues bounded audit previews and flushes them deterministically', async () => {
+  test('persists input metadata without storing keystroke previews', async () => {
     const db = new BetterSqlite3(':memory:')
     initializeRuntimeDatabase(db)
     const audit = createRemoteAuditStore(db)
@@ -100,7 +101,7 @@ describe('remote persistence', () => {
       {
         action: 'ws_input',
         byte_count: 20,
-        preview: 'x'.repeat(120),
+        preview: null,
       },
     ])
     db.close()
@@ -123,6 +124,7 @@ describe('remote persistence', () => {
       )
     `)
 
+    applySchemaVersion49(db)
     const audit = createRemoteAuditStore(db)
     audit.enqueue({
       action: 'http',

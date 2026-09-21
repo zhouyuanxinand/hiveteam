@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -337,7 +337,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     expect(store.listTerminalRuns(body.id)).toEqual([])
   })
 
-  test('default Claude orchestrator launch injects bypass permission args', async () => {
+  test('default Claude orchestrator launch keeps permission bypass disabled', async () => {
     setEnv('HIVE_ORCHESTRATOR_COMMAND', undefined)
     setEnv('HIVE_ORCHESTRATOR_ARGS_JSON', undefined)
 
@@ -383,11 +383,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     expect(startSpy).toHaveBeenCalledOnce()
     const startInput = startSpy.mock.calls[0]?.[0]
     expect(startInput?.command).toBe('claude')
-    expect(startInput?.args).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-    ])
+    expect(startInput?.args).toEqual([])
     expect(
       store.peekAgentLaunchConfig(body.id, `${body.id}:orchestrator`)?.commandPresetId
     ).toBeNull()

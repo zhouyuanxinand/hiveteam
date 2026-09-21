@@ -8,9 +8,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { App } from '../../web/src/app.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 let cleanupServer: (() => Promise<void>) | undefined
+let server: Awaited<ReturnType<typeof startTestServer>>
+let createdResponse: unknown
 let sandboxRoot = ''
 const nativeFetch = globalThis.fetch
 const tempDirs: string[] = []
@@ -18,27 +20,35 @@ const WORKSPACE_PICKER_TIMEOUT_MS = 15_000
 const WORKSPACE_CREATE_TIMEOUT_MS = 30_000
 
 beforeEach(async () => {
+  createdResponse = undefined
   window.localStorage.setItem('hive.first-run-seen', '1')
   sandboxRoot = mkdtempSync(join(tmpdir(), 'hive-fs-sandbox-'))
   mkdirSync(join(sandboxRoot, 'alpha-project'), { recursive: true })
   tempDirs.push(sandboxRoot)
   process.env.HIVE_FS_BROWSE_ROOT = sandboxRoot
 
-  const server = await startTestServer({
+  server = await startTestServer({
     pickFolderPath: join(sandboxRoot, 'alpha-project'),
   })
   cleanupServer = server.close
   let cookie = ''
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
-  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
     const value =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     const url = value.startsWith('http') ? value : `${server.baseUrl}${value}`
     const headers = new Headers(init?.headers)
     headers.set('cookie', cookie)
-    return nativeFetch(url, { ...init, headers })
+    const response = await nativeFetch(url, { ...init, headers })
+    if (new URL(url).pathname === '/api/workspaces' && init?.method === 'POST')
+      createdResponse = await response.clone().json()
+    return response
   })
 })
 
@@ -52,6 +62,31 @@ afterEach(async () => {
 })
 
 describe('workspace create initial state', () => {
+  test('advanced folder browsing creates an offline basic workspace without attempting to launch an agent', async () => {
+    render(<App />)
+    await screen.findByText('No Workspaces')
+    fireEvent.click(screen.getByRole('button', { name: 'New Workspace' }))
+    await screen.findByTestId('confirm-workspace-dialog')
+    fireEvent.click(screen.getByTestId('confirm-workspace-browse-toggle'))
+    fireEvent.click(await screen.findByTestId('fs-entry-alpha-project'))
+    await waitFor(() =>
+      expect(screen.getByTestId('fs-preview-path')).toHaveTextContent('alpha-project')
+    )
+    const create = screen.getByTestId('add-workspace-create')
+    expect(create).toBeEnabled()
+    fireEvent.click(create)
+    await waitFor(() =>
+      expect(createdResponse).toMatchObject({
+        orchestrator_start: { ok: false, error: null, run_id: null },
+      })
+    )
+    const workspace = server.store.listWorkspaces()[0]
+    expect(workspace).toBeDefined()
+    if (!workspace) throw new Error('Workspace was not persisted')
+    expect(server.store.listTerminalRuns(workspace.id)).toEqual([])
+    expect(server.store.onboarding.view(workspace.id)?.mode).toBe('basic')
+  })
+
   test('newly created workspace immediately shows the Linear workspace view with empty drawer', async () => {
     render(<App />)
 

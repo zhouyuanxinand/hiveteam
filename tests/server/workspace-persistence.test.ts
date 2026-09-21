@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<{ close: () => Promise<void> }> = []
@@ -17,7 +17,7 @@ afterEach(async () => {
 })
 
 describe('workspace persistence', () => {
-  test('reloads workspaces from sqlite-backed storage', () => {
+  test('reloads workspaces from sqlite-backed storage', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'hive-store-'))
     tempDirs.push(tempDir)
 
@@ -26,6 +26,7 @@ describe('workspace persistence', () => {
     firstStore.createWorkspace('/tmp/hive-alpha', 'Alpha')
     firstStore.createWorkspace('/tmp/hive-beta', 'Beta')
 
+    await firstStore.close()
     const secondStore = createRuntimeStore({ dataDir: tempDir })
     stores.push(secondStore)
 

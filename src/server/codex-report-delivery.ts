@@ -43,6 +43,7 @@ export const deliverCodexReport = async ({
   text,
   receipt,
   sessions,
+  waitMs,
 }: {
   agentManager: AgentManager
   agentId: string
@@ -51,6 +52,7 @@ export const deliverCodexReport = async ({
   text: string
   receipt: ReportDeliveryReceipt
   sessions: AgentSessionStorePort
+  waitMs?: number
 }) => {
   const marker = reportReceiptMarker(receipt.id)
   let checkpoint = receipt.checkpoint
@@ -66,7 +68,7 @@ export const deliverCodexReport = async ({
   const mirror = new TerminalStateMirror(size)
   mirror.write(agentManager.getRun(runId).output)
   const unsubscribe = agentManager.getOutputBus().subscribe(runId, (chunk) => mirror.write(chunk))
-  const deadline = Date.now() + WAIT_MS
+  const deadline = Date.now() + (waitMs ?? WAIT_MS)
   try {
     while (Date.now() < deadline) {
       const nextSize = agentManager.getTerminalSize(runId)

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const cleanups: Array<() => void | Promise<void>> = []

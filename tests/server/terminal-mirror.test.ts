@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []

@@ -3,6 +3,7 @@ import type { Database } from 'better-sqlite3'
 
 import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
 import { ConflictError } from './http-errors.js'
+import { assertWorkerCapacityInTransaction } from './resource-budget-store.js'
 import { getDefaultRoleDescription } from './role-templates.js'
 import type { WorkerInput, WorkspaceRecord, WorkspaceStore } from './workspace-store-contract.js'
 import { hydrateWorkspaceFromDb, seedWorkspacesFromDb } from './workspace-store-hydration.js'
@@ -47,14 +48,14 @@ export const createWorkspaceStore = (
     return workspace
   }
 
-  return {
-    addWorker(workspaceId, input) {
-      const workspace = getWorkspace(workspaceId)
+  const addWorkers: WorkspaceStore['addWorkers'] = (workspaceId, inputs, persist) => {
+    const workspace = getWorkspace(workspaceId)
+    const names = new Set(workspace.agents.filter(isWorkerAgent).map((agent) => agent.name))
+    const workers = inputs.map((input): AgentSummary => {
       const name = normalizeWorkerName(input.name)
-      if (workspace.agents.some((agent) => agent.name === name && isWorkerAgent(agent))) {
-        throw new ConflictError(`Worker name already exists: ${name}`)
-      }
-      const worker: AgentSummary = {
+      if (names.has(name)) throw new ConflictError(`Worker name already exists: ${name}`)
+      names.add(name)
+      return {
         ...(input.avatar ? { avatar: input.avatar } : {}),
         id: randomUUID(),
         workspaceId,
@@ -66,18 +67,32 @@ export const createWorkspaceStore = (
         status: 'stopped',
         pendingTaskCount: 0,
       }
-      db.prepare(
+    })
+    db.transaction(() => {
+      assertWorkerCapacityInTransaction(db, workspaceId, workers.length)
+      const insert = db.prepare(
         'INSERT INTO workers (id, workspace_id, name, avatar, description, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(
-        worker.id,
-        workspaceId,
-        worker.name,
-        worker.avatar ?? null,
-        worker.description,
-        worker.role,
-        Date.now()
       )
-      workspace.agents.push(worker)
+      for (const worker of workers)
+        insert.run(
+          worker.id,
+          workspaceId,
+          worker.name,
+          worker.avatar ?? null,
+          worker.description,
+          worker.role,
+          Date.now()
+        )
+      persist?.(workers)
+    }).immediate()
+    workspace.agents.push(...workers)
+    return workers
+  }
+  return {
+    addWorkers,
+    addWorker(workspaceId, input) {
+      const worker = addWorkers(workspaceId, [input])[0]
+      if (!worker) throw new Error('Worker batch returned no member')
       return worker
     },
     createWorkspace(path, name, language: WorkspaceLanguage = 'zh') {
@@ -97,6 +112,8 @@ export const createWorkspaceStore = (
       const workspace = getWorkspace(workspaceId)
       const agentIds = workspace.agents.map((agent) => agent.id)
       db.transaction(() => {
+        db.prepare('DELETE FROM data_archive_operations WHERE workspace_id=?').run(workspaceId)
+        db.prepare('DELETE FROM memory_context_snapshots WHERE workspace_id=?').run(workspaceId)
         db.prepare('DELETE FROM messages WHERE workspace_id = ?').run(workspaceId)
         db.prepare('DELETE FROM agent_launch_configs WHERE workspace_id = ?').run(workspaceId)
         db.prepare('DELETE FROM agent_sessions WHERE workspace_id = ?').run(workspaceId)
@@ -202,24 +219,39 @@ export const createWorkspaceStore = (
       workspace.autoResumeOnRestart = enabled
     },
     markAgentStarted(workspaceId, agentId) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM resource_agent_pauses WHERE workspace_id=? AND agent_id=?').run(
+          workspaceId,
+          agentId
+        )
+        db.prepare('UPDATE workers SET manual_stop = 0 WHERE workspace_id = ? AND id = ?').run(
+          workspaceId,
+          agentId
+        )
+      })()
       markAgentStarted(workspaces, workspaceId, agentId)
-      db.prepare('UPDATE workers SET manual_stop = 0 WHERE workspace_id = ? AND id = ?').run(
-        workspaceId,
-        agentId
-      )
     },
     markAgentStopped: (workspaceId, agentId) => markAgentStopped(workspaces, workspaceId, agentId),
     markAgentManuallyStopped(workspaceId, agentId) {
+      db.transaction(() => {
+        db.prepare(
+          'INSERT OR IGNORE INTO resource_agent_pauses(workspace_id,agent_id) VALUES(?,?)'
+        ).run(workspaceId, agentId)
+        db.prepare('UPDATE workers SET manual_stop = 1 WHERE workspace_id = ? AND id = ?').run(
+          workspaceId,
+          agentId
+        )
+      })()
       markAgentManuallyStopped(workspaces, workspaceId, agentId)
-      db.prepare('UPDATE workers SET manual_stop = 1 WHERE workspace_id = ? AND id = ?').run(
-        workspaceId,
-        agentId
-      )
     },
     isAgentManuallyStopped: (workspaceId, agentId) =>
       isAgentManuallyStopped(workspaces, workspaceId, agentId),
     markTaskDispatched: (workspaceId, workerId) =>
       markTaskDispatched(workspaces, workspaceId, workerId),
+    markTaskSubmitted(workspaceId, workerId) {
+      const worker = getWorkerRecord(workspaces, workspaceId, workerId)
+      if (worker.status !== 'stopped') worker.status = 'working'
+    },
     markTaskCancelled: (workspaceId, workerId) =>
       markTaskCancelled(workspaces, workspaceId, workerId),
     markTaskReported: (workspaceId, workerId) =>

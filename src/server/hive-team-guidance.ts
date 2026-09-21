@@ -43,9 +43,11 @@ export const buildWorkerReminderTail = (dispatchId: string, language: WorkspaceL
   language === 'en'
     ? '<hive-system-reminder>\n' +
       `You are a Hive Worker. Do not launch nested CLI subagents (Task / Explore / etc.) — finish the task yourself. When the task is done, blocked, or has failed, report with: \`team report "<result>" --dispatch ${dispatchId}\` (or \`team report --stdin --dispatch ${dispatchId}\` for long bodies).\n` +
+      `Acknowledge receipt with \`team status "Received" --dispatch ${dispatchId} --progress accepted\`. Send progress or waiting_input/waiting_permission/paused with the same --dispatch. A cancelled acknowledgement means this task has actually stopped.\n` +
       '</hive-system-reminder>'
     : '<hive-system-reminder>\n' +
       `你是 Hive worker。不要启动嵌套 CLI subagent（Task / Explore 等），请自己完成任务。任务完成、阻塞或失败时，使用 \`team report "<result>" --dispatch ${dispatchId}\` 汇报（长正文使用 \`team report --stdin --dispatch ${dispatchId}\`）。\n` +
+      `收到任务后用 \`team status "已接收" --dispatch ${dispatchId} --progress accepted\` 确认；进展和等待用 progress/waiting_input/waiting_permission/paused。只有此任务实际停止后才确认 cancelled。\n` +
       '</hive-system-reminder>'
 
 const ORCHESTRATOR_RULES = [
@@ -177,6 +179,7 @@ export const buildProtocolGuide = (topic: ProtocolGuideTopic): string => {
     return [
       renderGuideHeader('tasks', 'workspace task tracking'),
       '- Track durable work in `.hive/tasks.md` using a normal Markdown checklist.',
+      '- Read with `team tasks read`. The Orchestrator saves with `team tasks write --expected-version <version> --stdin`; on conflict, compare and merge before retrying. Workers can read but cannot overwrite the team checklist through this command. Direct filesystem edits are outside controlled-client conflict protection.',
       '- Before a larger change, read the current task list and preserve any explicit ordering or dependency notes.',
       '- Do not turn routine terminal output into task entries; task files are for work the team still needs to coordinate.',
       '- When a dispatch changes scope, update its task entry before sending a replacement dispatch.',
@@ -211,6 +214,7 @@ export const buildProtocolGuide = (topic: ProtocolGuideTopic): string => {
     '- A worker receives a specific dispatch and must complete it, report a blocker, or report failure through `team report`.',
     '- `team report "<result>" --dispatch <id>` closes the assigned dispatch; use `team report --stdin --dispatch <id>` for a long or multi-line report.',
     '- `team status "<state>"` is for readiness or progress only. It never closes a dispatch.',
+    '- Reviewers use `team review context --dispatch <source-dispatch-id>` for the exact repository, source commit, baseline and report revision. Read files with `team review file` and submit conclusions with `team review submit` carrying that original version JSON (see `team help`). Only enforced read-only reviewer runs can submit agent review evidence. Desktop acceptance, report completion, verification and integration are separate actions.',
     '- Do not use `team --help`, raw terminal output, or a built-in CLI subagent as a report; the Orchestrator only receives formal HiveTeam reports/status updates.',
     '',
     renderRules(getHiveTeamRules({ role: 'coder' })),

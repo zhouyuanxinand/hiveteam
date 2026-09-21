@@ -1,7 +1,14 @@
 import type WebSocket from 'ws'
+import { RemotePermissionError } from './remote-permission-store.js'
+import {
+  checkTerminalRead,
+  executeTerminalAction,
+  observeTerminalPermissions,
+  terminalGrant,
+} from './remote-terminal-authorization.js'
 
 import type { RuntimeStore } from './runtime-store.js'
-import { createTerminalOutputFlow } from './terminal-flow-control.js'
+import { createTerminalOutputFlow, FLOW_CONTROL } from './terminal-flow-control.js'
 import {
   parseTerminalControlMessage,
   serializeTerminalError,
@@ -16,6 +23,11 @@ interface ViewerState {
   controlSocket: WebSocket | null
   flowState: ReturnType<typeof createTerminalOutputFlow> | null
   ioSocket: WebSocket | null
+  coordinated: boolean
+  snapshotStarted: boolean
+  bootstrapChunks: string[]
+  bootstrapBytes: number
+  bootstrapTimer?: ReturnType<typeof setTimeout>
 }
 
 interface RunState {
@@ -27,6 +39,7 @@ interface RunState {
   outputUnsubscribe: (() => void) | null
   viewers: Map<string, ViewerState>
   recovery: ReturnType<typeof createTerminalSessionRecovery> | null
+  ptyPaused: boolean
 }
 
 const normalizeTerminalInput = (
@@ -42,17 +55,28 @@ const normalizeTerminalInput = (
 }
 
 export interface TerminalStreamHub {
+  metrics: () => Array<{
+    run_id: string
+    viewers: Array<{
+      queued_bytes: number
+      unacked_bytes: number
+      transport_bytes: number
+      backpressured: boolean
+    }>
+  }>
   attachControl: (
     runId: string,
     clientId: string,
     socket: WebSocket,
-    initialSize?: TerminalMirrorSize
+    initialSize?: TerminalMirrorSize,
+    coordinated?: boolean
   ) => void
   attachIo: (
     runId: string,
     clientId: string,
     socket: WebSocket,
-    initialSize?: TerminalMirrorSize
+    initialSize?: TerminalMirrorSize,
+    coordinated?: boolean
   ) => void
   close: () => void
 }
@@ -60,9 +84,22 @@ export interface TerminalStreamHub {
 export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub => {
   const runStates = new Map<string, RunState>()
 
+  const updateRunPressure = (runId: string, state: RunState) => {
+    const active = [...state.viewers.values()].filter(
+      (viewer) => viewer.flowState && viewer.ioSocket?.readyState === viewer.ioSocket?.OPEN
+    )
+    const pause =
+      active.length > 0 &&
+      active.every((viewer) => state.backpressuredViewerIds.has(viewer.clientId))
+    if (pause === state.ptyPaused) return
+    state.ptyPaused = pause
+    if (pause) store.pauseTerminalRun(runId)
+    else store.resumeTerminalRun(runId)
+  }
+
   const maybeResumeRun = (runId: string, state: RunState, clientId: string) => {
-    if (!state.backpressuredViewerIds.delete(clientId)) return
-    if (state.backpressuredViewerIds.size === 0) store.resumeTerminalRun(runId)
+    state.backpressuredViewerIds.delete(clientId)
+    updateRunPressure(runId, state)
   }
 
   const cleanupRun = (runId: string) => {
@@ -78,10 +115,57 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
   const getOrCreateViewer = (state: RunState, clientId: string) => {
     let viewer = state.viewers.get(clientId)
     if (!viewer) {
-      viewer = { clientId, controlSocket: null, flowState: null, ioSocket: null }
+      viewer = {
+        clientId,
+        controlSocket: null,
+        flowState: null,
+        ioSocket: null,
+        coordinated: false,
+        snapshotStarted: false,
+        bootstrapChunks: [],
+        bootstrapBytes: 0,
+      }
       state.viewers.set(clientId, viewer)
     }
     return viewer
+  }
+
+  const disconnectViewer = (
+    runId: string,
+    state: RunState,
+    viewer: ViewerState,
+    reason: string
+  ) => {
+    const message = `${reason}. Reconnect to restore the current terminal snapshot; older continuous history may be missing.`
+    if (viewer.controlSocket?.readyState === viewer.controlSocket?.OPEN)
+      viewer.controlSocket?.send(serializeTerminalError(message))
+    viewer.flowState?.close()
+    viewer.flowState = null
+    viewer.bootstrapChunks = []
+    viewer.bootstrapBytes = 0
+    if (viewer.bootstrapTimer) clearTimeout(viewer.bootstrapTimer)
+    for (const socket of [viewer.ioSocket, viewer.controlSocket]) {
+      if (!socket) continue
+      socket.close(4008, 'Terminal stream interrupted')
+      const deadline = setTimeout(() => socket.terminate(), 1000)
+      deadline.unref()
+      socket.once('close', () => clearTimeout(deadline))
+    }
+    state.viewers.delete(viewer.clientId)
+    maybeResumeRun(runId, state, viewer.clientId)
+  }
+
+  const checkBootstrap = (runId: string, state: RunState, viewer: ViewerState) => {
+    if (viewer.bootstrapTimer) {
+      clearTimeout(viewer.bootstrapTimer)
+      delete viewer.bootstrapTimer
+    }
+    if (!viewer.coordinated || (viewer.controlSocket && viewer.ioSocket)) return
+    viewer.bootstrapTimer = setTimeout(
+      () => disconnectViewer(runId, state, viewer, 'Terminal connection handshake timed out'),
+      FLOW_CONTROL.ACK_TIMEOUT_MS
+    )
+    viewer.bootstrapTimer.unref()
   }
 
   const getOrCreateState = (runId: string, initialSize?: TerminalMirrorSize) => {
@@ -97,6 +181,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         outputUnsubscribe: null,
         viewers: new Map(),
         recovery: null,
+        ptyPaused: false,
       }
       runStates.set(runId, state)
       const liveRun = store.getLiveRun(runId)
@@ -109,14 +194,33 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         broadcast(payload) {
           for (const viewer of nextState.viewers.values()) {
             const socket = viewer.controlSocket
-            if (socket && socket.readyState === socket.OPEN) socket.send(payload)
+            if (
+              socket &&
+              socket.readyState === socket.OPEN &&
+              checkTerminalRead(store, runId, socket)
+            )
+              socket.send(payload)
           }
         },
       })
       nextState.outputUnsubscribe = store.getPtyOutputBus().subscribe(runId, (chunk) => {
         nextState.mirror.write(chunk)
         nextState.recovery?.observe()
-        for (const viewer of nextState.viewers.values()) viewer.flowState?.enqueue(chunk)
+        for (const viewer of nextState.viewers.values()) {
+          if (viewer.coordinated && !viewer.snapshotStarted) continue
+          if (viewer.ioSocket && checkTerminalRead(store, runId, viewer.ioSocket))
+            viewer.flowState?.enqueue(chunk)
+          else if (
+            viewer.coordinated &&
+            viewer.controlSocket &&
+            checkTerminalRead(store, runId, viewer.controlSocket)
+          ) {
+            viewer.bootstrapBytes += Buffer.byteLength(chunk)
+            if (viewer.bootstrapBytes > FLOW_CONTROL.VIEWER_MAX_BYTES)
+              disconnectViewer(runId, nextState, viewer, 'Terminal bootstrap buffer limit exceeded')
+            else viewer.bootstrapChunks.push(chunk)
+          }
+        }
       })
       nextState.exitUnsubscribe = store.getPtyOutputBus().subscribeExit(runId, () => {
         handleRunExit(runId)
@@ -141,6 +245,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     const viewer = state.viewers.get(clientId)
     if (!viewer || viewer.controlSocket || viewer.ioSocket) return
     state.viewers.delete(clientId)
+    if (viewer.bootstrapTimer) clearTimeout(viewer.bootstrapTimer)
     maybeResumeRun(runId, state, clientId)
     cleanupRun(runId)
   }
@@ -176,17 +281,32 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
   }
 
   return {
-    attachControl(runId, clientId, socket, initialSize) {
+    metrics: () =>
+      [...runStates].map(([runId, state]) => ({
+        run_id: runId,
+        viewers: [...state.viewers.values()].flatMap((viewer) =>
+          viewer.flowState ? [viewer.flowState.metrics()] : []
+        ),
+      })),
+    attachControl(runId, clientId, socket, initialSize, coordinated = false) {
       const state = getOrCreateState(runId, initialSize)
+      const previous = state.viewers.get(clientId)
+      if (previous?.controlSocket)
+        disconnectViewer(runId, state, previous, 'Terminal client ID was replaced')
       const viewer = getOrCreateViewer(state, clientId)
+      viewer.coordinated ||= coordinated
       viewer.controlSocket = socket
+      checkBootstrap(runId, state, viewer)
+      observeTerminalPermissions(store, runId, socket, true)
       // A viewer attaching after the exit event still needs the terminal state.
       if (state.exited && socket.readyState === socket.OPEN) {
         socket.send(serializeTerminalExit(state.exitCode))
       }
-      void state.mirror
-        .getSnapshot()
+      const snapshotPromise = state.mirror.getSnapshot()
+      viewer.snapshotStarted = true
+      void snapshotPromise
         .then(async (snapshot) => {
+          if (viewer.controlSocket !== socket || !checkTerminalRead(store, runId, socket)) return
           if (socket.readyState === socket.OPEN) socket.send(serializeTerminalRestore(snapshot))
           await state.recovery?.sendCurrent(socket)
         })
@@ -199,24 +319,41 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
             )
         })
       socket.on('message', (raw) => {
+        if (viewer.controlSocket !== socket || state.viewers.get(clientId) !== viewer) return
         try {
           const message = parseTerminalControlMessage(raw as Buffer | string)
           if (message.type === 'output_ack') viewer.flowState?.ack(message.bytes)
           if (message.type === 'resize') {
-            state.mirror.resize(message.cols, message.rows)
-            store.resizeAgentRun(runId, message.cols, message.rows)
+            executeTerminalAction(store, runId, socket, 'terminal_resize', () => {
+              state.mirror.resize(message.cols, message.rows)
+              store.resizeAgentRun(runId, message.cols, message.rows)
+            })
           }
-          if (message.type === 'stop') store.stopAgentRun(runId)
+          if (message.type === 'stop')
+            executeTerminalAction(store, runId, socket, 'agent_stop', () =>
+              store.stopAgentRun(runId)
+            )
           if (message.type === 'restore_complete') return
           if (message.type === 'retry_session') {
-            void state.recovery?.retry(socket, message.request_id).catch((error: unknown) => {
-              if (socket.readyState === socket.OPEN)
-                socket.send(
-                  serializeTerminalError(
-                    error instanceof Error ? error.message : 'Session retry failed'
+            const grant = terminalGrant(store, runId, socket, 'session_retry')
+            void state.recovery
+              ?.retry(socket, message.request_id, (write) => {
+                const current = terminalGrant(store, runId, socket, 'session_retry')
+                if (current !== grant)
+                  throw new RemotePermissionError(
+                    'remote_grant_expired',
+                    'Session retry authorization expired'
                   )
-                )
-            })
+                executeTerminalAction(store, runId, socket, 'session_retry', write, 1)
+              })
+              .catch((error: unknown) => {
+                if (socket.readyState === socket.OPEN)
+                  socket.send(
+                    serializeTerminalError(
+                      error instanceof Error ? error.message : 'Session retry failed'
+                    )
+                  )
+              })
           }
         } catch (error) {
           socket.send(
@@ -227,29 +364,51 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         }
       })
       socket.on('close', () => {
+        if (state.viewers.get(clientId) !== viewer) return
         if (viewer.controlSocket === socket) viewer.controlSocket = null
         cleanupViewer(runId, state, clientId)
       })
     },
-    attachIo(runId, clientId, socket, initialSize) {
+    attachIo(runId, clientId, socket, initialSize, coordinated = false) {
       const state = getOrCreateState(runId, initialSize)
+      const previous = state.viewers.get(clientId)
+      if (previous?.ioSocket)
+        disconnectViewer(runId, state, previous, 'Terminal client ID was replaced')
       const viewer = getOrCreateViewer(state, clientId)
+      viewer.coordinated ||= coordinated
       viewer.ioSocket = socket
+      checkBootstrap(runId, state, viewer)
+      observeTerminalPermissions(store, runId, socket, false)
       viewer.flowState?.close()
       viewer.flowState = createTerminalOutputFlow(socket, {
         onBackpressureChange(backpressured) {
           if (backpressured) {
-            const wasEmpty = state.backpressuredViewerIds.size === 0
             state.backpressuredViewerIds.add(clientId)
-            if (wasEmpty) store.pauseTerminalRun(runId)
+            updateRunPressure(runId, state)
             return
           }
           maybeResumeRun(runId, state, clientId)
         },
+        onOverflow(reason) {
+          disconnectViewer(runId, state, viewer, reason)
+        },
       })
+      updateRunPressure(runId, state)
+      for (const chunk of viewer.bootstrapChunks) viewer.flowState?.enqueue(chunk)
+      viewer.bootstrapChunks = []
+      viewer.bootstrapBytes = 0
       socket.on('message', (raw, isBinary) => {
+        if (viewer.ioSocket !== socket || state.viewers.get(clientId) !== viewer) return
         try {
-          store.writeRunInput(runId, normalizeTerminalInput(raw, isBinary))
+          const input = normalizeTerminalInput(raw, isBinary)
+          executeTerminalAction(
+            store,
+            runId,
+            socket,
+            'terminal_input',
+            () => store.writeRunInput(runId, input),
+            Buffer.byteLength(input)
+          )
         } catch (error) {
           // A terminal can exit between the browser's keystroke and this
           // message handler. Report the stale input to that socket instead of
@@ -264,7 +423,8 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         }
       })
       socket.on('close', () => {
-        if (viewer.ioSocket === socket) viewer.ioSocket = null
+        if (viewer.ioSocket !== socket || state.viewers.get(clientId) !== viewer) return
+        viewer.ioSocket = null
         viewer.flowState?.close()
         viewer.flowState = null
         cleanupViewer(runId, state, clientId)
@@ -277,6 +437,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         state.recovery?.close()
         state.mirror.dispose()
         for (const viewer of state.viewers.values()) {
+          if (viewer.bootstrapTimer) clearTimeout(viewer.bootstrapTimer)
           viewer.flowState?.close()
           viewer.ioSocket?.close()
           viewer.controlSocket?.close()

@@ -1,6 +1,15 @@
-export type VerificationState = 'running' | 'passed' | 'failed' | 'cancelled' | 'interrupted'
+export type VerificationState =
+  | 'queued'
+  | 'running'
+  | 'passed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
 
 export interface DispatchVerification {
+  profile?: import('./verification-profile.js').VerificationProfile
+  logBytes?: number
+  subject?: { candidate_id: string; target_sha: string; source_sha: string; repository_id: string }
   id: string
   workspaceId: string
   dispatchId: string

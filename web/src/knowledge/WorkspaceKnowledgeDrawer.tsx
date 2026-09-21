@@ -33,7 +33,10 @@ import {
   type WorkflowRun,
 } from '../api.js'
 import { type TranslationKey, useI18n } from '../i18n.js'
+import { DataRecoveryPanel } from './DataRecoveryPanel.js'
+import { MemoryContextPanel } from './MemoryContextPanel.js'
 import { TeamMemoryDreamPanel } from './TeamMemoryDreamPanel.js'
+import { WorkflowRunSteps } from './WorkflowRunSteps.js'
 
 export type KnowledgeTab = 'memory' | 'workflows'
 
@@ -441,6 +444,8 @@ export const WorkspaceKnowledgeDrawer = ({
           <div className="workspace-knowledge-body scroll-y">
             {tab === 'memory' ? (
               <>
+                <MemoryContextPanel key={`context:${workspaceId}`} workspaceId={workspaceId} />
+                <DataRecoveryPanel key={`recovery:${workspaceId}`} workspaceId={workspaceId} />
                 <TeamMemoryDreamPanel
                   dreamEnabled={dreamEnabled}
                   onDreamEnabledChange={handleDreamEnabledChange}
@@ -683,6 +688,14 @@ export const WorkspaceKnowledgeDrawer = ({
                               })}
                             </span>
                             {latestRun.error ? <span>{latestRun.error}</span> : null}
+                            <WorkflowRunSteps
+                              run={latestRun}
+                              onChanged={(updated) =>
+                                setWorkflowRuns((runs) =>
+                                  runs.map((run) => (run.id === updated.id ? updated : run))
+                                )
+                              }
+                            />
                             {latestRun.steps
                               .filter(
                                 (step) =>

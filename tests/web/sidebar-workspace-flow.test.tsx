@@ -11,9 +11,10 @@ import type { WorkspaceSummary } from '../../src/shared/types.js'
 import { App } from '../../web/src/app.js'
 import { Sidebar } from '../../web/src/sidebar/Sidebar.js'
 import { ToastProvider } from '../../web/src/ui/useToast.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 class MockTerminal {
+  options = { disableStdin: false }
   buffer = {
     active: { type: 'normal', baseY: 0, viewportY: 0, cursorY: 0, getLine: () => undefined },
   }
@@ -74,7 +75,11 @@ beforeEach(async () => {
   const server = await startTestServer()
   cleanupServer = server.close
   baseUrl = server.baseUrl
-  await nativeFetch(`${baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {

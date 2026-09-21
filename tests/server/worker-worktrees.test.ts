@@ -5,7 +5,7 @@ import { join, resolve, sep } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { runGit } from '../../src/server/git-command.js'
 import { openRuntimeDatabase } from '../../src/server/runtime-database.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
@@ -47,7 +47,7 @@ const setup = async (subdirectory = false) => {
   writeFileSync(join(scope, 'value.txt'), 'original')
   writeFileSync(
     join(scope, 'agent.cjs'),
-    `require('node:fs').writeFileSync('session.runtime', JSON.stringify({cwd:process.cwd(), worker:process.env.HIVE_AGENT_ID, workspace:process.env.HIVE_PROJECT_ID})); process.stdin.resume()`
+    `require('node:fs').writeFileSync('session.runtime', JSON.stringify({cwd:process.cwd(), worker:process.env.HIVE_AGENT_ID, workspace:process.env.HIVE_PROJECT_ID})); if(process.stdin.isTTY)process.stdin.setRawMode(true); process.stdin.on('data',data=>require('node:fs').appendFileSync('input.runtime',data))`
   )
   writeFileSync(
     join(scope, 'check.cjs'),
@@ -273,7 +273,16 @@ describe('isolated worker delivery', () => {
         hivePort: new URL(restarted.baseUrl).port,
       }
     )
-    expect(resumed.status).toBe('submitted')
+    await vi.waitFor(
+      () =>
+        expect(restarted.store.getDispatch(ctx.workspace.id, resumed.id)?.status).toBe('submitted'),
+      { timeout: 5000 }
+    )
+    await vi.waitFor(() =>
+      expect(readFileSync(join(first.tree.workspacePath, 'input.runtime'), 'utf8')).toContain(
+        'Continue isolated work'
+      )
+    )
     await vi.waitFor(() =>
       expect(existsSync(join(first.tree.workspacePath, 'session.runtime'))).toBe(true)
     )

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { App } from '../../web/src/app.js'
 import { DemoBanner } from '../../web/src/demo/DemoBanner.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 // These flow tests isolate terminal rendering; real parser coverage lives in terminal-theme.test.
 vi.mock('../../web/src/terminal/input-highlights.js', () => ({
@@ -13,6 +13,7 @@ vi.mock('../../web/src/terminal/input-highlights.js', () => ({
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
+    options = { disableStdin: false }
     cols = 80
     rows = 24
     buffer = {
@@ -54,7 +55,11 @@ beforeEach(async () => {
   const server = await startTestServer()
   cleanupServer = server.close
   serverBaseUrl = server.baseUrl
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     uiCookie = response.headers.get('set-cookie') ?? ''
   })
   fetchCalls = []

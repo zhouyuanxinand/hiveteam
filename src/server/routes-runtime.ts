@@ -1,4 +1,5 @@
 import { getModelSwitchCapability } from './model-switch-capabilities.js'
+import { workspaceForRun } from './remote-http-authorization.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type {
   ConfigureAgentLaunchBody,
@@ -9,6 +10,14 @@ import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 import { getWorkspaceShellAgentId } from './workspace-shell-runtime.js'
 
 export const runtimeRoutes: RouteDefinition[] = [
+  route('GET', '/api/runtime/runs/:runId/stop-impact', ({ params, request, response, store }) => {
+    requireUiTokenFromRequest(request, store.validateUiToken)
+    const run = store.getLiveRun(params.runId ?? '')
+    sendJson(response, 200, {
+      run_id: run.runId,
+      dispatches: store.dispatchDelivery.stopImpact(workspaceForRun(store, run.runId), run.agentId),
+    })
+  }),
   route('GET', '/api/ui/workspaces/:workspaceId/runs', ({ params, request, response, store }) => {
     const workspaceId = getRequiredParam(
       response,

@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
 const directories: string[] = []
+const waitForRuntime = (check: () => void) => vi.waitFor(check, { timeout: 10000 })
 afterEach(async () => {
   while (servers.length) await servers.pop()?.close()
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
@@ -54,16 +55,24 @@ const setup = async () => {
   const dispatchId = run.steps[0]?.dispatch_id
   if (!dispatchId) throw new Error('Expected implementation dispatch')
   const dispatchPath = `/api/ui/workspaces/${workspace.id}/dispatches/${dispatchId}`
-  const report = (outcome?: unknown) =>
-    post('/api/team/report', {
-      project_id: workspace.id,
-      from_agent_id: builder.id,
-      token: server.store.peekAgentToken(builder.id),
-      dispatch_id: dispatchId,
-      result: 'Result text is preserved verbatim, independent of the declared outcome.',
-      artifacts: ['checks.txt'],
-      ...(outcome !== undefined ? { outcome } : {}),
-    })
+  const report = (
+    outcome?: unknown,
+    id = dispatchId,
+    result = 'Result text is preserved verbatim, independent of the declared outcome.'
+  ) =>
+    post(
+      '/api/team/report',
+      {
+        project_id: workspace.id,
+        from_agent_id: builder.id,
+        token: server.store.peekAgentToken(builder.id),
+        dispatch_id: id,
+        result,
+        artifacts: ['checks.txt'],
+        ...(outcome !== undefined ? { outcome } : {}),
+      },
+      false
+    )
   return {
     server,
     dataDir,
@@ -80,6 +89,44 @@ const setup = async () => {
 }
 
 describe('dispatch results and acceptance', () => {
+  test('rejects mixed desktop and Agent credentials without changing dispatch or pending work', async () => {
+    const ctx = await setup()
+    const before = ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)
+    const pendingBefore = ctx.server.store
+      .listWorkers(ctx.workspace.id)
+      .find((worker) => worker.id === ctx.builder.id)?.pendingTaskCount
+    expect(pendingBefore).toBe(1)
+
+    const mixed = await ctx.post('/api/team/report', {
+      project_id: ctx.workspace.id,
+      from_agent_id: ctx.builder.id,
+      token: ctx.server.store.peekAgentToken(ctx.builder.id),
+      dispatch_id: ctx.dispatchId,
+      result: 'This report must not be persisted.',
+      outcome: 'success',
+    })
+    expect(mixed.status).toBe(403)
+    expect(await mixed.json()).toEqual({
+      error: 'Credentials for different identities cannot be combined',
+    })
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toEqual(before)
+    expect(
+      ctx.server.store.listWorkers(ctx.workspace.id).find((worker) => worker.id === ctx.builder.id)
+        ?.pendingTaskCount
+    ).toBe(pendingBefore)
+
+    expect((await ctx.report('success')).status).toBe(202)
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toMatchObject({
+      status: 'reported',
+      reportOutcome: 'success',
+      reportRevision: 1,
+    })
+    expect(
+      ctx.server.store.listWorkers(ctx.workspace.id).find((worker) => worker.id === ctx.builder.id)
+        ?.pendingTaskCount
+    ).toBe(0)
+  })
+
   test.each([
     'failed',
     'blocked',
@@ -107,20 +154,35 @@ describe('dispatch results and acceptance', () => {
     expect(
       (
         await ctx.post(`${ctx.dispatchPath}/feedback`, {
-          text: 'Resolve the blocker and report again.',
+          text: `${'r'.repeat(3970)}FINAL_FEEDBACK_MARKER`,
         })
       ).status
     ).toBe(202)
-    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toMatchObject({
-      status: 'submitted',
-      reportOutcome: null,
-      acceptedAt: null,
-    })
-    expect((await ctx.report('success')).status).toBe(202)
-    await vi.waitFor(() =>
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toEqual(dispatch)
+    await vi.waitFor(
+      () =>
+        expect(
+          ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[0]
+        ).toMatchObject({
+          attempt: 2,
+          status: 'running',
+          dispatchId: expect.any(String),
+        }),
+      { timeout: 10000 }
+    )
+    const nextId = ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[0]
+      ?.dispatchId
+    if (!nextId) throw new Error('Expected a new implementation attempt')
+    expect(nextId).not.toBe(ctx.dispatchId)
+    const next = ctx.server.store.getDispatch(ctx.workspace.id, nextId)
+    expect(next?.text).toContain('Implement the change.')
+    expect(next?.text).toContain('FINAL_FEEDBACK_MARKER')
+    expect((await ctx.report('success', nextId)).status).toBe(202)
+    await waitForRuntime(() =>
       expect(ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]).toMatchObject({
         status: 'running',
         dispatchId: expect.any(String),
+        attempt: 2,
       })
     )
   })
@@ -145,7 +207,7 @@ describe('dispatch results and acceptance', () => {
       accepted_at: expect.any(Number),
       state: 'reported',
     })
-    await vi.waitFor(() =>
+    await waitForRuntime(() =>
       expect(ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]?.status).toBe(
         'running'
       )
@@ -162,42 +224,99 @@ describe('dispatch results and acceptance', () => {
     })
   })
 
-  test('success advances execution without accepting the report; feedback invalidates acceptance and dependent results', async () => {
+  test('success advances execution; feedback preserves accepted history and reruns affected attempts after cancellation', async () => {
     const ctx = await setup()
     expect((await ctx.report('success')).status).toBe(202)
-    await vi.waitFor(() =>
+    await waitForRuntime(() =>
       expect(ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]?.status).toBe(
         'running'
       )
     )
     expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)?.acceptedAt).toBeNull()
     expect((await ctx.post(`${ctx.dispatchPath}/accept`, { report_revision: 1 })).status).toBe(200)
+    const acceptedHistory = ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)
+    const oldReviewId = ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]
+      ?.dispatchId
+    if (!oldReviewId) throw new Error('Expected running review attempt')
+    ctx.server.store.statusTask(ctx.workspace.id, ctx.reviewer.id, {
+      dispatchId: oldReviewId,
+      progressState: 'accepted',
+    })
     expect(
       (await ctx.post(`${ctx.dispatchPath}/feedback`, { text: 'Please address this regression.' }))
         .status
     ).toBe(202)
-    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toMatchObject({
-      acceptedAt: null,
-      reportOutcome: null,
-      reportRevision: 1,
-      status: 'submitted',
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toEqual(acceptedHistory)
+    expect(ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)).toMatchObject({
+      status: 'running',
+      steps: [
+        expect.objectContaining({ rerunPending: true }),
+        expect.objectContaining({ rerunPending: true }),
+      ],
     })
-    expect(ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.status).toBe('failed')
-    await vi.waitFor(() =>
+    await vi.waitFor(
+      () =>
+        expect(ctx.server.store.getDispatch(ctx.workspace.id, oldReviewId)?.status).toBe(
+          'cancelled'
+        ),
+      { timeout: 10000 }
+    )
+    ctx.server.store.statusTask(ctx.workspace.id, ctx.reviewer.id, {
+      dispatchId: oldReviewId,
+      progressState: 'cancelled',
+    })
+    await waitForRuntime(() =>
       expect(
         ctx.server.store
           .listWorkers(ctx.workspace.id)
           .find((worker) => worker.id === ctx.reviewer.id)?.pendingTaskCount
       ).toBe(0)
     )
-    expect((await ctx.report('success')).status).toBe(202)
-    expect((await ctx.post(`${ctx.dispatchPath}/accept`, { report_revision: 1 })).status).toBe(409)
-    const accepted = await ctx.post(`${ctx.dispatchPath}/accept`, { report_revision: 2 })
+    await vi.waitFor(
+      () =>
+        expect(
+          ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[0]
+        ).toMatchObject({
+          attempt: 2,
+          status: 'running',
+          dispatchId: expect.any(String),
+        }),
+      { timeout: 10000 }
+    )
+    const nextId = ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[0]
+      ?.dispatchId
+    if (!nextId) throw new Error('Expected a fresh implementation dispatch')
+    expect(nextId).not.toBe(ctx.dispatchId)
+    const nextPath = `/api/ui/workspaces/${ctx.workspace.id}/dispatches/${nextId}`
+    expect((await ctx.report(undefined, nextId)).status).toBe(202)
+    expect((await ctx.report(undefined, nextId)).status).toBe(202)
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, nextId)?.reportRevision).toBe(1)
+    expect(
+      (await ctx.report(undefined, nextId, 'Revised result with the regression fixed.')).status
+    ).toBe(409)
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, nextId)?.reportRevision).toBe(1)
+    expect((await ctx.post(`${nextPath}/accept`, { report_revision: 2 })).status).toBe(409)
+    const accepted = await ctx.post(`${nextPath}/accept`, { report_revision: 1 })
     expect(accepted.status).toBe(200)
     expect(await accepted.json()).toMatchObject({
-      report_revision: 2,
+      report_revision: 1,
       accepted_at: expect.any(Number),
     })
+    expect(ctx.server.store.getDispatch(ctx.workspace.id, ctx.dispatchId)).toEqual(acceptedHistory)
+    await vi.waitFor(
+      () =>
+        expect(
+          ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]
+        ).toMatchObject({
+          attempt: 2,
+          status: 'running',
+          dispatchId: expect.any(String),
+        }),
+      { timeout: 10000 }
+    )
+    expect(
+      ctx.server.store.workflows.get(ctx.workspace.id, ctx.run.id)?.steps[1]?.dispatchId
+    ).not.toBe(oldReviewId)
   })
 
   test('invalid outcomes leave the dispatch and pending work unchanged', async () => {

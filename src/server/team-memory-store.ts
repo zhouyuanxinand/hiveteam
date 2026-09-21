@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import type { Database, Statement } from 'better-sqlite3'
-
 import {
   type CreateTeamMemoryInput,
   isTeamMemoryProcedureRefType,
@@ -13,8 +12,11 @@ import {
   type TeamMemoryScope,
   type TeamMemoryStatus,
 } from '../shared/team-memory.js'
+import { createMemoryContextStore } from './memory-context-store.js'
+import { rankMemory } from './memory-lexical.js'
 
 interface TeamMemoryRow {
+  revision: number
   body: string
   confidence: number | null
   created_at: number
@@ -67,6 +69,7 @@ const parseTags = (value: string | null): string[] => {
 }
 
 const fromRow = (row: TeamMemoryRow): TeamMemoryEntry => ({
+  revision: row.revision,
   body: row.body,
   confidence: row.confidence ?? 1,
   createdAt: row.created_at,
@@ -116,6 +119,9 @@ const requireProcedureRefForKind = (
 }
 
 export const createTeamMemoryStore = (db: Database) => {
+  const contextStore = createMemoryContextStore(db)
+  const staleSource = (id: string) =>
+    contextStore.sources(id).some((source) => source.state === 'stale')
   const selectEntries = `
     SELECT
       e.*,
@@ -210,10 +216,15 @@ export const createTeamMemoryStore = (db: Database) => {
     }
     const query = options.query?.trim().toLowerCase()
     if (query) {
-      clauses.push(
-        "(LOWER(e.body) LIKE ? OR LOWER(e.tags) LIKE ? OR LOWER(COALESCE(e.ref_id, '')) LIKE ? OR LOWER(COALESCE(e.ref_title, '')) LIKE ?)"
-      )
-      params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`)
+      const candidates = (
+        db
+          .prepare(`${selectEntries} WHERE ${clauses.join(' AND ')}`)
+          .all(...params) as TeamMemoryRow[]
+      ).map(fromRow)
+      return rankMemory(candidates, query, staleSource)
+        .filter((item) => item.matched_tokens > 0)
+        .slice(0, clampLimit(options.limit))
+        .map((item) => item.entry)
     }
     params.push(clampLimit(options.limit))
     const rows = listStmt(clauses.join('|'), clauses).all(...params) as TeamMemoryRow[]
@@ -221,11 +232,23 @@ export const createTeamMemoryStore = (db: Database) => {
   }
 
   return {
+    ...contextStore,
+    rank(workspaceId: string, query: string) {
+      const entries = (
+        db
+          .prepare(
+            `${selectEntries} WHERE e.workspace_id=? OR (e.workspace_id IS NULL AND e.scope='user')`
+          )
+          .all(workspaceId) as TeamMemoryRow[]
+      ).map(fromRow)
+      return rankMemory(entries, query, staleSource)
+    },
     create(workspaceId: string, input: CreateTeamMemoryInput) {
       const now = Date.now()
       const procedureRef = normalizeTeamMemoryProcedureRef(input.procedureRef)
       requireProcedureRefForKind(input.kind, procedureRef)
       const entry: TeamMemoryEntry = {
+        revision: 1,
         body: normalizeBody(input.body),
         confidence: Math.max(0, Math.min(input.confidence ?? 1, 1)),
         createdAt: now,
@@ -279,6 +302,9 @@ export const createTeamMemoryStore = (db: Database) => {
       return entry
     },
     deleteWorkspaceEntries(workspaceId: string) {
+      db.prepare(
+        'DELETE FROM memory_revisions WHERE memory_id IN (SELECT id FROM memory_entries WHERE workspace_id=?)'
+      ).run(workspaceId)
       deleteInjectionsForWorkspaceStmt.run(workspaceId)
       deleteSourcesForWorkspaceStmt.run(workspaceId)
       deleteEntriesForWorkspaceStmt.run(workspaceId)
@@ -286,33 +312,21 @@ export const createTeamMemoryStore = (db: Database) => {
     get,
     list,
     listInjectable(workspaceId: string, query: string, limit: number) {
-      const pinned = list(workspaceId, { limit, status: 'active' }).filter(
-        (entry) => entry.pinned && !entry.disabled
-      )
-      const merged = new Map<string, TeamMemoryEntry>()
-      for (const entry of pinned) merged.set(entry.id, entry)
-      const searchTerms = [
-        ...new Set(
-          query
-            .toLowerCase()
-            .split(/[^\p{L}\p{N}_-]+/u)
-            .map((term) => term.trim())
-            .filter((term) => term.length >= 2)
-        ),
-      ].slice(0, 8)
-      for (const term of searchTerms) {
-        for (const entry of list(workspaceId, { limit, query: term, status: 'active' })) {
-          if (!entry.disabled) merged.set(entry.id, entry)
-        }
-      }
-      if (merged.size === 0) {
-        for (const entry of list(workspaceId, { limit, status: 'active' })) {
-          if (!entry.disabled) merged.set(entry.id, entry)
-        }
-      }
-      return [...merged.values()].slice(0, clampLimit(limit))
+      const entries = (
+        db
+          .prepare(
+            `${selectEntries} WHERE e.workspace_id=? OR (e.workspace_id IS NULL AND e.scope='user')`
+          )
+          .all(workspaceId) as TeamMemoryRow[]
+      ).map(fromRow)
+      const ranked = rankMemory(entries, query, staleSource).filter((item) => item.eligible)
+      const matches = ranked.filter((item) => item.matched_tokens > 0 || item.entry.pinned)
+      return (matches.length ? matches : ranked)
+        .slice(0, clampLimit(limit))
+        .map((item) => item.entry)
     },
     recordInjection(input: {
+      dispatchId?: string | null
       agentId: string
       context: 'dispatch' | 'startup'
       memoryIds: string[]
@@ -329,7 +343,7 @@ export const createTeamMemoryStore = (db: Database) => {
             input.workspaceId,
             input.agentId,
             input.context,
-            null,
+            input.dispatchId ?? null,
             now
           )
           markInjectedStmt.run(now, input.workspaceId, memoryId)

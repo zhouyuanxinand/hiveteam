@@ -1,0 +1,52 @@
+{
+  "recorded_at": "2026-09-21T13:56:33.174604+00:00",
+  "platform": "linux",
+  "binary_sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+  "cli_version": "codex-cli 0.155.1",
+  "fixture_path": "/var/tmp/hive-codex-tester-grb_otne",
+  "profile_sha256": "0d564378d96c19ee6bda1d6dcd5c408c4874d0b169ea59be87e598147ae06ee7",
+  "checkout_helper_sha256": "5add965cf7fb755ab121a40229866cc21ce3d2510578ad7bde89929f51d77d16",
+  "source_kind": "registered_linked_worktree",
+  "scope": "Production Tester checkout, unchanged production profile, real shell/apply_patch, same native session resumed into a fresh checkout; synthetic local provider only.",
+  "runs": [
+    {
+      "resumed": false,
+      "thread_id": "01a0c441-145b-75e1-9c43-03031403e860",
+      "checkout_head_sha": "c6ec5460cf7bd654408212c45945e19566f4b7b8",
+      "cwd": "/var/tmp/hive-codex-tester-grb_otne/policies/tester/checkout/package",
+      "observed": {
+        "source_read": "uncommitted source must remain unchanged\n",
+        "source_write": "EROFS",
+        "source_secret": "EACCES",
+        "checkout_initial": "committed tester source\n",
+        "previous_artifact": "ENOENT",
+        "checkout_write": "allowed",
+        "scratch_write": "allowed",
+        "home_read": "EACCES",
+        "checkout_parent_write": "EROFS",
+        "git_head": "c6ec5460cf7bd654408212c45945e19566f4b7b8",
+        "git_exit": 0
+      }
+    },
+    {
+      "resumed": true,
+      "thread_id": "01a0c441-145b-75e1-9c43-03031403e860",
+      "checkout_head_sha": "c6ec5460cf7bd654408212c45945e19566f4b7b8",
+      "cwd": "/var/tmp/hive-codex-tester-grb_otne/policies/tester/checkout/package",
+      "observed": {
+        "source_read": "uncommitted source must remain unchanged\n",
+        "source_write": "EROFS",
+        "source_secret": "EACCES",
+        "checkout_initial": "committed tester source\n",
+        "previous_artifact": "ENOENT",
+        "checkout_write": "allowed",
+        "scratch_write": "allowed",
+        "home_read": "EACCES",
+        "checkout_parent_write": "EROFS",
+        "git_head": "c6ec5460cf7bd654408212c45945e19566f4b7b8",
+        "git_exit": 0
+      }
+    }
+  ],
+  "passed": true
+}

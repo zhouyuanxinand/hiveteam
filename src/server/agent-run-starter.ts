@@ -10,8 +10,13 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import { buildAgentStartupInstructions } from './agent-startup-instructions.js'
 import type { AgentTokenRegistry } from './agent-tokens.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
+import { ExecutionPolicyError } from './execution-policy-error.js'
+import type { ExecutionPolicyRuntime } from './execution-policy-runtime.js'
 import type { LiveRunRegistry } from './live-run-registry.js'
+import type { ManagedExecution } from './managed-execution.js'
+import { prepareNativeSessionLaunch } from './native-session-launch.js'
 import { createPostStartInputWriter, isInteractiveAgentCommand } from './post-start-input-writer.js'
+import { recheckRemoteAction, withoutRemoteActionContext } from './remote-action-context.js'
 import type { RestartPolicy } from './restart-policy.js'
 import type { TeamSkillRuntime } from './team-skill-runtime.js'
 
@@ -24,9 +29,10 @@ interface AgentRunStarterInput {
   tokenRegistry: AgentTokenRegistry
   getCommandPreset: (id: string) => CommandPresetRecord | undefined
   getAgent: ((workspaceId: string, agentId: string) => AgentSummary | undefined) | undefined
-  getStartupMemoryDigest?: (workspaceId: string, agent: AgentSummary) => string
+  getStartupMemoryDigest?: (workspaceId: string, agent: AgentSummary, runId?: string) => string
   assertSkillLaunchReady: TeamSkillRuntime['assertLaunchReady']
   restartPolicy: RestartPolicy
+  executionPolicies: Pick<ExecutionPolicyRuntime, 'prepare'> | undefined
 }
 
 const resolveCommandPresetId = (
@@ -52,29 +58,78 @@ export const createAgentRunStarter =
     getStartupMemoryDigest,
     assertSkillLaunchReady,
     restartPolicy,
+    executionPolicies,
   }: AgentRunStarterInput) =>
   async (
     workspace: WorkspaceSummary,
     agentId: string,
     config: AgentLaunchConfigInput,
-    input: { autoResume?: boolean; hivePort: string }
+    input: { autoResume?: boolean; hivePort: string; execution: ManagedExecution }
   ) => {
     if (!agentManager) throw new Error('Agent manager is required to start agents')
+    input.execution.assertReserved()
 
     if (input.autoResume !== true) store.resetFastExitCount?.(agentId)
 
     const agent = getAgent?.(workspace.id, agentId)
-    const { commitSessionContext, sessionCaptureSnapshot, startConfig, startEnv } =
-      buildAgentRunBootstrap(workspace, agentId, config, sessionStore, getCommandPreset, agent)
-    const skillReadiness = await assertSkillLaunchReady({
-      agentId,
-      commandPresetId: resolveCommandPresetId(startConfig, getCommandPreset),
-      workspaceId: workspace.id,
-    })
+    if (!executionPolicies)
+      throw new ExecutionPolicyError(
+        'Execution policy service is required before launching a member.',
+        ['policy_service_unavailable']
+      )
+    const token = tokenRegistry.issue(agentId)
+    let prepared: Awaited<ReturnType<ExecutionPolicyRuntime['prepare']>>
+    try {
+      prepared = await executionPolicies.prepare({
+        workspace,
+        agentId,
+        config,
+        token,
+        execution: input.execution,
+        hivePort: input.hivePort,
+        isActive: () => tokenRegistry.validate(agentId, token),
+        bootstrap: (compiledConfig, executionCwd) =>
+          buildAgentRunBootstrap(
+            { ...workspace, path: executionCwd ?? workspace.path },
+            agentId,
+            compiledConfig,
+            sessionStore,
+            getCommandPreset,
+            agent
+          ),
+      })
+    } catch (error) {
+      tokenRegistry.revokeIfMatches(agentId, token)
+      throw error
+    }
+    const { commitSessionContext, sessionCaptureSnapshot, startConfig, startEnv } = prepared
+    let nativeLaunch: Awaited<ReturnType<typeof prepareNativeSessionLaunch>> = null
+    let skillReadiness: Awaited<ReturnType<TeamSkillRuntime['assertLaunchReady']>>
+    try {
+      skillReadiness = await assertSkillLaunchReady({
+        agentId,
+        commandPresetId: resolveCommandPresetId(startConfig, getCommandPreset),
+        workspaceId: workspace.id,
+      })
+      nativeLaunch = await prepareNativeSessionLaunch({
+        config: startConfig,
+        cwd: prepared.cwd,
+        workspaceId: workspace.id,
+        agentId,
+        env: startEnv,
+        policy: prepared.sessionPolicy,
+        execution: input.execution,
+        sessions: sessionStore.native,
+        assertPolicy: prepared.assertCurrentPolicy,
+      })
+    } catch (error) {
+      tokenRegistry.revokeIfMatches(agentId, token)
+      await prepared.close()
+      throw error
+    }
     const handledRunExits = new Set<string>()
     const abortedRunIds = new Set<string>()
     const startedAt = Date.now()
-    const token = tokenRegistry.issue(agentId)
     const exitContext: AgentRunExitContext = {
       agentId,
       handledRunExits,
@@ -86,11 +141,17 @@ export const createAgentRunStarter =
       workspace,
     }
     const startInput = {
+      execution: input.execution,
+      afterNativeExit: async () => {
+        await nativeLaunch?.close()
+        await prepared.close()
+      },
       agentId,
       command: startConfig.command,
-      cwd: workspace.path,
+      cwd: prepared.cwd,
       env: {
         ...startEnv,
+        ...nativeLaunch?.env,
         COLORTERM: 'truecolor',
         FORCE_COLOR: '1',
         NO_COLOR: undefined,
@@ -102,7 +163,9 @@ export const createAgentRunStarter =
       onExit: ({ runId, exitCode }: { runId: string; exitCode: number | null }) => {
         const endedAt = Date.now()
         if (
-          !handleAgentRunExit(exitContext, { exitCode, endedAt, runId }) &&
+          !withoutRemoteActionContext(() =>
+            handleAgentRunExit(exitContext, { exitCode, endedAt, runId })
+          ) &&
           abortedRunIds.has(runId)
         ) {
           registry.clearPendingExitCode(runId)
@@ -113,11 +176,20 @@ export const createAgentRunStarter =
 
     let run: Awaited<ReturnType<AgentManager['startAgent']>>
     try {
+      await prepared.assertCurrentPolicy()
+      recheckRemoteAction()
       run = await agentManager.startAgent(
-        startConfig.args ? { ...startInput, args: startConfig.args } : startInput
+        nativeLaunch
+          ? { ...startInput, args: nativeLaunch.args }
+          : startConfig.args
+            ? { ...startInput, args: startConfig.args }
+            : startInput
       )
     } catch (error) {
+      nativeLaunch?.fail(error)
+      await nativeLaunch?.close()
       tokenRegistry.revokeIfMatches(agentId, token)
+      await prepared.close()
       throw error
     }
     const liveRun: LiveAgentRun = {
@@ -129,17 +201,25 @@ export const createAgentRunStarter =
     try {
       if (run.status !== 'error') commitSessionContext()
       store.insertAgentRun(run.runId, agentId, startedAt, run.pid, liveRun.status, liveRun.exitCode)
+      prepared.bindRun(run.runId)
     } catch (error) {
       abortedRunIds.add(run.runId)
       registry.clearPendingExitCode(run.runId)
       tokenRegistry.revokeIfMatches(agentId, token)
-      agentManager.stopRun(run.runId)
+      try {
+        nativeLaunch?.fail(error)
+      } finally {
+        agentManager.stopRun(run.runId)
+        await agentManager.waitForRunExit?.(run.runId)
+        await prepared.close()
+      }
       throw error
     }
     registry.createExitEntry(run.runId)
     registry.add(liveRun)
 
     if (run.status === 'error') {
+      nativeLaunch?.fail(new Error('Native session process could not start.'))
       store.updatePersistedRun(run.runId, 'error', run.exitCode, Date.now())
       tokenRegistry.revokeIfMatches(agentId, token)
       // Ensure §12 three-state: failed spawn must flip AgentSummary to stopped.
@@ -149,12 +229,27 @@ export const createAgentRunStarter =
       return liveRun
     }
 
+    if (nativeLaunch) {
+      try {
+        await nativeLaunch.verify(agentManager, run.runId)
+      } catch (error) {
+        try {
+          nativeLaunch.fail(error)
+        } finally {
+          tokenRegistry.revokeIfMatches(agentId, token)
+          agentManager.stopRun(run.runId)
+          await agentManager.waitForRunExit?.(run.runId)
+        }
+        throw error
+      }
+    }
+
     exitContext.stopSessionCapture = startAgentRunCapture({
       agentId,
       sessionCaptureSnapshot,
       sessionStore,
       startConfig,
-      workspace,
+      workspace: { ...workspace, path: prepared.cwd },
     })
     void registry.getExitEntry(run.runId)?.promise.then(exitContext.stopSessionCapture)
     const postStartWriter = createPostStartInputWriter(
@@ -162,6 +257,8 @@ export const createAgentRunStarter =
       startConfig.interactiveCommand ?? startConfig.command
     )
     queueMicrotask(() => {
+      // Native identity hooks do not prove an empty composer or authorize submission.
+      if (nativeLaunch) return
       try {
         const injectedRestartMessage = restartPolicy.injectPostStartMessage({
           agentId,
@@ -185,7 +282,7 @@ export const createAgentRunStarter =
                   agent,
                   documents,
                   ...(getStartupMemoryDigest
-                    ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent) }
+                    ? { memoryDigest: getStartupMemoryDigest(workspace.id, agent, run.runId) }
                     : {}),
                   skillCatalog: skillReadiness.catalog,
                   ...(workspace.language ? { language: workspace.language } : {}),

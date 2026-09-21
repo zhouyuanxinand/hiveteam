@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AgentStartError, type OrchestratorStartFailure } from '../agent-start-error.js'
 import type { TerminalRunSummary } from '../api.js'
 import { type OrchestratorStartResult, startAgentRun, stopAgentRun } from '../api.js'
 import { findOrchestratorRun, orchestratorAgentId } from '../terminal/useTerminalRuns.js'
@@ -8,7 +9,7 @@ interface UseOrchestratorPaneStateInput {
   workspaceId: string
   terminalRuns: TerminalRunSummary[]
   /** Latest known autostart error for this workspace (sticky until cleared). */
-  autostartError: string | null
+  autostartError: OrchestratorStartFailure | null
   /**
    * A just-created workspace may already have a server-side autostart run.
    * Suppress client-side auto-start briefly until terminalRuns catches up.
@@ -83,7 +84,10 @@ export const useOrchestratorPaneState = ({
   } else if (pendingStartWorkspaceId === workspaceId || suppressingAutostart) {
     state = { kind: 'starting' }
   } else if (autostartError) {
-    state = { kind: 'failed', error: autostartError }
+    state =
+      typeof autostartError === 'string'
+        ? { kind: 'failed', error: autostartError }
+        : { kind: 'failed', error: autostartError.message, ...autostartError }
   } else {
     state = { kind: 'stopped' }
   }
@@ -100,7 +104,17 @@ export const useOrchestratorPaneState = ({
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Failed to start Queen'
         setOptimisticRun(null)
-        onAfterStart?.({ ok: false, error: message, run_id: null })
+        onAfterStart?.({
+          ok: false,
+          error: message,
+          run_id: null,
+          ...(error instanceof AgentStartError && error.failure.errorCode
+            ? { error_code: error.failure.errorCode }
+            : {}),
+          ...(error instanceof AgentStartError && error.failure.missingCapabilities
+            ? { missing_capabilities: error.failure.missingCapabilities }
+            : {}),
+        })
       })
       .finally(() =>
         setPendingStartWorkspaceId((current) => (current === workspaceId ? null : current))
@@ -137,7 +151,17 @@ export const useOrchestratorPaneState = ({
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to restart Queen'
-          onAfterStart?.({ ok: false, error: message, run_id: null })
+          onAfterStart?.({
+            ok: false,
+            error: message,
+            run_id: null,
+            ...(error instanceof AgentStartError && error.failure.errorCode
+              ? { error_code: error.failure.errorCode }
+              : {}),
+            ...(error instanceof AgentStartError && error.failure.missingCapabilities
+              ? { missing_capabilities: error.failure.missingCapabilities }
+              : {}),
+          })
         })
       return
     }

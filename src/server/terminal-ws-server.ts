@@ -1,13 +1,15 @@
-import type { IncomingMessage, Server } from 'node:http'
+import type { Server } from 'node:http'
 
 import { WebSocketServer } from 'ws'
 import { getLocalRequestRejection } from './local-request-guard.js'
+import { workspaceForRun } from './remote-http-authorization.js'
+import { RemotePermissionError } from './remote-permission-store.js'
+import { authenticateUiRequest, setRequestPrincipal } from './request-principal.js'
 import type { RuntimeStore } from './runtime-store.js'
 import type { TasksFileService } from './tasks-file.js'
 import { createTasksWebSocketServer } from './tasks-websocket-server.js'
 import type { TerminalMirrorSize } from './terminal-state-mirror.js'
 import { createTerminalStreamHub } from './terminal-stream-hub.js'
-import { readCookie } from './ui-auth-helpers.js'
 
 const matchTerminalPath = (pathname: string) => {
   const match = /^\/ws\/terminal\/(?<runId>[^/]+)\/(?<channel>io|control)$/.exec(pathname)
@@ -53,18 +55,6 @@ export const createTerminalWebSocketServer = (
     tasksWss.publish(workspaceId, content)
   })
 
-  const validateUpgradeSession = (request: IncomingMessage) => {
-    const cookieHeader = Array.isArray(request.headers.cookie)
-      ? request.headers.cookie.join('; ')
-      : request.headers.cookie
-    const token = readCookie(cookieHeader, 'hive_ui_token')
-    const remoteSecretHeader = request.headers['x-hive-remote-secret']
-    const remoteSecret = Array.isArray(remoteSecretHeader)
-      ? remoteSecretHeader[0]
-      : remoteSecretHeader
-    return store.validateUiToken(token) || store.validateUiToken(remoteSecret)
-  }
-
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     const pathname = url.pathname
@@ -80,23 +70,44 @@ export const createTerminalWebSocketServer = (
       rejectUpgrade(socket, '403 Forbidden')
       return
     }
-    if (!validateUpgradeSession(request)) {
+    let principal: ReturnType<typeof authenticateUiRequest>
+    try {
+      principal = authenticateUiRequest(request, store)
+    } catch {
+      rejectUpgrade(socket, '403 Forbidden')
+      return
+    }
+    if (!principal) {
       rejectUpgrade(socket, '401 Unauthorized')
       return
     }
 
     try {
       store.getLiveRun(match.runId)
-    } catch {
-      rejectUpgrade(socket, '404 Not Found')
+      if (principal.kind === 'remote_device')
+        store.remote.permissions.assertRead(principal.deviceId, workspaceForRun(store, match.runId))
+    } catch (error) {
+      rejectUpgrade(
+        socket,
+        error instanceof RemotePermissionError ? '403 Forbidden' : '404 Not Found'
+      )
       return
     }
 
     const wss = match.channel === 'io' ? ioWss : controlWss
     wss.handleUpgrade(request, socket, head, (ws) => {
-      const clientId = getClientId(url)
-      if (match.channel === 'io') hub.attachIo(match.runId, clientId, ws, getInitialSize(url))
-      else hub.attachControl(match.runId, clientId, ws, getInitialSize(url))
+      setRequestPrincipal(ws, principal)
+      const clientId = JSON.stringify([
+        principal.kind,
+        principal.kind === 'remote_device' ? principal.deviceId : 'desktop',
+        getClientId(url),
+      ])
+      // Remote viewers never resize the shared mirror by connecting. Explicit
+      // resize messages need a separately approved capability.
+      const initialSize = principal.kind === 'remote_device' ? undefined : getInitialSize(url)
+      const coordinated = url.searchParams.get('snapshot') === '1'
+      if (match.channel === 'io') hub.attachIo(match.runId, clientId, ws, initialSize, coordinated)
+      else hub.attachControl(match.runId, clientId, ws, initialSize, coordinated)
     })
   })
 
@@ -108,5 +119,5 @@ export const createTerminalWebSocketServer = (
     tasksWss.close()
   })
 
-  return { close: () => hub.close() }
+  return { close: () => hub.close(), metrics: () => hub.metrics() }
 }

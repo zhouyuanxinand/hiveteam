@@ -1,12 +1,17 @@
-import type { IncomingMessage, Server } from 'node:http'
+import type { Server } from 'node:http'
 
 import type { WebSocket as WsSocket } from 'ws'
 import { WebSocketServer } from 'ws'
 
 import { getLocalRequestRejection } from './local-request-guard.js'
+import { RemotePermissionError } from './remote-permission-store.js'
+import {
+  authenticateUiRequest,
+  getRequestPrincipal,
+  setRequestPrincipal,
+} from './request-principal.js'
 import type { RuntimeStore } from './runtime-store.js'
-import type { TasksFileService } from './tasks-file.js'
-import { readCookie } from './ui-auth-helpers.js'
+import { type TasksFileService, tasksSnapshot } from './tasks-file.js'
 
 const matchTasksPath = (pathname: string) => {
   const match = /^\/ws\/tasks\/(?<workspaceId>[^/]+)$/.exec(pathname)
@@ -35,18 +40,6 @@ export const createTasksWebSocketServer = (
   const wss = new WebSocketServer({ noServer: true })
   const socketsByWorkspaceId = new Map<string, Set<WsSocket>>()
 
-  const validateUpgradeSession = (request: IncomingMessage) => {
-    const cookieHeader = Array.isArray(request.headers.cookie)
-      ? request.headers.cookie.join('; ')
-      : request.headers.cookie
-    const token = readCookie(cookieHeader, 'hive_ui_token')
-    const remoteSecretHeader = request.headers['x-hive-remote-secret']
-    const remoteSecret = Array.isArray(remoteSecretHeader)
-      ? remoteSecretHeader[0]
-      : remoteSecretHeader
-    return store.validateUiToken(token) || store.validateUiToken(remoteSecret)
-  }
-
   server.on('upgrade', (request, socket, head) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     const workspaceId = matchTasksPath(url.pathname)
@@ -55,18 +48,31 @@ export const createTasksWebSocketServer = (
       rejectUpgrade(socket, '403 Forbidden')
       return
     }
-    if (!validateUpgradeSession(request)) {
+    let principal: ReturnType<typeof authenticateUiRequest>
+    try {
+      principal = authenticateUiRequest(request, store)
+    } catch {
+      rejectUpgrade(socket, '403 Forbidden')
+      return
+    }
+    if (!principal) {
       rejectUpgrade(socket, '401 Unauthorized')
       return
     }
     let workspacePath = ''
     try {
+      if (principal.kind === 'remote_device')
+        store.remote.permissions.assertRead(principal.deviceId, workspaceId)
       workspacePath = store.getWorkspaceSnapshot(workspaceId).summary.path
-    } catch {
-      rejectUpgrade(socket, '404 Not Found')
+    } catch (error) {
+      rejectUpgrade(
+        socket,
+        error instanceof RemotePermissionError ? '403 Forbidden' : '404 Not Found'
+      )
       return
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
+      setRequestPrincipal(ws, principal)
       const sockets = socketsByWorkspaceId.get(workspaceId) ?? new Set<WsSocket>()
       sockets.add(ws)
       socketsByWorkspaceId.set(workspaceId, sockets)
@@ -76,18 +82,45 @@ export const createTasksWebSocketServer = (
           socketsByWorkspaceId.delete(workspaceId)
         }
       })
+      if (principal.kind === 'remote_device') {
+        const check = () => {
+          if (!store.remote.permissions.canRead(principal.deviceId, workspaceId))
+            ws.close(1008, 'Workspace access revoked')
+        }
+        const timer = setInterval(check, 1000)
+        timer.unref()
+        const unsubscribe = store.remote.permissions.subscribe((deviceId) => {
+          if (deviceId === principal.deviceId) check()
+        })
+        ws.once('close', () => {
+          clearInterval(timer)
+          unsubscribe()
+        })
+      }
       setImmediate(() => {
         if (ws.readyState !== ws.OPEN) return
+        if (
+          principal.kind === 'remote_device' &&
+          !store.remote.permissions.canRead(principal.deviceId, workspaceId)
+        ) {
+          ws.close(1008, 'Workspace access revoked')
+          return
+        }
         try {
           ws.send(
             JSON.stringify({
               type: 'tasks-snapshot',
-              content: tasksFileService.readTasks(workspacePath),
+              ...tasksSnapshot(tasksFileService.readTasks(workspacePath)),
             })
           )
-        } catch {
+        } catch (error) {
           if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify({ type: 'tasks-snapshot', content: '' }))
+            ws.send(
+              JSON.stringify({
+                type: 'tasks-error',
+                error: error instanceof Error ? error.message : 'Tasks could not be read',
+              })
+            )
           }
         }
       })
@@ -105,8 +138,16 @@ export const createTasksWebSocketServer = (
     publish: (workspaceId, content) => {
       const sockets = socketsByWorkspaceId.get(workspaceId)
       if (!sockets) return
-      const payload = JSON.stringify({ type: 'tasks-updated', content })
+      const payload = JSON.stringify({ type: 'tasks-updated', ...tasksSnapshot(content) })
       for (const socket of sockets) {
+        const principal = getRequestPrincipal(socket)
+        if (
+          principal?.kind === 'remote_device' &&
+          !store.remote.permissions.canRead(principal.deviceId, workspaceId)
+        ) {
+          socket.close(1008, 'Workspace access revoked')
+          continue
+        }
         if (socket.readyState === socket.OPEN) {
           socket.send(payload)
         }

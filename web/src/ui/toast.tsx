@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, X, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import type { ComponentType, CSSProperties } from 'react'
 
 import { useI18n } from '../i18n.js'
@@ -6,12 +6,14 @@ import type { ToastEntry, ToastKind } from './useToast.js'
 import { useToast, useToastList } from './useToast.js'
 
 const iconByKind: Record<ToastKind, ComponentType<{ size?: number; 'aria-hidden'?: boolean }>> = {
+  info: Info,
   success: CheckCircle2,
   warning: AlertTriangle,
   error: XCircle,
 }
 
 const accentByKind: Record<ToastKind, string> = {
+  info: 'var(--accent)',
   success: 'var(--status-green)',
   warning: 'var(--status-orange)',
   error: 'var(--status-red)',

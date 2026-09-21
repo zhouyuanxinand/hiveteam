@@ -8,6 +8,7 @@ import type { AgentSessionStorePort } from './agent-runtime-ports.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { workerClarificationGuidance } from './clarification-guidance.js'
 import { deliverCodexReport } from './codex-report-delivery.js'
+import { guardDeliveryInput, requireEmptyDeliveryComposer } from './delivery-input-guard.js'
 import {
   buildWorkerReminderTail,
   getOrchestratorReminderTail,
@@ -15,6 +16,8 @@ import {
 } from './hive-team-guidance.js'
 import { PtyInactiveError } from './http-errors.js'
 import type { LiveRunRegistry } from './live-run-registry.js'
+import { NativeSessionError } from './native-session-error.js'
+import { nativeSessionHarness } from './native-session-profile.js'
 import {
   createAwaitablePostStartInputWriter,
   createPostStartInputWriter,
@@ -30,7 +33,12 @@ import { normalizeExecutableToken } from './startup-command-parser.js'
 interface AgentStdinDispatcherInput {
   agentManager: AgentManager | undefined
   sessionStore?: AgentSessionStorePort
-  getDispatchMemoryDigest?: (workspaceId: string, agentId: string, task: string) => string
+  getDispatchMemoryDigest?: (
+    workspaceId: string,
+    agentId: string,
+    task: string,
+    dispatchId?: string
+  ) => string
   getLaunchConfig: (workspaceId: string, agentId: string) => AgentLaunchConfigInput | undefined
   getWorkspaceId: (agentId: string) => string | undefined
   getWorkspaceLanguage?: (workspaceId: string) => WorkspaceLanguage | undefined
@@ -220,6 +228,11 @@ export const createAgentStdinDispatcher = ({
 
     try {
       const config = getLaunchConfig(workspaceId, agentId)
+      if (config && nativeSessionHarness(config))
+        throw new NativeSessionError(
+          'session_delivery_unverified',
+          'This native session has no verified empty-composer or receipt contract. Automatic terminal submission is paused; use the terminal and explicit delivery acknowledgement.'
+        )
       if (agentManager && config) {
         createPostStartInputWriter(agentManager, config.interactiveCommand ?? config.command)(
           run.runId,
@@ -229,6 +242,7 @@ export const createAgentStdinDispatcher = ({
         agentManager?.writeInput(run.runId, text)
       }
     } catch (error) {
+      if (error instanceof NativeSessionError) throw error
       throw new PtyInactiveError(error instanceof Error ? error.message : String(error))
     }
   }
@@ -249,6 +263,13 @@ export const createAgentStdinDispatcher = ({
 
     try {
       const config = getLaunchConfig(workspaceId, agentId)
+      if (config && nativeSessionHarness(config))
+        return Promise.reject(
+          new NativeSessionError(
+            'session_delivery_unverified',
+            'This native session has no verified empty-composer or receipt contract. The delivery remains unconfirmed; terminal output is not a receipt.'
+          )
+        )
       if (agentManager && config) {
         if (
           input.receipt &&
@@ -259,14 +280,30 @@ export const createAgentStdinDispatcher = ({
               new Error('Codex session store is unavailable; report remains queued.')
             )
           return deliverCodexReport({
-            agentManager,
+            agentManager: input.delivery
+              ? guardDeliveryInput(agentManager, run.runId, input.delivery)
+              : agentManager,
             agentId,
             workspaceId,
             runId: run.runId,
             text,
             receipt: input.receipt,
             sessions: sessionStore,
-          })
+            ...(input.delivery ? { waitMs: input.delivery.timeoutMs } : {}),
+          }).then(() => input.delivery?.nativeReceipt())
+        }
+        if (input.delivery) {
+          const guarded = guardDeliveryInput(agentManager, run.runId, input.delivery)
+          return requireEmptyDeliveryComposer(
+            guarded,
+            run.runId,
+            config.interactiveCommand ?? config.command
+          ).then(() =>
+            createAwaitablePostStartInputWriter(
+              guarded,
+              config.interactiveCommand ?? config.command
+            )(run.runId, text)
+          )
         }
         return createAwaitablePostStartInputWriter(
           agentManager,
@@ -335,9 +372,10 @@ export const createAgentStdinDispatcher = ({
       workerDescription: string,
       text: string,
       language?: WorkspaceLanguage,
-      skillActivation?: ResolvedSkillActivation
+      skillActivation?: ResolvedSkillActivation,
+      deliveryOptions?: SystemMessageDeliveryOptions
     ) {
-      writeToActiveAgentRun(
+      return deliverToActiveAgentRun(
         workspaceId,
         workerId,
         buildWorkerDispatchPayload(
@@ -345,12 +383,12 @@ export const createAgentStdinDispatcher = ({
           workerDescription,
           dispatchId,
           text,
-          getDispatchMemoryDigest?.(workspaceId, workerId, text),
+          getDispatchMemoryDigest?.(workspaceId, workerId, text, dispatchId),
           `Hive session binding: workspace_id=${workspaceId}; agent_id=${workerId}`,
           language ?? getWorkspaceLanguage?.(workspaceId),
           skillActivation
         ),
-        { requireActiveRun: true }
+        { ...deliveryOptions, requireActiveRun: true }
       )
     },
     writeCancelPrompt(

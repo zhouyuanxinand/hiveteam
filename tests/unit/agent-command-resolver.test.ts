@@ -125,8 +125,23 @@ describe('agent command resolver', () => {
     writeFileSync(join(binDir, 'agent.exe'), 'protected placeholder')
 
     expect(() =>
-      resolveCommandPath('agent', root, { Path: binDir, PathExt: '.cmd;.EXE' }, 'win32')
-    ).toThrow(/protected WindowsApps app resource/)
+      resolveCommandPath('agent', root, { Path: binDir, PathExt: '.cmd;.exe' }, 'win32')
+    ).toThrow(expect.objectContaining({ code: 'EACCES', path: join(binDir, 'agent.exe') }))
+  })
+
+  test('a WindowsApps PATH entry does not turn an absent command into an access error', () => {
+    const root = mkdtempSync(join(tmpdir(), 'hive-command-missing-windowsapps-'))
+    tempDirs.push(root)
+    const binDir = join(root, 'WindowsApps')
+    mkdirSync(binDir)
+    expect(() =>
+      resolveCommandPath(
+        'fixture-missing-cli',
+        root,
+        { Path: binDir, PathExt: '.cmd;.exe' },
+        'win32'
+      )
+    ).toThrow(expect.objectContaining({ code: 'ENOENT' }))
   })
 
   test('wraps Windows command shims with cmd.exe for PTY spawn', () => {

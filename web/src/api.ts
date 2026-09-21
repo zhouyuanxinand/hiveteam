@@ -33,9 +33,12 @@ import type {
   WorkspaceSummary,
 } from '../../src/shared/types.js'
 import type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
+import { readAgentStartError } from './agent-start-error.js'
 import { readScenarioLaunchStream } from './api-team-scenario-stream.js'
+import { initializeUiSession } from './ui-session.js'
 
 export type { WorkspaceDocumentSummary } from '../../src/shared/workspace-documents.js'
+export { initializeUiSession } from './ui-session.js'
 
 export type {
   GitCommitPage,
@@ -96,19 +99,6 @@ const isStaleUiSession = async (response: Response): Promise<boolean> => {
   } catch {
     return false
   }
-}
-
-const isRemoteMode = () =>
-  typeof window !== 'undefined' &&
-  (window as Window & { __HIVE_REMOTE_MODE__?: boolean }).__HIVE_REMOTE_MODE__ === true
-
-export const initializeUiSession = async (): Promise<void> => {
-  if (isRemoteMode()) return
-  const response = await fetch('/api/ui/session', { mode: 'same-origin' })
-  if (!response.ok) {
-    throw new Error('Failed to initialize UI session')
-  }
-  await response.json()
 }
 
 let uiSessionRefreshPromise: Promise<void> | null = null
@@ -411,6 +401,12 @@ export interface RemotePendingPairing {
 }
 
 export interface RemoteAuditRecord {
+  method?: string | null
+  businessAction?: string | null
+  resourceId?: string | null
+  grantId?: string | null
+  decision?: string | null
+  statusCode?: number | null
   action: string
   byteCount: number | null
   deviceId: string | null
@@ -457,6 +453,12 @@ interface RemotePendingPairingPayload {
 }
 
 interface RemoteAuditRecordPayload {
+  method?: string | null
+  business_action?: string | null
+  resource_id?: string | null
+  grant_id?: string | null
+  decision?: string | null
+  status_code?: number | null
   action: string
   byte_count: number | null
   device_id: string | null
@@ -607,6 +609,12 @@ export const getRemoteAudit = async (limit = 50): Promise<RemoteAuditRecord[]> =
     throw new Error(await readErrorMessage(response, 'Failed to load remote audit'))
   }
   return ((await response.json()) as RemoteAuditRecordPayload[]).map((record) => ({
+    method: record.method ?? null,
+    businessAction: record.business_action ?? null,
+    resourceId: record.resource_id ?? null,
+    grantId: record.grant_id ?? null,
+    decision: record.decision ?? null,
+    statusCode: record.status_code ?? null,
     action: record.action,
     byteCount: record.byte_count,
     deviceId: record.device_id,
@@ -623,6 +631,8 @@ export const getRemoteAudit = async (limit = 50): Promise<RemoteAuditRecord[]> =
 export interface OrchestratorStartResult {
   ok: boolean
   error: string | null
+  error_code?: string
+  missing_capabilities?: string[]
   run_id: string | null
 }
 
@@ -717,6 +727,7 @@ export interface LocalRetentionDiagnostics {
 }
 
 export const createWorkspace = async (input: {
+  initialization_mode?: 'basic' | 'packs'
   language?: WorkspaceLanguage
   name: string
   path: string
@@ -761,7 +772,7 @@ export const startAgentRun = async (
     method: 'POST',
   })
   if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'Failed to start agent run'))
+    throw await readAgentStartError(response)
   }
   const body = (await response.json()) as { run_id: string; thread_id?: string | null }
   return { runId: body.run_id, threadId: body.thread_id ?? null }
@@ -806,6 +817,9 @@ export const restartAgentRun = async (
 }
 
 export const getActiveWorkspaceId = async (): Promise<string | null> => {
+  if ((window as Window & { __HIVE_REMOTE_MODE__?: boolean }).__HIVE_REMOTE_MODE__) {
+    return window.localStorage.getItem('hive.remote.active_workspace_id')
+  }
   const response = await apiFetch('/api/settings/app-state/active_workspace_id')
 
   if (!response.ok) {
@@ -817,6 +831,11 @@ export const getActiveWorkspaceId = async (): Promise<string | null> => {
 }
 
 export const saveActiveWorkspaceId = async (workspaceId: string | null): Promise<void> => {
+  if ((window as Window & { __HIVE_REMOTE_MODE__?: boolean }).__HIVE_REMOTE_MODE__) {
+    if (workspaceId === null) window.localStorage.removeItem('hive.remote.active_workspace_id')
+    else window.localStorage.setItem('hive.remote.active_workspace_id', workspaceId)
+    return
+  }
   const response = await apiFetch('/api/settings/app-state/active_workspace_id', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
@@ -1596,6 +1615,11 @@ interface WorkflowDefinitionPayload {
 }
 
 export interface WorkflowRunStep {
+  quality?: import('../../src/shared/workflows.js').WorkflowQuality | null
+  waitingFor?: import('../../src/shared/workflows.js').WorkflowCondition[]
+  attempt?: number
+  rerunPending?: boolean
+  needsRerun?: boolean
   artifacts: string[]
   dispatchId: string | null
   error: string | null
@@ -1630,6 +1654,11 @@ interface WorkflowRunPayload {
   started_at: number | null
   status: WorkflowRun['status']
   steps: Array<{
+    quality?: import('../../src/shared/workflows.js').WorkflowQuality | null
+    waiting_for?: import('../../src/shared/workflows.js').WorkflowCondition[]
+    attempt?: number
+    rerun_pending?: boolean
+    needs_rerun?: boolean
     artifacts: string[]
     dispatch_id: string | null
     error: string | null
@@ -1669,7 +1698,7 @@ const fromWorkflowDefinitionPayload = (
   validationError: workflow.validation_error ?? null,
 })
 
-const fromWorkflowRunPayload = (run: WorkflowRunPayload): WorkflowRun => ({
+export const fromWorkflowRunPayload = (run: WorkflowRunPayload): WorkflowRun => ({
   createdAt: run.created_at,
   endedAt: run.ended_at,
   error: run.error,
@@ -1678,6 +1707,11 @@ const fromWorkflowRunPayload = (run: WorkflowRunPayload): WorkflowRun => ({
   startedAt: run.started_at,
   status: run.status,
   steps: run.steps.map((step) => ({
+    quality: step.quality ?? null,
+    waitingFor: step.waiting_for ?? [],
+    attempt: step.attempt ?? 0,
+    rerunPending: step.rerun_pending ?? false,
+    needsRerun: step.needs_rerun ?? false,
     artifacts: step.artifacts,
     dispatchId: step.dispatch_id,
     error: step.error,
@@ -1995,32 +2029,7 @@ export const updateWorkerAvatar = async (
   return fromPayload((await response.json()) as TeamListItemPayload)
 }
 
-export const getWorkspaceTasks = async (workspaceId: string): Promise<{ content: string }> => {
-  const response = await apiFetch(`/api/workspaces/${workspaceId}/tasks`)
-
-  if (!response.ok) {
-    throw new Error('Failed to load tasks')
-  }
-
-  return (await response.json()) as { content: string }
-}
-
-export const saveWorkspaceTasks = async (
-  workspaceId: string,
-  input: { content: string }
-): Promise<{ content: string }> => {
-  const response = await apiFetch(`/api/workspaces/${workspaceId}/tasks`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  })
-
-  if (!response.ok) {
-    throw new Error('Failed to save tasks')
-  }
-
-  return (await response.json()) as { content: string }
-}
+export { getWorkspaceTasks, saveWorkspaceTasks } from './tasks/tasks-api.js'
 
 export interface FsBrowseEntryPayload {
   is_dir: true

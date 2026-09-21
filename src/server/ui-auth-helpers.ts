@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 
 import { ForbiddenError } from './http-errors.js'
+import { getRequestPrincipal } from './request-principal.js'
 import type { RuntimeStore } from './runtime-store.js'
 
 export const readCookie = (cookieHeader: string | undefined, name: string) => {
@@ -20,22 +21,16 @@ export const readCookie = (cookieHeader: string | undefined, name: string) => {
 
 export const requireUiTokenFromRequest = (
   request: IncomingMessage,
-  validateUiToken: RuntimeStore['validateUiToken'],
-  validateRemoteTunnelSecret?: RuntimeStore['validateRemoteTunnelSecret']
+  validateUiToken: RuntimeStore['validateUiToken']
 ) => {
   const cookieHeader = Array.isArray(request.headers.cookie)
     ? request.headers.cookie.join('; ')
     : request.headers.cookie
   const token = readCookie(cookieHeader, 'hive_ui_token')
-  const remoteSecretHeader = request.headers['x-hive-remote-secret']
-  const remoteSecret = Array.isArray(remoteSecretHeader)
-    ? remoteSecretHeader[0]
-    : remoteSecretHeader
-  if (
-    !validateUiToken(token) &&
-    !validateUiToken(remoteSecret) &&
-    !validateRemoteTunnelSecret?.(remoteSecret)
-  ) {
+  const principal = getRequestPrincipal(request)
+  if (principal?.kind === 'remote_device') return principal
+  if (!validateUiToken(token)) {
     throw new ForbiddenError('UI endpoint requires valid UI token')
   }
+  return { kind: 'local_user' } as const
 }

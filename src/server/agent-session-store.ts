@@ -3,6 +3,7 @@ import {
   type AgentSessionContext,
   createAgentSessionContextStore,
 } from './agent-session-context.js'
+import { createNativeSessionStore, type NativeSessionStore } from './native-session-store.js'
 
 interface AgentSessionRow {
   agent_id: string
@@ -11,6 +12,7 @@ interface AgentSessionRow {
 }
 
 export interface AgentSessionStore {
+  native: NativeSessionStore
   getCaptureContext: (workspaceId: string, agentId: string) => AgentSessionContext | undefined
   saveCaptureContext: (workspaceId: string, agentId: string, context: AgentSessionContext) => void
   clearLastSessionId: (workspaceId: string, agentId: string) => void
@@ -19,6 +21,7 @@ export interface AgentSessionStore {
 }
 
 export const createAgentSessionStore = (db: Database): AgentSessionStore => {
+  const native = createNativeSessionStore(db)
   const lastSessionIds = new Map<string, string>()
 
   for (const row of db
@@ -68,12 +71,15 @@ export const createAgentSessionStore = (db: Database): AgentSessionStore => {
   )
 
   return {
+    native,
     ...createAgentSessionContextStore(db),
     clearLastSessionId(workspaceId, agentId) {
       clearTransaction(workspaceId, agentId)
       lastSessionIds.delete(`${workspaceId}:${agentId}`)
     },
     getLastSessionId(workspaceId, agentId) {
+      const binding = native.current(workspaceId, agentId)
+      if (binding) return binding.native_id ?? undefined
       return lastSessionIds.get(`${workspaceId}:${agentId}`)
     },
     setLastSessionId(workspaceId, agentId, sessionId) {

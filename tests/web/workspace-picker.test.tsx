@@ -304,6 +304,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(screen.getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'renamed',
       path: PICKED,
@@ -327,6 +329,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'codex',
       name: 'alpha',
       path: PICKED,
@@ -362,13 +366,15 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'codex',
       name: 'alpha',
       path: PICKED,
     })
   })
 
-  test('blocks an unavailable preset unless the user supplies a startup command', async () => {
+  test('allows offline creation but requires a startup command when opting into an unavailable CLI', async () => {
     stubFetch(
       () => ({
         canceled: false,
@@ -393,6 +399,12 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     const confirm = await screen.findByTestId('confirm-workspace-dialog')
     expect(within(confirm).getByText(/Claude Code.*not installed/)).toBeInTheDocument()
+    expect(within(confirm).getByTestId('confirm-workspace-create')).toBeEnabled()
+    fireEvent.click(
+      within(confirm).getByRole('checkbox', {
+        name: 'Try starting the Orchestrator after creation',
+      })
+    )
     expect(within(confirm).getByTestId('confirm-workspace-create')).toBeDisabled()
 
     fireEvent.click(within(confirm).getByTestId('workspace-command-preset'))
@@ -405,6 +417,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: true,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -435,6 +449,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -463,6 +479,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: null,
       name: 'alpha',
       path: PICKED,
@@ -491,6 +509,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -516,6 +536,8 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     fireEvent.click(screen.getByTestId('confirm-workspace-create'))
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'custom',
       path: '/abs/path/here',
@@ -567,6 +589,8 @@ describe('AddWorkspaceDialog — server-browse Advanced mode', () => {
     fireEvent.click(screen.getByTestId('add-workspace-create'))
 
     expect(onCreate).toHaveBeenCalledWith({
+      autostartOrchestrator: false,
+      initializationMode: 'basic',
       commandPresetId: 'claude',
       name: 'Alpha',
       path: PICKED,

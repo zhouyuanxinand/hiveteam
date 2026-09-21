@@ -4,7 +4,8 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { runHiveCommand } from '../../src/cli/hive.js'
+import { runAuthorizedTestHiveCommand as runHiveCommand } from '../helpers/authorized-hive.js'
+import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
 
@@ -44,11 +45,7 @@ describe('cross workspace send isolation', () => {
 
     try {
       const baseUrl = `http://127.0.0.1:${hive.port}`
-      const uiSessionResponse = await fetch(`${baseUrl}/api/ui/session`)
-      const uiCookie = uiSessionResponse.headers.get('set-cookie')
-      if (!uiCookie) {
-        throw new Error('Expected UI session cookie')
-      }
+      const uiCookie = await getUiCookie(baseUrl)
       const workspaceAPath = join(dataDir, 'workspace-a')
       const workspaceBPath = join(dataDir, 'workspace-b')
       mkdirSync(workspaceAPath, { recursive: true })

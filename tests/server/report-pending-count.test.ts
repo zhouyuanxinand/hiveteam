@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 describe('report pending count', () => {
   test('report decrements pending count instead of forcing zero', () => {

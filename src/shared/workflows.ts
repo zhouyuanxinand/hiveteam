@@ -13,12 +13,31 @@ export const workflowStepStatuses = [
 export type WorkflowRunStatus = (typeof workflowRunStatuses)[number]
 export type WorkflowStepStatus = (typeof workflowStepStatuses)[number]
 
+export const workflowConditions = [
+  'report_success',
+  'review_accepted',
+  'verification_passed',
+] as const
+export type WorkflowCondition = (typeof workflowConditions)[number]
+export interface WorkflowQuality {
+  all_of: WorkflowCondition[]
+}
+export interface WorkflowResultVersion {
+  dispatch_id: string
+  report_revision: number
+  attempt: number
+  source_sha: string | null
+  base_sha: string | null
+  repository_id: string | null
+}
+
 /** The only executable workflow format. Code files remain discoverable metadata. */
 export interface WorkflowStepDefinition {
   id: string
   needs: string[]
   task: string
   worker: string
+  quality?: WorkflowQuality
 }
 
 export interface WorkflowCatalogItem {
@@ -32,6 +51,14 @@ export interface WorkflowCatalogItem {
 }
 
 export interface WorkflowRunStep {
+  quality?: WorkflowQuality
+  waitingFor?: WorkflowCondition[]
+  attempt?: number
+  inputVersion?: string | null
+  dependencyVersions?: Record<string, WorkflowResultVersion>
+  resultVersion?: WorkflowResultVersion | null
+  rerunPending?: boolean
+  needsRerun?: boolean
   artifacts: string[]
   dispatchId: string | null
   error: string | null

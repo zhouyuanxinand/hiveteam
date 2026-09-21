@@ -120,7 +120,6 @@ export const teamScenarioRoutes: RouteDefinition[] = [
 
       const launchConfig = resolveCommandPresetLaunchConfig(store.settings, preset.id)
       if (!launchConfig) throw new ConflictError(`Command preset not found: ${preset.id}`)
-      const createdIds: string[] = []
       const created: string[] = []
       const reused: string[] = []
       const usedNames = new Set(
@@ -131,56 +130,51 @@ export const teamScenarioRoutes: RouteDefinition[] = [
       )
       const started: ScenarioStartResult[] = []
       const members: ScenarioLaunchMember[] = []
-      try {
-        for (const member of scenario.members) {
-          const existing = store
-            .getWorkspaceSnapshot(workspaceId)
-            .agents.find(
-              (agent) =>
-                agent.role !== 'orchestrator' &&
-                agent.role === member.role &&
-                (agent.name === member.name || agent.description === member.description)
-            )
-          if (existing) {
-            reused.push(existing.id)
-            members.push({
-              id: existing.id,
-              name: existing.name,
-              role: member.role,
-              state: 'reused',
-              error: null,
-              duration_ms: null,
-            })
-            continue
-          }
-          const name = buildScenarioWorkerName(member, usedNames)
-          usedNames.add(name)
-          const worker = store.addWorker(workspaceId, {
-            description: member.description,
-            name,
-            role: member.role,
-          })
-          createdIds.push(worker.id)
-          created.push(worker.id)
-          store.configureAgentLaunch(workspaceId, worker.id, launchConfig)
+      const additions: Array<{
+        description: string
+        name: string
+        role: (typeof scenario.members)[number]['role']
+      }> = []
+      for (const member of scenario.members) {
+        const existing = store
+          .getWorkspaceSnapshot(workspaceId)
+          .agents.find(
+            (agent) =>
+              agent.role !== 'orchestrator' &&
+              agent.role === member.role &&
+              (agent.name === member.name || agent.description === member.description)
+          )
+        if (existing) {
+          reused.push(existing.id)
           members.push({
-            id: worker.id,
-            name: worker.name,
+            id: existing.id,
+            name: existing.name,
             role: member.role,
-            state: body.autostart === false ? 'created' : 'queued',
+            state: 'reused',
             error: null,
             duration_ms: null,
           })
+          continue
         }
-      } catch (error) {
-        for (const workerId of createdIds) {
-          try {
-            store.deleteWorker(workspaceId, workerId)
-          } catch {
-            // Keep the original scenario error; cleanup is best effort.
-          }
-        }
-        throw error
+        const name = buildScenarioWorkerName(member, usedNames)
+        usedNames.add(name)
+        additions.push({
+          description: member.description,
+          name,
+          role: member.role,
+        })
+      }
+      const workers = store.addWorkers(workspaceId, additions, launchConfig)
+      for (const worker of workers) {
+        created.push(worker.id)
+        members.push({
+          id: worker.id,
+          name: worker.name,
+          role: worker.role as ScenarioLaunchMember['role'],
+          state: body.autostart === false ? 'created' : 'queued',
+          error: null,
+          duration_ms: null,
+        })
       }
 
       // JSON remains the default contract. The UI opts into progress on this
@@ -213,7 +207,7 @@ export const teamScenarioRoutes: RouteDefinition[] = [
                 missingConfigError: 'No worker launch config available',
               }
             )
-            member.state = result.ok ? 'started' : 'failed'
+            member.state = result.queue_id ? 'queued' : result.ok ? 'started' : 'failed'
             member.error = result.error
             member.duration_ms = Math.round(performance.now() - begin)
             started.push({ id: member.id, ...result })

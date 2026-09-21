@@ -4,8 +4,9 @@ import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -170,7 +171,10 @@ const startWorkerViaHttp = async (
 const getRunViaHttp = async (baseUrl: string, cookie: string, runId: string) => {
   const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, { headers: { cookie } })
   expect(response.status).toBe(200)
-  return (await response.json()) as { output: string; status: string }
+  const body = (await response.json()) as { output: string; status: string }
+  if (body.status === 'exited' || body.status === 'error')
+    await waitForRunResourceRelease(baseUrl, cookie, runId)
+  return body
 }
 
 afterEach(() => {

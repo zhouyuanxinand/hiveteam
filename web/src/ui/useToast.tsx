@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
-export type ToastKind = 'success' | 'warning' | 'error'
+export type ToastKind = 'success' | 'warning' | 'error' | 'info'
 
 export interface ToastEntry {
   id: string
@@ -52,7 +52,7 @@ const ToastStateContext = createContext<ToastEntry[]>([])
 const MAX_TOASTS = 3
 
 const defaultDuration = (kind: ToastKind): number => {
-  if (kind === 'success') return 3000
+  if (kind === 'success' || kind === 'info') return 3000
   if (kind === 'warning') return 5000
   return 0
 }

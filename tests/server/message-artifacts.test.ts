@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 describe('message artifacts', () => {
   test('report messages persist artifacts for recovery/debugging', () => {

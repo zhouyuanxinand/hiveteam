@@ -4,8 +4,9 @@ import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -210,6 +211,8 @@ const getRunViaHttp = async (baseUrl: string, cookie: string, runId: string) => 
   const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, { headers: { cookie } })
   expect(response.status).toBe(200)
   const body = (await response.json()) as { output: string; status: string }
+  if (body.status === 'exited' || body.status === 'error')
+    await waitForRunResourceRelease(baseUrl, cookie, runId)
   return {
     ...body,
     output: process.platform === 'win32' ? normalizePtyText(body.output) : body.output,
@@ -334,11 +337,17 @@ describe('Layer B fallback integration', () => {
       const alice = { id: orchestratorId(workspace.id) }
       const bob = await createWorkerViaHttp(server.baseUrl, cookie, workspace.id, 'Bob', 'tester')
 
-      await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/tasks`, {
+      const tasksUrl = `${server.baseUrl}/api/workspaces/${workspace.id}/tasks`
+      const tasks = await (await fetch(tasksUrl, { headers: { cookie } })).json()
+      const written = await fetch(tasksUrl, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ content: '# Tasks\n- [ ] layer b fallback\n' }),
+        body: JSON.stringify({
+          content: '# Tasks\n- [ ] layer b fallback\n',
+          expected_version: tasks.version,
+        }),
       })
+      expect(written.status, await written.clone().text()).toBe(200)
       await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, bob.id, {
         command: process.execPath,
         args: [bobScript],
@@ -501,11 +510,17 @@ describe('Layer B fallback integration', () => {
       const bobScript = writeEchoAgent(workspacePath, 'bob-passive.js')
       const sessionId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 
-      await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/tasks`, {
+      const tasksUrl = `${server.baseUrl}/api/workspaces/${workspace.id}/tasks`
+      const tasks = await (await fetch(tasksUrl, { headers: { cookie } })).json()
+      const written = await fetch(tasksUrl, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', cookie },
-        body: JSON.stringify({ content: '# Tasks\n- [ ] recover after failed resume\n' }),
+        body: JSON.stringify({
+          content: '# Tasks\n- [ ] recover after failed resume\n',
+          expected_version: tasks.version,
+        }),
       })
+      expect(written.status, await written.clone().text()).toBe(200)
       await configureWorkerViaHttp(server.baseUrl, cookie, workspace.id, bob.id, {
         command: process.execPath,
         args: [bobScript],

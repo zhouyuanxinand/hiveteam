@@ -5,7 +5,7 @@ import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
 } from '../../../src/shared/terminal-recovery.js'
-
+import { isRemoteMode } from '../remote/remote-permissions-api.js'
 import { UI_THEME_CHANGE_EVENT } from '../theme.js'
 import { createInputHighlights } from './input-highlights.js'
 import { resolveTerminalShortcut } from './shortcuts.js'
@@ -69,6 +69,7 @@ export const useTerminalRun = (
   const [connectionVersion, setConnectionVersion] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<'connecting' | 'running' | 'stopped'>('connecting')
+  const [readOnly, setReadOnly] = useState(isRemoteMode)
 
   const refresh = useCallback(() => {
     refreshRef.current?.()
@@ -328,6 +329,10 @@ export const useTerminalRun = (
         onError(message) {
           if (!disposed) setError(message)
         },
+        onInputPermissionChange(allowed) {
+          nextTerminal.options.disableStdin = !allowed
+          if (!disposed) setReadOnly(!allowed)
+        },
         onExit() {
           terminalExited = true
           if (!disposed) setStatus('stopped')
@@ -427,6 +432,7 @@ export const useTerminalRun = (
     focus,
     refresh,
     status,
+    readOnly,
     recovery,
     retrySession,
     connectionStatus,

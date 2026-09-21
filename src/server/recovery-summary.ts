@@ -6,7 +6,7 @@ import { getHiveTeamRules } from './hive-team-guidance.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import { wrapUntrustedPromptData } from './prompt-safety.js'
 import { wrapSystemMessage } from './system-message.js'
-import { TASKS_RELATIVE_PATH } from './tasks-file.js'
+import { TASKS_RELATIVE_PATH, tasksSnapshot } from './tasks-file.js'
 
 const TASKS_HEAD_LIMIT = 1536
 
@@ -86,9 +86,13 @@ const formatOpenTasks = (
     for (const task of queue.slice(-8)) {
       const suffix = task.lastError ? `\nDelivery error: ${task.lastError}` : ''
       lines.push(
-        `- ${target.name}:\n${wrapUntrustedPromptData('dispatch-task', task.text)}${suffix}`
+        `- dispatch_id=${task.id} report_revision=${task.reportRevision} status=${task.status} agent_id=${target.id}:\n${wrapUntrustedPromptData('dispatch-task', task.text, 1000)}${suffix}`
       )
     }
+    if (queue.length > 8)
+      lines.push(
+        `- agent_id=${target.id}: ${queue.length - 8} additional unfinished dispatches. Read the complete index with team recovery.`
+      )
     if (target.pendingTaskCount > queue.length) {
       lines.push(
         language === 'en'
@@ -156,14 +160,18 @@ export const buildRecoverySummary = ({
         ...formatTaskEvents(messages, agent, language),
         '',
         english ? '## Unfinished tasks' : '## 当前未完成任务',
+        `Complete paginated ledger: team recovery. Follow next_cursor using team recovery --cursor <cursor>; reload on recovery_snapshot_expired. This is new session context, not native session restoration. Preserve existing report receipts and reconcile unknown external actions; do not automatically redispatch.`,
+        `Open dispatch references: ${openDispatches.length}. Tasks file version: ${tasksSnapshot(tasksContent).version}. Task positions in the index are bound to that exact version.`,
         ...formatOpenTasks(openDispatches, agent, workers, language),
         '',
         english ? `## Current ${TASKS_RELATIVE_PATH} state` : `## 当前 ${TASKS_RELATIVE_PATH} 状态`,
-        tasksContent.trim()
-          ? wrapUntrustedPromptData('workflow', tasksContent.slice(0, TASKS_HEAD_LIMIT))
-          : english
-            ? '(empty)'
-            : '(空)',
+        agent.role !== 'orchestrator'
+          ? 'Read only your assigned task positions through team recovery.'
+          : tasksContent.trim()
+            ? wrapUntrustedPromptData('workflow', tasksContent.slice(0, TASKS_HEAD_LIMIT))
+            : english
+              ? '(empty)'
+              : '(空)',
         '',
         english ? '## Active workers' : '## 当前活跃 worker',
         ...formatWorkers(workers, language),

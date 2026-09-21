@@ -18,6 +18,7 @@ import { useI18n } from '../i18n.js'
 import { DeliveryQueuePanel } from './DeliveryQueuePanel.js'
 import { DispatchDiffDialog } from './DispatchDiffDialog.js'
 import { DispatchReport } from './DispatchReport.js'
+import { MessageDeliveryPanel } from './MessageDeliveryPanel.js'
 import { WorktreeResourcesPanel } from './WorktreeResourcesPanel.js'
 
 interface ActivityCenterDrawerProps {
@@ -95,7 +96,7 @@ export const ActivityCenterDrawer = ({
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'report' | 'diagnostics' | null>(null)
   const [reviewDispatchId, setReviewDispatchId] = useState<string | null>(null)
-  const [surface, setSurface] = useState<'workspace' | 'queue' | 'resources'>(
+  const [surface, setSurface] = useState<'workspace' | 'queue' | 'resources' | 'messages'>(
     workspaceId ? 'workspace' : 'queue'
   )
 
@@ -220,6 +221,15 @@ export const ActivityCenterDrawer = ({
               <button
                 type="button"
                 className="icon-btn"
+                disabled={!workspaceId}
+                aria-pressed={surface === 'messages'}
+                onClick={() => setSurface('messages')}
+              >
+                {language === 'zh' ? '任务状态' : 'Task status'}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
                 aria-pressed={surface === 'workspace'}
                 disabled={!workspaceId}
                 onClick={() => setSurface('workspace')}
@@ -275,7 +285,9 @@ export const ActivityCenterDrawer = ({
             ) : null}
 
             <div className="activity-center-body scroll-y">
-              {surface === 'resources' ? (
+              {surface === 'messages' ? (
+                <MessageDeliveryPanel key={workspaceId} workspaceId={workspaceId} />
+              ) : surface === 'resources' ? (
                 <WorktreeResourcesPanel />
               ) : surface === 'queue' ? (
                 <DeliveryQueuePanel

@@ -1,7 +1,11 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
+import { ExecutionPolicyError } from './execution-policy-error.js'
+import { ResourceLimitError } from './resource-budget-store.js'
+import type { ResourceStartQueue } from './resource-start-queue.js'
 import { getStartupCommandExecutable } from './startup-command-parser.js'
 
 interface AutostartPort {
+  resourceQueue?: ResourceStartQueue
   startAgent: (
     workspaceId: string,
     agentId: string,
@@ -30,8 +34,11 @@ const COMMAND_NOT_FOUND_EXIT_CODE = 127
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 export interface OrchestratorStartResult {
+  queue_id?: string
   ok: boolean
   error: string | null
+  error_code?: string
+  missing_capabilities?: string[]
   run_id: string | null
 }
 
@@ -141,10 +148,30 @@ export const autostartAgent = async (
     }
     return { ok: true, error: null, run_id: run.runId }
   } catch (error) {
+    if (error instanceof ResourceLimitError && port.resourceQueue) {
+      const queued = port.resourceQueue.enqueue({
+        workspaceId,
+        agentId,
+        executionKey: `agent:${agentId}`,
+        kind: agentId === `${workspaceId}:orchestrator` ? 'orchestrator' : 'worker',
+        source: 'scenario',
+        payload: {},
+        reason: error.reason,
+      })
+      return {
+        ok: false,
+        error: 'Waiting for execution resources',
+        run_id: null,
+        queue_id: queued.id,
+      }
+    }
     return {
       ok: false,
       error: formatStartError(error, getLaunchErrorCommand(config)),
       run_id: null,
+      ...(error instanceof ExecutionPolicyError
+        ? { error_code: error.code, missing_capabilities: error.missingCapabilities }
+        : {}),
     }
   }
 }

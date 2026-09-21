@@ -1,5 +1,10 @@
 import type { Database } from 'better-sqlite3'
 
+import {
+  createPublicAppStateStore,
+  type InternalAppStateStore,
+  type PublicAppStateStore,
+} from './app-state-policy.js'
 import { type AppStateRecord, type AppStateValue, createAppStateStore } from './app-state-store.js'
 import {
   type CommandPresetInput,
@@ -17,11 +22,11 @@ export interface SettingsStore {
   createRoleTemplate: (input: RoleTemplateInput) => RoleTemplateRecord
   deleteCommandPreset: (id: string) => void
   deleteRoleTemplate: (id: string) => void
-  getAppState: (key: string) => AppStateRecord | undefined
+  internalAppState: InternalAppStateStore
+  publicAppState: PublicAppStateStore
   getCommandPreset: (id: string) => CommandPresetRecord | undefined
   listCommandPresets: () => CommandPresetRecord[]
   listRoleTemplates: () => RoleTemplateRecord[]
-  setAppState: (key: string, value: AppStateValue) => void
   updateCommandPreset: (id: string, input: CommandPresetInput) => CommandPresetRecord
   updateRoleTemplate: (id: string, input: RoleTemplateInput) => RoleTemplateRecord
 }
@@ -45,11 +50,11 @@ export const createSettingsStore = (db: Database): SettingsStore => {
     createRoleTemplate: roleTemplateStore.create,
     deleteCommandPreset: commandPresetStore.remove,
     deleteRoleTemplate: roleTemplateStore.remove,
-    getAppState: appStateStore.get,
+    internalAppState: appStateStore,
+    publicAppState: createPublicAppStateStore(appStateStore),
     getCommandPreset: commandPresetStore.get,
     listCommandPresets: commandPresetStore.list,
     listRoleTemplates: roleTemplateStore.list,
-    setAppState: appStateStore.set,
     updateCommandPreset: commandPresetStore.update,
     updateRoleTemplate: roleTemplateStore.update,
   }

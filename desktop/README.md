@@ -17,6 +17,18 @@ Web mode runs from the system tray after the browser closes; use the tray menu
 to reopen or exit HiveTeam. Desktop mode confirms before it stops the local
 services and closes.
 
+Both modes receive a one-time sign-in link over the private launcher/runtime
+IPC channel. The link expires after 60 seconds and the UI removes its fragment
+before exchanging it for an HttpOnly cookie. Refreshing an authenticated window
+keeps its session until the runtime restarts. After a restart or when opening a
+new browser profile, reopen through the tray/desktop launcher. Opening only the
+printed localhost URL does not grant a new management session.
+
+`hive` and `pnpm start` open the authenticated browser themselves; enter `o` in
+their terminal to request another link. Do not copy a sign-in link into logs or
+share it with another user. The launcher does not put UI credentials in worker
+environment variables, URLs sent to the HTTP server, or workspace files.
+
 For unattended development or automation, skip the chooser with
 `HIVE_DESKTOP_LAUNCH_MODE=desktop` or `HIVE_DESKTOP_LAUNCH_MODE=web`.
 

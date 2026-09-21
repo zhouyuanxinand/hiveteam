@@ -1,27 +1,31 @@
 import { randomUUID } from 'node:crypto'
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { basename, extname, join, relative, resolve, sep } from 'node:path'
-
+import { readFile } from 'node:fs/promises'
+import { basename, extname } from 'node:path'
 import type { Database } from 'better-sqlite3'
 import type {
-  WorkflowCatalogItem,
+  WorkflowCondition,
+  WorkflowResultVersion,
   WorkflowRun,
   WorkflowRunStep,
-  WorkflowStepDefinition,
 } from '../shared/workflows.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { BadRequestError, ConflictError } from './http-errors.js'
 import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
+import { createWorkflowAttempts } from './workflow-attempts.js'
+import {
+  listWorkflowFiles,
+  MAX_REPORT_LENGTH,
+  MAX_TASK_LENGTH,
+  MAX_WORKFLOW_SOURCE_BYTES,
+  parseDefinition,
+  readCatalogItem,
+  resolveWorkflowPath,
+  titleFromFileName,
+} from './workflow-definition.js'
+import { createWorkflowRunStore, type WorkflowRunRow } from './workflow-run-store.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
-const WORKFLOW_EXTENSIONS = new Set(['.cjs', '.js', '.json', '.md', '.mjs', '.ts', '.yaml', '.yml'])
-const MAX_WORKFLOW_FILES = 100
-const MAX_WORKFLOW_STEPS = 20
-const MAX_WORKFLOW_SOURCE_BYTES = 128 * 1024
-const MAX_TASK_LENGTH = 4_000
-const MAX_REPORT_LENGTH = 8_000
-
-interface WorkflowRuntimeInput {
+export interface WorkflowRuntimeInput {
   db: Database
   teamOps: {
     cancelTask: (
@@ -33,260 +37,44 @@ interface WorkflowRuntimeInput {
       workspaceId: string,
       workerId: string,
       text: string,
-      input: { fromAgentId: string; hivePort: string }
+      input: {
+        fromAgentId: string
+        hivePort: string
+        onCreated?: (dispatch: DispatchRecord) => void
+      }
     ) => Promise<DispatchRecord>
   }
   workspaceStore: WorkspaceStore
+  getDispatch?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  cancellationConfirmed?: (dispatchId: string) => boolean
+  canDispatch?: (workspaceId: string) => boolean
 }
 
-interface WorkflowDefinition {
-  description: string
-  name: string
-  steps: WorkflowStepDefinition[]
-}
-
-interface WorkflowRunRow {
-  created_at: number
-  definition_json: string
-  ended_at: number | null
-  error: string | null
-  hive_port: string
-  id: string
-  name: string
-  started_at: number | null
-  status: WorkflowRun['status']
-  steps_json: string
-  updated_at: number
-  workflow_id: string
-  workspace_id: string
-}
-
-const parseJson = <T>(value: string, fallback: T): T => {
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
-
-const titleFromFileName = (name: string) =>
-  name
-    .replace(/\.[^.]+$/, '')
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ')
-
-const readText = (value: unknown, fallback: string, maxLength: number) =>
-  typeof value === 'string' && value.trim() ? sanitizePromptData(value.trim(), maxLength) : fallback
-
-const fromRow = (row: WorkflowRunRow): WorkflowRun => ({
-  createdAt: row.created_at,
-  endedAt: row.ended_at,
-  error: row.error,
-  id: row.id,
-  name: sanitizePromptData(row.name, 100),
-  startedAt: row.started_at,
-  status: row.status,
-  steps: parseJson<WorkflowRunStep[]>(row.steps_json, []).map((step) => ({
-    artifacts: Array.isArray(step.artifacts)
-      ? step.artifacts
-          .filter((artifact): artifact is string => typeof artifact === 'string')
-          .map((artifact) => sanitizePromptData(artifact, 1_000))
-      : [],
-    dispatchId: typeof step.dispatchId === 'string' ? step.dispatchId : null,
-    error: typeof step.error === 'string' ? sanitizePromptData(step.error, 1_000) : null,
-    id: sanitizePromptData(step.id, 100),
-    needs: Array.isArray(step.needs)
-      ? step.needs
-          .filter((need): need is string => typeof need === 'string')
-          .slice(0, MAX_WORKFLOW_STEPS)
-      : [],
-    reportText:
-      typeof step.reportText === 'string'
-        ? sanitizePromptData(step.reportText, MAX_REPORT_LENGTH)
-        : null,
-    status: step.status,
-    task: sanitizePromptData(step.task, MAX_TASK_LENGTH),
-    worker: sanitizePromptData(step.worker, 100),
-  })),
-  updatedAt: row.updated_at,
-  workflowId: row.workflow_id,
-  workspaceId: row.workspace_id,
-})
-
-const parseDefinition = (
-  value: unknown,
-  fallbackName: string
-): { definition?: WorkflowDefinition; error?: string } => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return { error: 'Workflow JSON must contain an object.' }
-  }
-  const record = value as Record<string, unknown>
-  const name = readText(record.name, fallbackName, 100)
-  const description = readText(record.description, '', 240)
-  if (!Array.isArray(record.steps) || record.steps.length === 0) {
-    return { error: 'Workflow JSON must define at least one step.' }
-  }
-  if (record.steps.length > MAX_WORKFLOW_STEPS) {
-    return { error: `Workflow cannot contain more than ${MAX_WORKFLOW_STEPS} steps.` }
-  }
-
-  const ids = new Set<string>()
-  const steps: WorkflowStepDefinition[] = []
-  for (const item of record.steps) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      return { error: 'Every workflow step must be an object.' }
-    }
-    const step = item as Record<string, unknown>
-    const id = readText(step.id, '', 100)
-    const worker = readText(step.worker, '', 100)
-    const task = readText(step.task, '', MAX_TASK_LENGTH)
-    if (!id || !worker || !task) {
-      return { error: 'Every workflow step needs id, worker, and task.' }
-    }
-    if (ids.has(id)) return { error: `Workflow step id is duplicated: ${id}` }
-    ids.add(id)
-    const needsValue = step.needs
-    if (needsValue !== undefined && !Array.isArray(needsValue)) {
-      return { error: `Workflow step ${id} needs must be an array.` }
-    }
-    const needs = (Array.isArray(needsValue) ? needsValue : [])
-      .filter((need): need is string => typeof need === 'string' && Boolean(need.trim()))
-      .map((need) => sanitizePromptData(need.trim(), 100))
-    if (needs.length !== (Array.isArray(needsValue) ? needsValue.length : 0)) {
-      return { error: `Workflow step ${id} has an invalid dependency.` }
-    }
-    steps.push({ id, needs: [...new Set(needs)], task, worker })
-  }
-
-  const stepIds = new Set(steps.map((step) => step.id))
-  for (const step of steps) {
-    if (step.needs.some((need) => need === step.id || !stepIds.has(need))) {
-      return { error: `Workflow step ${step.id} references an invalid dependency.` }
-    }
-  }
-
-  const visiting = new Set<string>()
-  const visited = new Set<string>()
-  const byId = new Map(steps.map((step) => [step.id, step]))
-  const visit = (id: string): boolean => {
-    if (visiting.has(id)) return false
-    if (visited.has(id)) return true
-    visiting.add(id)
-    const step = byId.get(id)
-    if (!step || step.needs.every(visit)) {
-      visiting.delete(id)
-      visited.add(id)
-      return true
-    }
-    return false
-  }
-  if (steps.some((step) => !visit(step.id)))
-    return { error: 'Workflow dependencies contain a cycle.' }
-
-  return { definition: { description, name, steps } }
-}
-
-const listWorkflowFiles = async (root: string) => {
-  const found: string[] = []
-  const visit = async (directory: string, depth: number): Promise<void> => {
-    if (depth > 4 || found.length >= MAX_WORKFLOW_FILES) return
-    let entries: import('node:fs').Dirent[]
-    try {
-      entries = await readdir(directory, { withFileTypes: true })
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
-    for (const entry of entries) {
-      if (found.length >= MAX_WORKFLOW_FILES) return
-      const absolutePath = join(directory, entry.name)
-      if (entry.isDirectory()) await visit(absolutePath, depth + 1)
-      else if (entry.isFile() && WORKFLOW_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
-        found.push(absolutePath)
-      }
-    }
-  }
-  await visit(root, 0)
-  return found
-}
-
-const resolveWorkflowPath = (workflowRoot: string, workflowId: string) => {
-  const root = resolve(workflowRoot)
-  const candidate = resolve(root, workflowId)
-  if (candidate === root || !candidate.startsWith(`${root}${sep}`)) {
-    throw new BadRequestError('Workflow path is outside .hive/workflows')
-  }
-  const normalizedId = relative(root, candidate).replaceAll('\\', '/')
-  if (normalizedId !== workflowId) throw new BadRequestError('Workflow path is invalid')
-  return candidate
-}
-
-export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowRuntimeInput) => {
+export const createWorkflowRuntime = ({
+  db,
+  teamOps,
+  workspaceStore,
+  getDispatch,
+  cancellationConfirmed,
+  canDispatch,
+}: WorkflowRuntimeInput) => {
   const inFlightRuns = new Set<string>()
+  const pendingRuns = new Set<string>()
+  let closing = false
+  let timer: ReturnType<typeof setInterval> | undefined
+  let readEvidence:
+    | ((
+        workspaceId: string,
+        dispatch: DispatchRecord,
+        conditions: WorkflowCondition[]
+      ) => Promise<{
+        satisfied: WorkflowCondition[]
+        version: Omit<WorkflowResultVersion, 'attempt' | 'dispatch_id' | 'report_revision'>
+        reason: string | null
+      }>)
+    | undefined
 
-  const get = (workspaceId: string, runId: string) => {
-    const row = db
-      .prepare('SELECT * FROM workflow_runs WHERE workspace_id = ? AND id = ?')
-      .get(workspaceId, runId) as WorkflowRunRow | undefined
-    return row ? fromRow(row) : undefined
-  }
-
-  const listRuns = (workspaceId: string, limit = 20) =>
-    (
-      db
-        .prepare(
-          `SELECT * FROM workflow_runs
-           WHERE workspace_id = ?
-           ORDER BY created_at DESC
-           LIMIT ?`
-        )
-        .all(workspaceId, Math.max(1, Math.min(50, Math.floor(limit)))) as WorkflowRunRow[]
-    ).map(fromRow)
-
-  const findRunForDispatch = (workspaceId: string, dispatchId: string) => {
-    const row = db
-      .prepare(
-        `SELECT * FROM workflow_runs
-       WHERE workspace_id = ? AND status IN ('running', 'completed')
-         AND EXISTS (SELECT 1 FROM json_each(steps_json) step
-                     WHERE json_extract(step.value, '$.dispatchId') = ?)
-       LIMIT 1`
-      )
-      .get(workspaceId, dispatchId) as WorkflowRunRow | undefined
-    return row ? fromRow(row) : undefined
-  }
-
-  const saveRun = (
-    run: WorkflowRun,
-    patch: { error?: string | null; status?: WorkflowRun['status']; endedAt?: number | null } = {}
-  ) => {
-    const now = Date.now()
-    const status = patch.status ?? run.status
-    const endedAt = patch.endedAt === undefined ? run.endedAt : patch.endedAt
-    db.prepare(
-      `UPDATE workflow_runs
-       SET steps_json = ?, status = ?, error = ?, ended_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ?`
-    ).run(
-      JSON.stringify(run.steps),
-      status,
-      patch.error === undefined ? run.error : patch.error,
-      endedAt,
-      now,
-      run.workspaceId,
-      run.id
-    )
-  }
-
-  const updateStep = (run: WorkflowRun, stepId: string, patch: Partial<WorkflowRunStep>) => {
-    const nextSteps = run.steps.map((step) => (step.id === stepId ? { ...step, ...patch } : step))
-    const next = { ...run, steps: nextSteps, updatedAt: Date.now() }
-    saveRun(next)
-    return get(run.workspaceId, run.id) ?? next
-  }
-
+  const { get, listRuns, findRunForDispatch, saveRun, updateStep } = createWorkflowRunStore(db)
   const failRun = (run: WorkflowRun, error: unknown) => {
     const message = sanitizePromptData(
       error instanceof Error ? error.message : String(error),
@@ -295,7 +83,7 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
     let current = get(run.workspaceId, run.id) ?? run
     if (current.status !== 'running') return current
     for (const step of current.steps) {
-      if (step.status !== 'running' || !step.dispatchId) continue
+      if (!['queued', 'running'].includes(step.status) || !step.dispatchId) continue
       try {
         teamOps.cancelTask(run.workspaceId, step.dispatchId, {
           fromAgentId: `${run.workspaceId}:orchestrator`,
@@ -322,10 +110,132 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
 
   const stepIsReady = (step: WorkflowRunStep, steps: WorkflowRunStep[]) =>
     step.status === 'queued' &&
+    !step.rerunPending &&
+    !step.needsRerun &&
+    !step.dispatchId &&
     step.needs.every(
       (need) => steps.find((candidate) => candidate.id === need)?.status === 'completed'
     )
 
+  const refreshQuality = async (initial: WorkflowRun) => {
+    for (const candidate of initial.steps) {
+      if (
+        !candidate.quality ||
+        !candidate.dispatchId ||
+        candidate.rerunPending ||
+        candidate.needsRerun
+      )
+        continue
+      const dispatch = getDispatch?.(initial.workspaceId, candidate.dispatchId)
+      if (!dispatch || dispatch.status !== 'reported') continue
+      const evidence = readEvidence
+        ? await readEvidence(initial.workspaceId, dispatch, candidate.quality.all_of)
+        : null
+      const latest = get(initial.workspaceId, initial.id)
+      const step = latest?.steps.find((item) => item.id === candidate.id)
+      const current = getDispatch?.(initial.workspaceId, candidate.dispatchId)
+      if (
+        !latest ||
+        !['running', 'completed'].includes(latest.status) ||
+        !step ||
+        step.dispatchId !== candidate.dispatchId ||
+        step.attempt !== candidate.attempt ||
+        step.rerunPending ||
+        step.needsRerun ||
+        current?.status !== 'reported' ||
+        current.reportRevision !== dispatch.reportRevision
+      )
+        continue
+      const waitingFor = candidate.quality.all_of.filter(
+        (condition) => !evidence?.satisfied.includes(condition)
+      )
+      const status = waitingFor.length ? 'awaiting_review' : 'completed'
+      const resultVersion =
+        waitingFor.length || !evidence
+          ? null
+          : {
+              dispatch_id: dispatch.id,
+              report_revision: dispatch.reportRevision,
+              attempt: step.attempt ?? 0,
+              ...evidence.version,
+            }
+      const error = waitingFor.length
+        ? (evidence?.reason ?? `Report received. Waiting for: ${waitingFor.join(', ')}.`)
+        : null
+      if (
+        step.status !== status ||
+        step.error !== error ||
+        JSON.stringify(step.resultVersion) !== JSON.stringify(resultVersion)
+      ) {
+        const updated = updateStep(latest, step.id, {
+          status,
+          waitingFor,
+          error,
+          resultVersion,
+          reportText: dispatch.reportText,
+          artifacts: dispatch.artifacts,
+        })
+        if (latest.status === 'completed' && status !== 'completed')
+          saveRun(updated, { status: 'running', endedAt: null })
+        if (
+          step.status === 'completed' &&
+          (status !== 'completed' ||
+            JSON.stringify(step.resultVersion) !== JSON.stringify(resultVersion))
+        ) {
+          const affected = affectedSteps(updated, step.id)
+          affected.delete(step.id)
+          for (const child of updated.steps)
+            if (affected.has(child.id) && child.dispatchId) {
+              const dispatch = getDispatch?.(updated.workspaceId, child.dispatchId)
+              if (dispatch && ['queued', 'submitted', 'failed'].includes(dispatch.status))
+                teamOps.cancelTask(updated.workspaceId, dispatch.id, {
+                  fromAgentId: `${updated.workspaceId}:orchestrator`,
+                  reason: 'Workflow dependency evidence became stale.',
+                })
+            }
+          const current = get(updated.workspaceId, updated.id)
+          if (!current) continue
+          saveRun({
+            ...current,
+            steps: current.steps.map((child) =>
+              affected.has(child.id) && child.dispatchId
+                ? {
+                    ...child,
+                    status: 'blocked' as const,
+                    needsRerun: true,
+                    resultVersion: null,
+                    error:
+                      'Dependency evidence changed. Rerun from the changed step after reviewing external effects.',
+                  }
+                : child
+            ),
+          })
+        }
+      }
+    }
+    return get(initial.workspaceId, initial.id) ?? initial
+  }
+
+  const schedule = (runId: string) => {
+    if (closing) return
+    if (inFlightRuns.has(runId)) {
+      pendingRuns.add(runId)
+      return
+    }
+    void dispatchReady(runId).catch((error: unknown) => {
+      console.error('[hive] workflow reconciliation failed', { runId, error })
+    })
+  }
+
+  const { affectedSteps, requestRerun, settleRerun } = createWorkflowAttempts({
+    db,
+    teamOps,
+    getDispatch,
+    cancellationConfirmed,
+    get,
+    saveRun,
+    schedule,
+  })
   const buildStepTask = (run: WorkflowRun, step: WorkflowRunStep) => {
     const dependencies = step.needs
       .map((need) => run.steps.find((candidate) => candidate.id === need))
@@ -339,10 +249,26 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       `[Hive Workflow: ${sanitizePromptData(run.name, 100)}]`,
       `Workflow step: ${sanitizePromptData(step.id, 100)}`,
       'Complete only this step and report through the normal Hive team protocol.',
-      'Declare --outcome success|failed|blocked|partial when reporting. Only success or human acceptance can release dependent steps. A success report is not proof that code has been verified.',
+      'Include the dispatch_id supplied with this attempt in every report; never reuse a previous attempt id.',
+      step.quality
+        ? `Declare --outcome success|failed|blocked|partial when reporting. Dependencies require ALL of: ${step.quality.all_of.join(', ')}. A report is separate from review and verification.`
+        : 'Declare --outcome success|failed|blocked|partial when reporting. Only success or human acceptance can release dependent steps. A success report is not proof that code has been verified.',
       'Task:',
       wrapUntrustedPromptData('workflow', step.task, MAX_TASK_LENGTH),
     ]
+    if ((step.attempt ?? 0) > 1) {
+      const previous = db
+        .prepare(
+          'SELECT reason FROM workflow_step_attempts WHERE run_id=? AND step_id=? AND attempt=?'
+        )
+        .get(run.id, step.id, (step.attempt ?? 0) - 1) as { reason: string | null } | undefined
+      if (previous?.reason)
+        lines.push(
+          '',
+          'Reason for this attempt:',
+          wrapUntrustedPromptData('workflow', previous.reason, MAX_TASK_LENGTH)
+        )
+    }
     if (dependencies.length > 0) {
       lines.push(
         '',
@@ -358,19 +284,28 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       ...(db.prepare('SELECT * FROM workflow_runs WHERE id = ?').all(runId) as WorkflowRunRow[]),
     ]
     const workspaceId = initial[0]?.workspace_id
-    if (!workspaceId || inFlightRuns.has(runId)) return
+    if (closing || !workspaceId || inFlightRuns.has(runId)) return
     inFlightRuns.add(runId)
     try {
       const initialRun = get(workspaceId, runId)
-      if (!initialRun || initialRun.status !== 'running') return
-      let run: WorkflowRun = initialRun
+      if (!initialRun || !['running', 'completed'].includes(initialRun.status)) return
+      if (canDispatch && !canDispatch(workspaceId)) return
+      let run: WorkflowRun = settleRerun(initialRun)
+      run = await refreshQuality(run)
+      if (run.status !== 'running') return
       const readySteps = run.steps.filter((step) => stepIsReady(step, run.steps))
       for (const candidate of readySteps) {
         const currentRun = get(workspaceId, runId)
         if (!currentRun || currentRun.status !== 'running') return
+        const currentStep = currentRun.steps.find((step) => step.id === candidate.id)
+        if (!currentStep || !stepIsReady(currentStep, currentRun.steps)) continue
+        // Evidence reads and earlier dispatches yield. A worktree operation may
+        // have started since the initial check; leave this step queued for the
+        // existing scheduler instead of failing the workflow on a temporary lock.
+        if (canDispatch && !canDispatch(workspaceId)) return
         try {
           const worker = workspaceStore.getWorkerByName(workspaceId, candidate.worker)
-          run = updateStep(currentRun, candidate.id, { error: null, status: 'running' })
+          run = updateStep(currentRun, candidate.id, { error: null, status: 'queued' })
           const portRow = db
             .prepare('SELECT hive_port FROM workflow_runs WHERE id = ?')
             .get(runId) as { hive_port?: unknown } | undefined
@@ -381,6 +316,33 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
             {
               fromAgentId: `${workspaceId}:orchestrator`,
               hivePort: typeof portRow?.hive_port === 'string' ? portRow.hive_port : '',
+              onCreated: (dispatch) => {
+                const owner = get(workspaceId, runId)
+                const current = owner?.steps.find((step) => step.id === candidate.id)
+                if (
+                  !owner ||
+                  owner.status !== 'running' ||
+                  !current ||
+                  current.attempt !== candidate.attempt ||
+                  !stepIsReady(current, owner.steps)
+                )
+                  throw new ConflictError('Workflow attempt changed before dispatch creation.')
+                updateStep(owner, current.id, {
+                  dispatchId: dispatch.id,
+                  status: 'queued',
+                  inputVersion: dispatch.baseHeadSha,
+                  dependencyVersions: Object.fromEntries(
+                    current.needs.map((id) => {
+                      const dependency = owner.steps.find((step) => step.id === id)
+                      if (!dependency?.resultVersion)
+                        throw new ConflictError(
+                          'Dependency version is unavailable. Rerun the dependency first.'
+                        )
+                      return [id, dependency.resultVersion]
+                    })
+                  ),
+                })
+              },
             }
           )
           const latest = get(workspaceId, runId)
@@ -397,7 +359,15 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
             failRun(latest, dispatch.lastError ?? 'Workflow step delivery failed')
             return
           }
-          run = updateStep(latest, candidate.id, { dispatchId: dispatch.id, status: 'running' })
+          run = updateStep(latest, candidate.id, {
+            dispatchId: dispatch.id,
+            inputVersion: dispatch.baseHeadSha,
+            ...(latest.steps.find((step) => step.id === candidate.id)?.status === 'queued'
+              ? {
+                  status: dispatch.status === 'queued' ? 'queued' : 'running',
+                }
+              : {}),
+          })
         } catch (error) {
           failRun(get(workspaceId, runId) ?? run, error)
           return
@@ -416,46 +386,71 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       }
     } finally {
       inFlightRuns.delete(runId)
+      if (pendingRuns.delete(runId)) queueMicrotask(() => schedule(runId))
     }
-  }
-
-  const readCatalogItem = async (workflowRoot: string, workspacePath: string, filePath: string) => {
-    const source = await readFile(filePath, 'utf8').then((content) => content.slice(0, 12_000))
-    const id = relative(workflowRoot, filePath).replaceAll('\\', '/')
-    const extension = extname(filePath).toLowerCase()
-    let name = titleFromFileName(basename(filePath))
-    let description = ''
-    let validationError: string | null = null
-    if (extension === '.json') {
-      try {
-        const parsed = parseDefinition(JSON.parse(source), name)
-        if (parsed.definition) {
-          name = parsed.definition.name
-          description = parsed.definition.description
-        } else validationError = parsed.error ?? 'Workflow JSON is invalid.'
-      } catch {
-        validationError = 'Workflow JSON could not be parsed.'
-      }
-    } else {
-      const nameMatch = source.match(/(?:name|title)\s*[:=]\s*['"]([^'"]{1,100})['"]/i)
-      const descriptionMatch = source.match(/description\s*[:=]\s*['"]([^'"]{1,240})['"]/i)
-      name = readText(nameMatch?.[1], name, 100)
-      description = readText(descriptionMatch?.[1], '', 240)
-      validationError = 'Only .json workflows are executable; this file is metadata-only.'
-    }
-    const fileStat = await stat(filePath)
-    return {
-      description,
-      id,
-      name,
-      path: relative(workspacePath, filePath).replaceAll('\\', '/'),
-      runnable: extension === '.json' && validationError === null,
-      updatedAt: fileStat.mtimeMs,
-      validationError,
-    } satisfies WorkflowCatalogItem
   }
 
   return {
+    rerun: requestRerun,
+    rerunForDispatch(workspaceId: string, dispatchId: string, text: string) {
+      const run = findRunForDispatch(workspaceId, dispatchId)
+      const step = run?.steps.find((item) => item.dispatchId === dispatchId)
+      if (!run || !step) return false
+      requestRerun(workspaceId, run.id, step.id, step.attempt ?? 0, text, false)
+      return true
+    },
+    attempts(workspaceId: string, runId: string) {
+      if (!get(workspaceId, runId)) throw new BadRequestError('Workflow run not found')
+      const rows = db
+        .prepare(
+          'SELECT step_id,attempt,dispatch_id,snapshot,invalidated_at,reason FROM workflow_step_attempts WHERE run_id=? ORDER BY step_id,attempt'
+        )
+        .all(runId) as Array<{
+        step_id: string
+        attempt: number
+        dispatch_id: string | null
+        snapshot: string
+        invalidated_at: number | null
+        reason: string | null
+      }>
+      return rows.map((entry) => ({
+        ...entry,
+        snapshot: JSON.parse(entry.snapshot) as WorkflowRunStep,
+      }))
+    },
+    resume(hivePort: string) {
+      if (closing) return
+      db.prepare("UPDATE workflow_runs SET hive_port=? WHERE status='running'").run(hivePort)
+      if (timer) return
+      timer = setInterval(() => {
+        for (const row of db
+          .prepare("SELECT id FROM workflow_runs WHERE status='running'")
+          .all() as Array<{ id: string }>)
+          schedule(row.id)
+      }, 1500)
+      timer.unref()
+    },
+    async close() {
+      closing = true
+      if (timer) clearInterval(timer)
+      pendingRuns.clear()
+      while (inFlightRuns.size) await new Promise((resolve) => setTimeout(resolve, 25))
+    },
+    setEvidenceReader(reader: NonNullable<typeof readEvidence>) {
+      readEvidence = reader
+    },
+    evidenceChanged(workspaceId: string, dispatchId: string) {
+      const run = findRunForDispatch(workspaceId, dispatchId)
+      if (run) schedule(run.id)
+    },
+    async refresh(workspaceId: string, runId: string) {
+      const run = get(workspaceId, runId)
+      if (run && ['running', 'completed'].includes(run.status)) {
+        await refreshQuality(run)
+        await dispatchReady(runId)
+      }
+      return get(workspaceId, runId)
+    },
     async listCatalog(workflowRoot: string, workspacePath: string) {
       const files = await listWorkflowFiles(workflowRoot)
       const items = await Promise.all(
@@ -464,6 +459,7 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       return items.sort((left, right) => right.updatedAt - left.updatedAt)
     },
     async start(workspaceId: string, workflowRoot: string, workflowId: string, hivePort: string) {
+      this.resume(hivePort)
       const workspace = workspaceStore.getWorkspaceSnapshot(workspaceId)
       const orchestrator = workspace.agents.find(
         (agent) => agent.id === `${workspaceId}:orchestrator`
@@ -498,6 +494,11 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
         }
         steps.push({
           artifacts: [],
+          ...(step.quality ? { quality: step.quality } : {}),
+          waitingFor: step.quality?.all_of ?? [],
+          attempt: 1,
+          dependencyVersions: {},
+          resultVersion: null,
           dispatchId: null,
           error: null,
           id: step.id,
@@ -546,7 +547,7 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       const nextSteps = current.steps.map((step) => {
         if (step.status === 'completed' || step.status === 'failed' || step.status === 'stopped')
           return step
-        if (step.dispatchId && step.status === 'running') {
+        if (step.dispatchId && ['queued', 'running'].includes(step.status)) {
           try {
             teamOps.cancelTask(workspaceId, step.dispatchId, {
               fromAgentId: orchestratorId,
@@ -566,17 +567,37 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
       saveRun(next, { status: 'stopped', endedAt: Date.now() })
       return get(workspaceId, runId) ?? next
     },
+    recordDispatchSubmitted(workspaceId: string, dispatchId: string) {
+      const run = findRunForDispatch(workspaceId, dispatchId)
+      if (!run || run.status !== 'running') return
+      const step = run.steps.find((candidate) => candidate.dispatchId === dispatchId)
+      if (step?.status === 'queued') updateStep(run, step.id, { status: 'running' })
+    },
     recordDispatchReport(workspaceId: string, dispatch: DispatchRecord) {
+      const persisted = getDispatch?.(workspaceId, dispatch.id)
+      if (
+        persisted &&
+        (persisted.status !== 'reported' || persisted.reportRevision !== dispatch.reportRevision)
+      )
+        return false
       const run = findRunForDispatch(workspaceId, dispatch.id)
       if (!run || run.status !== 'running' || dispatch.status !== 'reported') return false
       const step = run.steps.find((candidate) => candidate.dispatchId === dispatch.id)
-      if (!step || !['running', 'blocked', 'awaiting_review'].includes(step.status)) return false
+      if (
+        !step ||
+        step.rerunPending ||
+        step.needsRerun ||
+        !['queued', 'running', 'blocked', 'awaiting_review'].includes(step.status)
+      )
+        return false
       const canAdvance = dispatch.reportOutcome === 'success' || dispatch.acceptedAt != null
-      const status = canAdvance
-        ? 'completed'
-        : dispatch.reportOutcome
-          ? 'blocked'
-          : 'awaiting_review'
+      const status = step.quality
+        ? 'awaiting_review'
+        : canAdvance
+          ? 'completed'
+          : dispatch.reportOutcome
+            ? 'blocked'
+            : 'awaiting_review'
       const completed = updateStep(run, step.id, {
         artifacts: dispatch.artifacts,
         error:
@@ -587,7 +608,22 @@ export const createWorkflowRuntime = ({ db, teamOps, workspaceStore }: WorkflowR
           ? sanitizePromptData(dispatch.reportText, MAX_REPORT_LENGTH)
           : '',
         status,
+        resultVersion:
+          !step.quality && canAdvance
+            ? {
+                attempt: step.attempt ?? 0,
+                dispatch_id: dispatch.id,
+                report_revision: dispatch.reportRevision,
+                source_sha: null,
+                base_sha: null,
+                repository_id: null,
+              }
+            : null,
       })
+      if (step.quality) {
+        schedule(run.id)
+        return true
+      }
       if (!canAdvance) return true
       if (completed.steps.every((candidate) => candidate.status === 'completed')) {
         saveRun(completed, { status: 'completed', endedAt: Date.now() })

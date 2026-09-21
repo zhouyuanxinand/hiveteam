@@ -9,11 +9,6 @@ type BoundPreset = Pick<
   'resumeArgsTemplate' | 'sessionIdCapture' | 'yoloArgsTemplate'
 >
 
-const appendUniqueArgs = (prefix: string[], args: string[]) => {
-  const seen = new Set(prefix)
-  return prefix.concat(args.filter((arg) => !seen.has(arg)))
-}
-
 const getEffectiveCapture = (
   config: AgentLaunchConfigInput,
   preset: BoundPreset | null | undefined
@@ -23,24 +18,6 @@ const getEffectiveResumeTemplate = (
   config: AgentLaunchConfigInput,
   preset: BoundPreset | null | undefined
 ) => config.resumeArgsTemplate ?? preset?.resumeArgsTemplate ?? null
-
-const withPresetYoloArgs = (
-  config: AgentLaunchConfigInput,
-  preset: BoundPreset | null | undefined
-) => {
-  const yoloArgs = preset?.yoloArgsTemplate
-  if (!yoloArgs?.length) return config
-  const nextArgs = appendUniqueArgs(yoloArgs, config.args ?? [])
-  if (
-    nextArgs.length === (config.args ?? []).length &&
-    nextArgs.every((arg, index) => arg === (config.args ?? [])[index])
-  ) {
-    return config
-  }
-  return { ...config, args: nextArgs }
-}
-
-const getPresetYoloArgs = (preset: BoundPreset | null | undefined) => preset?.yoloArgsTemplate ?? []
 
 const hasResumeArgs = (args: string[]) =>
   args.includes('--resume') ||
@@ -60,7 +37,7 @@ export const withPresetResumeArgs = (
   cwd?: string,
   discriminator?: SessionCaptureSnapshot['discriminator']
 ) => {
-  let nextConfig = withPresetYoloArgs(config, preset)
+  let nextConfig = config
   const sessionIdCapture = getEffectiveCapture(nextConfig, preset)
   if (sessionIdCapture && sessionIdCapture !== nextConfig.sessionIdCapture) {
     nextConfig = { ...nextConfig, sessionIdCapture }
@@ -91,12 +68,11 @@ export const withPresetResumeArgs = (
   // persisted session pointer.
   const args = config.args ?? []
   if (hasResumeArgs(args)) return nextConfig
-  const yoloArgs = getPresetYoloArgs(preset)
   const resumeArgs = resumeArgsTemplate.replace('{session_id}', lastSessionId).trim().split(/\s+/)
 
   return {
     ...nextConfig,
-    args: appendUniqueArgs(yoloArgs, resumeArgs.concat(args)),
+    args: resumeArgs.concat(args),
     resumeArgsTemplate,
     resumedSessionId: lastSessionId,
   } satisfies AgentLaunchConfigInput

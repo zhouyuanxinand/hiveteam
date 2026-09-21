@@ -1,25 +1,11 @@
-import type { DispatchVerification, DispatchVerificationView } from '../shared/verification.js'
+import type { DispatchVerificationView } from '../shared/verification.js'
 import { BadRequestError } from './http-errors.js'
+import { requireLocalUser } from './request-principal.js'
 import { readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
+import { serializeVerification as serializeRun } from './verification-dto.js'
 
-const serializeRun = (run: DispatchVerification) => ({
-  id: run.id,
-  workspace_id: run.workspaceId,
-  dispatch_id: run.dispatchId,
-  report_revision: run.reportRevision,
-  head_sha: run.headSha,
-  command: run.command,
-  state: run.state,
-  output: run.output,
-  output_truncated: run.outputTruncated,
-  exit_code: run.exitCode,
-  error: run.error,
-  started_at: run.startedAt,
-  ended_at: run.endedAt,
-  accepted_at: run.acceptedAt,
-})
 const serializeView = (view: DispatchVerificationView) => ({
   isolated: view.isolated ?? false,
   head_sha: view.headSha,
@@ -40,6 +26,60 @@ const required = (params: Record<string, string>, name: string) => {
 }
 
 export const verificationRoutes: RouteDefinition[] = [
+  route(
+    'GET',
+    '/api/ui/workspaces/:workspaceId/verification-profiles',
+    ({ params, request, response, store }) => {
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const id = required(params, 'workspaceId')
+      store.getWorkspaceSnapshot(id)
+      sendJson(response, 200, store.verifications.profiles.list(id))
+    }
+  ),
+  route(
+    'POST',
+    '/api/ui/workspaces/:workspaceId/verification-profiles',
+    async ({ params, request, response, store }) => {
+      requireLocalUser(request, store)
+      const id = required(params, 'workspaceId')
+      store.getWorkspaceSnapshot(id)
+      sendJson(response, 201, store.verifications.profiles.save(id, await readJsonBody(request)))
+    }
+  ),
+  route(
+    'PUT',
+    '/api/ui/workspaces/:workspaceId/verification-profiles/:profileId',
+    async ({ params, request, response, store }) => {
+      requireLocalUser(request, store)
+      const id = required(params, 'workspaceId')
+      store.getWorkspaceSnapshot(id)
+      store.verifications.profiles.get(id, required(params, 'profileId'))
+      sendJson(
+        response,
+        200,
+        store.verifications.profiles.save(
+          id,
+          await readJsonBody(request),
+          required(params, 'profileId')
+        )
+      )
+    }
+  ),
+  route('GET', `${base}/:verificationId/log`, ({ params, request, response, store }) => {
+    requireUiTokenFromRequest(request, store.validateUiToken)
+    const query = new URL(request.url ?? '/', 'http://localhost').searchParams
+    sendJson(
+      response,
+      200,
+      store.verifications.readLog(
+        required(params, 'workspaceId'),
+        required(params, 'dispatchId'),
+        required(params, 'verificationId'),
+        query.has('offset') ? Number(query.get('offset')) : undefined,
+        query.has('limit') ? Number(query.get('limit')) : undefined
+      )
+    )
+  }),
   route('GET', base, async ({ params, request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     sendJson(
@@ -59,9 +99,11 @@ export const verificationRoutes: RouteDefinition[] = [
       command?: unknown
       head_sha?: unknown
       report_revision?: unknown
+      profile_id?: unknown
     }>(request)
     if (
-      typeof body?.command !== 'string' ||
+      (typeof body?.command !== 'string' && typeof body?.profile_id !== 'string') ||
+      (body.profile_id !== undefined && typeof body.profile_id !== 'string') ||
       typeof body.head_sha !== 'string' ||
       !/^[0-9a-f]{40,64}$/u.test(body.head_sha) ||
       typeof body.report_revision !== 'number' ||
@@ -74,7 +116,8 @@ export const verificationRoutes: RouteDefinition[] = [
       required(params, 'workspaceId'),
       required(params, 'dispatchId'),
       {
-        command: body.command,
+        command: typeof body.command === 'string' ? body.command : '',
+        ...(typeof body.profile_id === 'string' ? { profileId: body.profile_id } : {}),
         headSha: body.head_sha,
         reportRevision: body.report_revision,
       }

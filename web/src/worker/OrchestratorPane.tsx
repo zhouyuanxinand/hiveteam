@@ -1,15 +1,19 @@
 import { Copy, Crown, LoaderCircle, Play, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { useI18n } from '../i18n.js'
+import { isRemoteMode } from '../remote/remote-permissions-api.js'
+import { ExecutionPolicyButton } from '../security/ExecutionPolicyButton.js'
+import { executionCapabilityMessage } from '../security/execution-policy-labels.js'
 import { AgentTerminalSurface } from '../terminal/AgentTerminalSurface.js'
 import { EmptyState } from '../ui/EmptyState.js'
 import { Tooltip } from '../ui/Tooltip.js'
+import { NativeSessionButton } from './NativeSessionButton.js'
 
 export type OrchestratorPaneState =
   | { kind: 'starting' }
   | { kind: 'running'; runId: string }
   | { kind: 'stopped' }
-  | { kind: 'failed'; error: string }
+  | { kind: 'failed'; error: string; errorCode?: string; missingCapabilities?: string[] }
 
 type OrchestratorPaneProps = {
   workspaceId: string
@@ -58,15 +62,24 @@ const StoppedBody = ({ onStart }: { onStart: () => void }) => {
 }
 
 const FailedBody = ({
+  workspaceId,
   error,
+  errorCode,
+  missingCapabilities,
   onRemoveWorkspace,
   onRestart,
 }: {
+  workspaceId: string
   error: string
+  errorCode?: string | undefined
+  missingCapabilities?: string[] | undefined
   onRemoveWorkspace: () => void
   onRestart: () => void
 }) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
+  const zh = language === 'zh'
+  const policyDenied = errorCode === 'execution_policy_denied'
+  const remote = isRemoteMode()
   const [copied, setCopied] = useState(false)
   const copyError = () => {
     void navigator.clipboard
@@ -80,7 +93,7 @@ const FailedBody = ({
   return (
     <div
       data-testid="orchestrator-failed-body"
-      className="m-auto flex max-w-[480px] flex-col items-center gap-3 px-6 py-8"
+      className="m-auto flex w-full max-w-[480px] flex-col items-center gap-3 px-6 py-8"
     >
       <div
         aria-hidden
@@ -89,11 +102,42 @@ const FailedBody = ({
       >
         <Crown size={24} />
       </div>
-      <div className="text-lg font-semibold text-pri">{t('orchestrator.failed')}</div>
+      <div className="text-lg font-semibold text-pri">
+        {policyDenied
+          ? zh
+            ? 'Orchestrator 启动被执行策略阻止'
+            : 'Execution policy blocked Orchestrator startup'
+          : t('orchestrator.failed')}
+      </div>
+      {policyDenied ? (
+        <div role="alert" className="w-full text-sm text-sec">
+          <p>
+            {zh
+              ? '当前环境无法满足受限执行要求，进程尚未启动。'
+              : 'This environment cannot meet the restricted execution requirements. No process was started.'}
+          </p>
+          {missingCapabilities?.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {missingCapabilities.map((capability) => (
+                <li key={capability}>{executionCapabilityMessage(capability, zh)}</li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3">
+            {remote
+              ? zh
+                ? '请在本机查看执行权限并处理启动限制。远程页面不能授权无隔离运行。'
+                : 'Review execution permissions on the local computer. Remote pages cannot authorize execution without isolation.'
+              : zh
+                ? '查看执行权限，修正上述条件后重试；如需继续无隔离运行，须由你在本机明确授权。'
+                : 'Review execution permissions and resolve these requirements before retrying. Continuing without isolation requires your explicit local authorization.'}
+          </p>
+        </div>
+      ) : null}
       <div className="relative w-full">
         <pre
           data-testid="orchestrator-error-message"
-          className="mono w-full max-h-40 overflow-auto whitespace-pre-wrap break-all rounded p-3 text-left text-xs"
+          className="mono w-full max-h-40 overflow-auto whitespace-pre-wrap break-all rounded p-3 pr-9 text-left text-xs"
           style={{
             background: 'color-mix(in oklab, var(--status-red) 8%, var(--bg-2))',
             border: '1px solid color-mix(in oklab, var(--status-red) 24%, transparent)',
@@ -114,11 +158,19 @@ const FailedBody = ({
           </button>
         </Tooltip>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        {policyDenied ? (
+          <ExecutionPolicyButton
+            workspaceId={workspaceId}
+            agentId={`${workspaceId}:orchestrator`}
+            triggerLabel={zh ? '查看执行权限' : 'Review execution permissions'}
+            onAuthorized={onRestart}
+          />
+        ) : null}
         <button
           type="button"
           onClick={onRestart}
-          className="icon-btn icon-btn--primary"
+          className={policyDenied ? 'icon-btn' : 'icon-btn icon-btn--primary'}
           data-testid="orchestrator-retry"
         >
           <RotateCcw size={12} aria-hidden /> {t('common.retry')}
@@ -126,7 +178,9 @@ const FailedBody = ({
         <button
           type="button"
           onClick={onRemoveWorkspace}
-          className="icon-btn icon-btn--danger"
+          className={
+            policyDenied ? 'icon-btn icon-btn--ghost text-xs' : 'icon-btn icon-btn--danger'
+          }
           data-testid="orchestrator-remove-workspace"
         >
           {t('orchestrator.removeWorkspace')}
@@ -155,6 +209,18 @@ export const OrchestratorPane = ({
     }}
     data-testid="orchestrator-terminal-slot"
   >
+    <div className="shrink-0 px-3 pt-2">
+      <ExecutionPolicyButton
+        workspaceId={workspaceId}
+        agentId={`${workspaceId}:orchestrator`}
+        running={state.kind === 'running'}
+      />
+      <NativeSessionButton
+        workspaceId={workspaceId}
+        agentId={`${workspaceId}:orchestrator`}
+        running={state.kind === 'running' || state.kind === 'starting'}
+      />
+    </div>
     {state.kind === 'running' ? (
       <AgentTerminalSurface
         key={state.runId}
@@ -164,7 +230,14 @@ export const OrchestratorPane = ({
         slot="orch"
       />
     ) : state.kind === 'failed' ? (
-      <FailedBody error={state.error} onRemoveWorkspace={onRemoveWorkspace} onRestart={onRestart} />
+      <FailedBody
+        workspaceId={workspaceId}
+        error={state.error}
+        errorCode={state.errorCode}
+        missingCapabilities={state.missingCapabilities}
+        onRemoveWorkspace={onRemoveWorkspace}
+        onRestart={onRestart}
+      />
     ) : state.kind === 'stopped' ? (
       <StoppedBody onStart={onStart} />
     ) : (

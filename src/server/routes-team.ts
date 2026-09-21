@@ -1,4 +1,6 @@
 import { isReportOutcome } from '../shared/dispatch-result.js'
+import type { DispatchProgress } from '../shared/message-delivery.js'
+import { validateDispatchTimeouts } from './dispatch-health-store.js'
 import { BadRequestError } from './http-errors.js'
 import { readJsonBody, route, sendJson } from './route-helpers.js'
 import type {
@@ -44,6 +46,7 @@ export const teamRoutes: RouteDefinition[] = [
     const text = requireNonEmptyString(body.text, 'text')
     const skillName = optionalNonEmptyString(body.skill_name, 'skill_name')
     const agent = authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -57,6 +60,9 @@ export const teamRoutes: RouteDefinition[] = [
         fromAgentId,
         hivePort: String(request.socket.localPort ?? ''),
         ...(skillName ? { skillName } : {}),
+        ...(body.timeouts === undefined
+          ? {}
+          : { timeouts: validateDispatchTimeouts(body.timeouts) }),
       })
     } catch (error) {
       if (error instanceof TeamSkillRuntimeError) {
@@ -69,6 +75,19 @@ export const teamRoutes: RouteDefinition[] = [
     const activation = store.skills.getDispatchActivation(dispatch.id)
     sendJson(response, 202, {
       dispatch_id: dispatch.id,
+      status: dispatch.status,
+      ...(dispatch.status === 'queued'
+        ? {
+            queue:
+              store.resourceQueue
+                .list(projectId)
+                .find(
+                  (entry) =>
+                    entry.agent_id === dispatch.toAgentId &&
+                    (entry.status === 'queued' || entry.status === 'starting')
+                ) ?? null,
+          }
+        : {}),
       ok: true,
       ...(activation
         ? {
@@ -89,6 +108,7 @@ export const teamRoutes: RouteDefinition[] = [
     const fromAgentId = requireNonEmptyString(request.headers['x-hive-agent-id'], 'x-hive-agent-id')
     const token = request.headers['x-hive-agent-token']
     authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: Array.isArray(token) ? token[0] : token,
@@ -120,6 +140,7 @@ export const teamRoutes: RouteDefinition[] = [
       throw new BadRequestError('Exactly one of dispatch_id or skill_name is required')
     }
     authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -153,6 +174,7 @@ export const teamRoutes: RouteDefinition[] = [
     const dispatchId = requireNonEmptyString(body.dispatch_id, 'dispatch_id')
     const path = requireNonEmptyString(body.path, 'path')
     authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -182,6 +204,7 @@ export const teamRoutes: RouteDefinition[] = [
     const dispatchId = requireNonEmptyString(body.dispatch_id, 'dispatch_id')
     const reason = requireNonEmptyString(body.reason, 'reason')
     const agent = authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -203,6 +226,7 @@ export const teamRoutes: RouteDefinition[] = [
     const fromAgentId = requireNonEmptyString(body.from_agent_id, 'from_agent_id')
     const resultText = requireNonEmptyString(body.result, 'result')
     const agent = authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -227,6 +251,7 @@ export const teamRoutes: RouteDefinition[] = [
       })
       sendJson(response, 202, {
         ...(result.deliveryState ? { delivery_state: result.deliveryState } : {}),
+        ...(result.lateReportId ? { late_report_id: result.lateReportId } : {}),
         dispatch_id: result.dispatch?.id ?? null,
         forward_error: result.forwardError,
         forwarded: result.forwarded,
@@ -237,6 +262,7 @@ export const teamRoutes: RouteDefinition[] = [
       const result = store.reportTask(projectId, fromAgentId, reportInput)
       sendJson(response, 202, {
         ...(result.deliveryState ? { delivery_state: result.deliveryState } : {}),
+        ...(result.lateReportId ? { late_report_id: result.lateReportId } : {}),
         dispatch_id: result.dispatch?.id ?? null,
         forward_error: result.forwardError,
         forwarded: result.forwarded,
@@ -251,6 +277,7 @@ export const teamRoutes: RouteDefinition[] = [
     const fromAgentId = requireNonEmptyString(body.from_agent_id, 'from_agent_id')
     const resultText = requireNonEmptyString(body.result, 'result')
     const agent = authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: body.token,
@@ -258,7 +285,24 @@ export const teamRoutes: RouteDefinition[] = [
       workspaceId: projectId,
     })
     requireCommandForRole(agent, 'status')
+    if (
+      body.progress_state !== undefined &&
+      (typeof body.progress_state !== 'string' ||
+        ![
+          'accepted',
+          'progress',
+          'waiting_input',
+          'waiting_permission',
+          'paused',
+          'cancelled',
+        ].includes(body.progress_state))
+    )
+      throw new BadRequestError('Invalid progress_state')
     const result = store.statusTask(projectId, fromAgentId, {
+      ...(body.dispatch_id ? { dispatchId: body.dispatch_id } : {}),
+      ...(body.progress_state
+        ? { progressState: body.progress_state as DispatchProgress | 'accepted' | 'cancelled' }
+        : {}),
       artifacts: getArtifacts(body.artifacts),
       requireActiveRun: true,
       text: resultText,

@@ -18,7 +18,7 @@ import type { FsProbeResponse } from '../../web/src/api.js'
 import { App } from '../../web/src/app.js'
 import { FirstRunWizard } from '../../web/src/wizard/FirstRunWizard.js'
 import { useFirstRunFlag } from '../../web/src/wizard/useFirstRunFlag.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 // ─── W1: useFirstRunFlag ───────────────────────────────────────────────────
 
@@ -100,7 +100,11 @@ beforeEach(async () => {
   })
   cleanupServer = server.close
   let cookie = ''
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {

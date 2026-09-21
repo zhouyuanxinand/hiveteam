@@ -1,12 +1,16 @@
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
+import type { OrchestratorStartFailure } from './agent-start-error.js'
 import type { OrchestratorStartResult, TerminalRunSummary } from './api.js'
 import { DemoWorkspaceView } from './demo/DemoWorkspaceView.js'
 import type { DemoReplaySnapshot } from './demo/demo-fixture.js'
+import { useI18n } from './i18n.js'
+import { isRemoteMode } from './remote/remote-permissions-api.js'
 import { WorkspaceDetail } from './WorkspaceDetail.js'
 import { WorkspaceTerminalPanels } from './WorkspaceTerminalPanels.js'
 import type { WorkerActions } from './worker/useWorkerActions.js'
 
 type AppWorkspaceContentProps = {
+  onOpenSkills?: (() => void) | undefined
   activeId: string | undefined
   activeWorkspace: WorkspaceSummary | undefined
   bootstrapError: string | null
@@ -20,7 +24,7 @@ type AppWorkspaceContentProps = {
   onWorkersChanged?: ((workspaceId: string, workers: TeamListItem[]) => void) | undefined
   onTryDemo: () => void
   optimisticRunsByWorkspaceId: Record<string, TerminalRunSummary[]>
-  orchestratorAutostartErrors: Record<string, string | null>
+  orchestratorAutostartErrors: Record<string, OrchestratorStartFailure | null>
   orchestratorAutostartRunIds: Record<string, string | null>
   recordOrchestratorResult: (workspaceId: string, result: OrchestratorStartResult) => void
   terminalRuns: TerminalRunSummary[]
@@ -29,6 +33,7 @@ type AppWorkspaceContentProps = {
 }
 
 export const AppWorkspaceContent = ({
+  onOpenSkills,
   activeId,
   activeWorkspace,
   bootstrapError,
@@ -49,10 +54,20 @@ export const AppWorkspaceContent = ({
   workerActions,
   workers,
 }: AppWorkspaceContentProps) => {
+  const { language } = useI18n()
   if (demoMode) return <DemoWorkspaceView onExit={onExitDemo} replay={demoReplay} />
+  if (isRemoteMode() && !activeWorkspace)
+    return (
+      <div className="m-auto max-w-md p-6 text-center text-sm text-sec" role="status">
+        {language === 'zh'
+          ? '尚无可查看的工作区。请在本机打开远程设备面板，为此设备选择读取范围；授权后此页面会自动更新。'
+          : 'No visible workspaces yet. On the local computer, open the remote-device panel and choose read access for this device. This page updates automatically.'}
+      </div>
+    )
 
   return (
     <>
+      {workerActions.stopConfirmation}
       {activeId ? (
         <WorkspaceTerminalPanels
           key={`terminal-${activeId}`}
@@ -62,6 +77,7 @@ export const AppWorkspaceContent = ({
         />
       ) : null}
       <WorkspaceDetail
+        onOpenSkills={onOpenSkills}
         onCreateWorker={workerActions.createWorker}
         onDeleteWorker={workerActions.deleteWorker}
         onDeleteWorkspace={onDeleteWorkspace}

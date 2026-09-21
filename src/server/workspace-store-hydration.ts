@@ -93,6 +93,10 @@ export const hydrateWorkspaceFromDb = (
   }
 
   applyMessageKinds(workspaces, messageKinds, workspaceId)
+  for (const pause of db
+    .prepare('SELECT agent_id FROM resource_agent_pauses WHERE workspace_id=?')
+    .all(workspaceId) as Array<{ agent_id: string }>)
+    workspaces.get(workspaceId)?.manualStoppedAgentIds?.add(pause.agent_id)
 }
 
 export const seedWorkspacesFromDb = (
@@ -127,4 +131,8 @@ export const seedWorkspacesFromDb = (
   }
 
   applyMessageKinds(workspaces, messageKinds)
+  for (const pause of db
+    .prepare('SELECT workspace_id,agent_id FROM resource_agent_pauses')
+    .all() as Array<{ workspace_id: string; agent_id: string }>)
+    workspaces.get(pause.workspace_id)?.manualStoppedAgentIds?.add(pause.agent_id)
 }

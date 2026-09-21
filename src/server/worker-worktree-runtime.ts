@@ -69,6 +69,8 @@ export const createWorkerWorktreeRuntime = (db: Database, dataDir: string | null
     return version
   }
   return {
+    isBusy: (workspaceId: string) =>
+      closing || active.has(workspaceId) || !!starts.get(workspaceId)?.size,
     get: store.get,
     path,
     validate,

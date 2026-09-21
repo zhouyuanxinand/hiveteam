@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 describe('team send authorization', () => {
   test('rejects whitespace-only dispatch text before starting a worker', async () => {

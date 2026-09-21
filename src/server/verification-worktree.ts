@@ -7,12 +7,11 @@ import { readMergeState } from './git-merge-state.js'
 export const readVerificationVersion = async (workspacePath: string) => {
   try {
     const repository = await detectGitRepository(workspacePath)
-    const changes = await runGit(repository.repoRoot, [
-      'status',
-      '--porcelain=v1',
-      '-z',
-      '--untracked-files=all',
-    ])
+    const changes = await runGit(
+      repository.repoRoot,
+      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { env: { GIT_OPTIONAL_LOCKS: '0' } }
+    )
     // Hive writes these two untracked coordination files when opening a workspace.
     // Tracked edits, including tracked .hive files, still invalidate verification.
     const prefix = repository.relativePath ? `${repository.relativePath}/` : ''

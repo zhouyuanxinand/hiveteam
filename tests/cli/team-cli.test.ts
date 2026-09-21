@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { runTeamCommand } from '../../src/cli/team.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
+import { getUiCookie } from '../helpers/ui-session.js'
 
 let cleanupServer: (() => Promise<void>) | undefined
 let serverStore: Awaited<ReturnType<typeof startTestServer>>['store'] | undefined
@@ -11,11 +12,7 @@ beforeEach(async () => {
   const server = await startTestServer()
   cleanupServer = server.close
   serverStore = server.store
-  const uiSessionResponse = await fetch(`${server.baseUrl}/api/ui/session`)
-  const uiCookie = uiSessionResponse.headers.get('set-cookie')
-  if (!uiCookie) {
-    throw new Error('Expected UI session cookie')
-  }
+  const uiCookie = await getUiCookie(server.baseUrl)
 
   const workspaceResponse = await fetch(`${server.baseUrl}/api/workspaces`, {
     method: 'POST',
@@ -54,11 +51,7 @@ beforeEach(async () => {
     throw new Error(`Failed to configure orchestrator: ${await configResponse.text()}`)
   }
 
-  const sessionResponse = await fetch(`${server.baseUrl}/api/ui/session`)
-  const cookie = sessionResponse.headers.get('set-cookie')
-  if (!cookie) {
-    throw new Error('Expected UI session cookie')
-  }
+  const cookie = uiCookie
   const workerListResponse = await fetch(
     `${server.baseUrl}/api/ui/workspaces/${workspace.id}/team`,
     {
@@ -156,9 +149,10 @@ describe('team cli with real server', () => {
 
     await expect(runTeamCommand(['send', 'Alice', 'Implement login'])).resolves.toBeUndefined()
     const output = logSpy.mock.calls[0]?.[0] ?? ''
-    const parsed = JSON.parse(output) as { dispatch_id: string; ok: true }
+    const parsed = JSON.parse(output) as { dispatch_id: string; ok: true; status: 'submitted' }
     expect(parsed).toEqual({
       dispatch_id: expect.any(String),
+      status: 'submitted',
       ok: true,
     })
     logSpy.mockRestore()

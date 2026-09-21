@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import type { AgentManager, AgentRunSnapshot } from '../../src/server/agent-manager.js'
 import { createPtyOutputBus } from '../../src/server/pty-output-bus.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
@@ -35,9 +35,13 @@ const createFakeAgentManager = () => {
     (event: { runId: string; exitCode: number | null }) => void
   >()
   const writes: string[] = []
+  const inputSequences = new Map<string, number>()
   let nextRun = 1
 
   const manager: AgentManager = {
+    getTerminalScreen: async (runId) => manager.getRun(runId).output,
+    getInputSequence: (runId) => inputSequences.get(runId) ?? 0,
+    getTerminalSize: () => ({ cols: 80, rows: 24 }),
     getOutputBus: () => outputBus,
     pauseRun: () => {},
     resizeRun: () => {},
@@ -56,7 +60,8 @@ const createFakeAgentManager = () => {
       if (input.onExit) exitHandlers.set(runId, input.onExit)
       return run
     },
-    writeInput(_runId, input) {
+    writeInput(runId, input) {
+      inputSequences.set(runId, (inputSequences.get(runId) ?? 0) + 1)
       writes.push(String(input))
     },
     getRun(runId) {
@@ -65,6 +70,7 @@ const createFakeAgentManager = () => {
       return run
     },
     removeRun(runId) {
+      inputSequences.delete(runId)
       runs.delete(runId)
       exitHandlers.delete(runId)
     },

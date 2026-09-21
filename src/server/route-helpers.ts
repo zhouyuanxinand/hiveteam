@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { PayloadTooLargeError } from './http-errors.js'
+import { recheckRemoteRequest } from './remote-http-authorization.js'
 import type { RouteDefinition } from './route-types.js'
 
 const DEFAULT_JSON_BODY_LIMIT_BYTES = 1024 * 1024
@@ -34,7 +35,9 @@ export const readJsonBody = async <T>(
     chunks.push(buffer)
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+  const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+  recheckRemoteRequest(request)
+  return body
 }
 
 export const getRequiredParam = (

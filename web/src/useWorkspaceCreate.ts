@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { WorkspaceSummary } from '../../src/shared/types.js'
+import { type OrchestratorStartFailure, startFailureFromResult } from './agent-start-error.js'
 import {
   type CreateWorkspaceResponse,
   createWorkspace,
@@ -17,7 +18,7 @@ interface UseWorkspaceCreateInput {
 
 interface UseWorkspaceCreateOutput {
   /** workspaceId → sticky autostart error (cleared on Retry). */
-  orchestratorAutostartErrors: Record<string, string | null>
+  orchestratorAutostartErrors: Record<string, OrchestratorStartFailure | null>
   /** workspaceId → recent server-side autostart run id; used only to avoid immediate duplicate starts. */
   orchestratorAutostartRunIds: Record<string, string | null>
   recordOrchestratorResult: (workspaceId: string, result: OrchestratorStartResult) => void
@@ -34,12 +35,17 @@ export const useWorkspaceCreate = ({
   onError,
 }: UseWorkspaceCreateInput): UseWorkspaceCreateOutput => {
   const { language } = useI18n()
-  const [orchestratorAutostartErrors, setErrors] = useState<Record<string, string | null>>({})
+  const [orchestratorAutostartErrors, setErrors] = useState<
+    Record<string, OrchestratorStartFailure | null>
+  >({})
   const [orchestratorAutostartRunIds, setRunIds] = useState<Record<string, string | null>>({})
 
   const recordOrchestratorResult = useCallback(
     (workspaceId: string, result: OrchestratorStartResult) => {
-      setErrors((current) => ({ ...current, [workspaceId]: result.ok ? null : result.error }))
+      setErrors((current) => ({
+        ...current,
+        [workspaceId]: result.ok ? null : startFailureFromResult(result),
+      }))
       setRunIds((current) => ({ ...current, [workspaceId]: result.ok ? result.run_id : null }))
     },
     []
@@ -52,7 +58,8 @@ export const useWorkspaceCreate = ({
           name: input.name,
           path: input.path,
           language: input.language ?? language,
-          autostart_orchestrator: true,
+          autostart_orchestrator: input.autostartOrchestrator ?? false,
+          initialization_mode: input.initializationMode ?? 'basic',
           command_preset_id: input.commandPresetId,
           startup_command: input.startupCommand ?? null,
         })

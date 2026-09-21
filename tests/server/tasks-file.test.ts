@@ -15,7 +15,7 @@ afterEach(() => {
 })
 
 describe('tasks file service', () => {
-  test('creates .hive/tasks.md on first read and persists writes there', () => {
+  test('creates .hive/tasks.md on first read and persists writes there', async () => {
     const workspacePath = join(tmpdir(), `hive-tasks-${Date.now()}`)
     mkdirSync(workspacePath, { recursive: true })
     tempDirs.push(workspacePath)
@@ -27,13 +27,17 @@ describe('tasks file service', () => {
     expect(existsSync(tasksPath)).toBe(true)
     expect(existsSync(join(workspacePath, 'tasks.md'))).toBe(false)
 
-    service.writeTasks(workspacePath, '- [ ] implement login\n')
+    await service.writeTasks(
+      workspacePath,
+      '- [ ] implement login\n',
+      service.readSnapshot(workspacePath).version
+    )
 
     expect(service.readTasks(workspacePath)).toBe('- [ ] implement login\n')
     expect(readFileSync(tasksPath, 'utf8')).toBe('- [ ] implement login\n')
   })
 
-  test('copies legacy root tasks.md into .hive/tasks.md without rewriting the root file', () => {
+  test('copies legacy root tasks.md into .hive/tasks.md without rewriting the root file', async () => {
     const workspacePath = join(tmpdir(), `hive-tasks-legacy-${Date.now()}`)
     mkdirSync(workspacePath, { recursive: true })
     tempDirs.push(workspacePath)
@@ -46,7 +50,11 @@ describe('tasks file service', () => {
     expect(service.readTasks(workspacePath)).toBe('- [ ] legacy task\n')
     expect(readFileSync(hiveTasksPath, 'utf8')).toBe('- [ ] legacy task\n')
 
-    service.writeTasks(workspacePath, '- [x] new hive task\n')
+    await service.writeTasks(
+      workspacePath,
+      '- [x] new hive task\n',
+      service.readSnapshot(workspacePath).version
+    )
 
     expect(readFileSync(hiveTasksPath, 'utf8')).toBe('- [x] new hive task\n')
     expect(readFileSync(legacyPath, 'utf8')).toBe('- [ ] legacy task\n')

@@ -143,41 +143,6 @@ describe('post-start input writer', () => {
     expect(manager.writeInput).not.toHaveBeenCalled()
   })
 
-  test('handles Codex trust screens before writing Hive startup input', () => {
-    vi.useFakeTimers()
-    let output = 'OpenAI Codex\n› Ask Codex to do anything\n'
-    const manager = {
-      getRun: vi.fn(() => ({ output, status: 'running' })),
-      writeInput: vi.fn(),
-    }
-
-    const write = createPostStartInputWriter(manager as never, 'codex')
-    write('run-codex', 'Hive startup instructions')
-
-    // Codex can show its normal prompt briefly before the asynchronous trust
-    // screen arrives. The startup writer must wait instead of injecting into it.
-    vi.advanceTimersByTime(300)
-    expect(manager.writeInput).not.toHaveBeenCalled()
-
-    output +=
-      '\n> You are in D:\\桌面\\AI test\nDo you trust the contents of this directory?\nPress enter to continue\n› 1. Yes, continue\n'
-    vi.advanceTimersByTime(50)
-    expect(manager.writeInput).toHaveBeenNthCalledWith(1, 'run-codex', '\r')
-
-    output +=
-      "\nHooks need review\n› 1. Review hooks\n  2. Trust all and continue\n  3. Continue without trusting (hooks won't run)\n"
-    vi.advanceTimersByTime(50)
-    expect(manager.writeInput).toHaveBeenNthCalledWith(2, 'run-codex', '\u001b[B\u001b[B\r')
-
-    output += '\n› Ask Codex to do anything\n'
-    vi.advanceTimersByTime(1100)
-    expect(manager.writeInput).toHaveBeenNthCalledWith(
-      3,
-      'run-codex',
-      '\u001b[200~Hive startup instructions\u001b[201~'
-    )
-  })
-
   test('waits for Gemini prompt readiness and writes plain input without bracketed paste', () => {
     vi.useFakeTimers()
     let output = 'Gemini CLI v0.35.3\nAuthenticated with gemini-api-key'

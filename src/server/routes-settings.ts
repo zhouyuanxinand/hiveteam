@@ -1,5 +1,7 @@
 import { resolveCommandPath } from './agent-command-resolver.js'
+import { assertPublicAppStateKey } from './app-state-policy.js'
 import { supportsModelSelection } from './model-arguments.js'
+import { getRequestPrincipal } from './request-principal.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import type { SessionIdCaptureConfig } from './session-capture.js'
@@ -119,7 +121,25 @@ export const settingsRoutes: RouteDefinition[] = [
   }),
   route('GET', '/api/settings/command-presets', ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
-    sendJson(response, 200, store.settings.listCommandPresets().map(serializeCommandPreset))
+    const remote = getRequestPrincipal(request)?.kind === 'remote_device'
+    sendJson(
+      response,
+      200,
+      store.settings.listCommandPresets().map((preset) => {
+        const result = serializeCommandPreset(preset)
+        return remote
+          ? {
+              ...result,
+              command: preset.isBuiltin ? preset.command : '',
+              args: [],
+              env: {},
+              resume_args_template: null,
+              session_id_capture: null,
+              yolo_args_template: [],
+            }
+          : result
+      })
+    )
   }),
   route('POST', '/api/settings/command-presets', async ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
@@ -162,7 +182,22 @@ export const settingsRoutes: RouteDefinition[] = [
   ),
   route('GET', '/api/settings/role-templates', ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
-    sendJson(response, 200, store.settings.listRoleTemplates().map(serializeRoleTemplate))
+    const remote = getRequestPrincipal(request)?.kind === 'remote_device'
+    sendJson(
+      response,
+      200,
+      store.settings.listRoleTemplates().map((template) => {
+        const result = serializeRoleTemplate(template)
+        return remote
+          ? {
+              ...result,
+              default_command: template.isBuiltin ? template.defaultCommand : '',
+              default_args: [],
+              default_env: {},
+            }
+          : result
+      })
+    )
   }),
   route('POST', '/api/settings/role-templates', async ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
@@ -207,14 +242,15 @@ export const settingsRoutes: RouteDefinition[] = [
     requireUiTokenFromRequest(request, store.validateUiToken)
     const key = getRequiredParam(response, params, 'key', 'App state key is required')
     if (!key) return
-    sendJson(response, 200, store.settings.getAppState(key) ?? { key, value: null })
+    sendJson(response, 200, store.settings.publicAppState.get(key) ?? { key, value: null })
   }),
   route('PUT', '/api/settings/app-state/:key', async ({ params, request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
     const key = getRequiredParam(response, params, 'key', 'App state key is required')
     if (!key) return
-    const body = await readJsonBody<{ value: string | null }>(request)
-    store.settings.setAppState(key, body.value)
+    assertPublicAppStateKey(key)
+    const body = await readJsonBody<{ value?: unknown } | null>(request)
+    store.settings.publicAppState.set(key, body?.value)
     response.statusCode = 204
     response.end()
   }),

@@ -5,6 +5,7 @@ import type { TerminalRunSummary } from '../api.js'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { useNotifications } from './NotificationProvider.js'
+import { useDispatchHealthNotifications } from './useDispatchHealthNotifications.js'
 
 const ROLE_LABEL_KEYS: Record<WorkerRole, TranslationKey> = {
   coder: 'role.coder',
@@ -45,6 +46,7 @@ export const WorkspaceNotifications = ({
   workers,
   workspace,
 }: WorkspaceNotificationsProps) => {
+  useDispatchHealthNotifications(workspace?.id)
   const { notify } = useNotifications()
   const { t } = useI18n()
   const previous = useRef<Snapshot | null>(null)
@@ -93,19 +95,19 @@ export const WorkspaceNotifications = ({
         continue
       }
 
-      const completedTask =
+      const pendingChanged =
         worker.pendingTaskCount < before.pendingTaskCount ||
         (before.status === 'working' && worker.status === 'idle')
-      if (completedTask) {
+      if (pendingChanged) {
         notify({
-          brief: t('notifications.workerReported.brief', { name: worker.name }),
-          detail: t('notifications.workerReported.detail', {
+          brief: t('notifications.workerPendingChanged.brief', { name: worker.name }),
+          detail: t('notifications.workerPendingChanged.detail', {
             name: worker.name,
             workspace: workspace.name,
             count: worker.pendingTaskCount,
           }),
-          kind: 'success',
-          title: t('notifications.workerReported.title'),
+          kind: 'info',
+          title: t('notifications.workerPendingChanged.title'),
         })
       }
     }

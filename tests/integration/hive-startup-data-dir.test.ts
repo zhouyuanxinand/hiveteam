@@ -18,10 +18,12 @@ import { promisify } from 'node:util'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { getUiCookie } from '../helpers/ui-session.js'
+import { requestUiBootstrap } from '../../scripts/ui-launcher.mjs'
+import { listenOnFetchSafePort } from '../helpers/test-server.js'
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url))
 const cliUrl = new URL('../../src/cli/hive.ts', import.meta.url).href
+const launcherUrl = new URL('../../src/cli/ui-launcher.ts', import.meta.url).href
 const require = createRequire(import.meta.url)
 const tsxUrl = pathToFileURL(require.resolve('tsx')).href
 const execFileAsync = promisify(execFile)
@@ -35,12 +37,9 @@ afterEach(async () => {
 
 const freePort = async () => {
   const server = createServer()
-  server.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const address = server.address()
-  if (!address || typeof address === 'string') throw new Error('Expected a loopback port')
+  const port = await listenOnFetchSafePort(server)
   await new Promise<void>((resolveClose) => server.close(() => resolveClose()))
-  return address.port
+  return port
 }
 
 const createFixture = (sourceCheckout = false) => {
@@ -59,6 +58,7 @@ const createFixture = (sourceCheckout = false) => {
   writeFixture('package.json', JSON.stringify({ type: 'module' }))
   for (const path of [
     'scripts/dev-start.mjs',
+    'scripts/ui-launcher.mjs',
     'desktop/app.mjs',
     'desktop/service-environment.mjs',
   ]) {
@@ -71,7 +71,9 @@ const createFixture = (sourceCheckout = false) => {
   writeFixture(
     sourceCheckout ? 'src/cli/hive.ts' : 'dist/src/cli/hive.js',
     `import { runHiveCommand } from ${JSON.stringify(cliUrl)};
-await runHiveCommand(process.argv.slice(2));`
+import { installUiLauncher } from ${JSON.stringify(launcherUrl)};
+const runtime = await runHiveCommand(process.argv.slice(2));
+installUiLauncher(runtime.store, runtime.port);`
   )
   if (sourceCheckout) {
     mkdirSync(join(installDir, 'node_modules'), { recursive: true })
@@ -109,8 +111,18 @@ export class BrowserWindow extends EventEmitter {
     `import { launchHiveDesktop, launchHiveWebHost } from './desktop/app.mjs';
 const launch = process.argv[2] === 'desktop' ? launchHiveDesktop : launchHiveWebHost;
 const host = await launch({ randomPorts: true, show: false, dataDir: process.argv[3] });
+process.on('message', async (message) => {
+  if (message.type !== 'hive:create-ui-bootstrap') return;
+  const url = new URL(await host.createLaunchUrl());
+  process.send({ type: 'hive:ui-bootstrap', request_id: message.request_id,
+    bootstrap_token: new URLSearchParams(url.hash.slice(1)).get('hive_bootstrap') });
+});
 console.log('STARTUP_READY=' + host.runtimeOrigin);
-process.stdin.once('data', async () => { await host.close(); process.stdin.destroy(); });`
+process.stdin.once('data', async () => {
+  await host.close();
+  process.stdin.destroy();
+  process.disconnect?.();
+});`
   )
   return { root, installDir, invocationDir, homeDir }
 }
@@ -127,12 +139,13 @@ const start = async (
   const environment = { ...process.env }
   delete environment.HIVE_DATA_DIR
   delete environment.HIVE_DESKTOP_BRIDGE_TOKEN
+  const runtimePort = String(await freePort())
   Object.assign(environment, {
     HOME: fixture.homeDir,
     USERPROFILE: fixture.homeDir,
     APPDATA: join(fixture.homeDir, 'appdata'),
     XDG_CONFIG_HOME: join(fixture.homeDir, 'xdg'),
-    HIVE_RUNTIME_PORT: String(await freePort()),
+    HIVE_RUNTIME_PORT: runtimePort,
     HIVE_WEB_PORT: String(await freePort()),
     HIVE_NODE_EXECUTABLE: process.execPath,
     NODE_OPTIONS: `${environment.NODE_OPTIONS ?? ''} --import=${tsxUrl}`.trim(),
@@ -140,7 +153,7 @@ const start = async (
   if (override !== undefined) environment.HIVE_DATA_DIR = override
   const args =
     mode === 'cli'
-      ? [fileURLToPath(cliUrl), '--port', '0']
+      ? [fileURLToPath(cliUrl), '--port', runtimePort]
       : mode === 'dev'
         ? [join(fixture.installDir, 'scripts/dev-start.mjs')]
         : [
@@ -151,20 +164,20 @@ const start = async (
   const child = spawn(process.execPath, args, {
     cwd,
     env: environment,
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   })
   const closed = once(child, 'close')
   let output = ''
-  child.stdout.on('data', (chunk) => {
+  child.stdout?.on('data', (chunk) => {
     output += chunk
   })
-  child.stderr.on('data', (chunk) => {
+  child.stderr?.on('data', (chunk) => {
     output += chunk
   })
   const stop = async () => {
     if (child.exitCode === null && child.signalCode === null) {
-      if (mode === 'desktop' || mode === 'web') child.stdin.end('close\n')
+      if (mode === 'desktop' || mode === 'web') child.stdin?.end('close\n')
       else if (process.platform === 'win32' && child.pid) {
         await execFileAsync('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
           windowsHide: true,
@@ -189,7 +202,15 @@ const start = async (
     .toBe(true)
   const origin = ready.exec(output)?.[1]
   if (!origin) throw new Error(output)
-  const cookie = await getUiCookie(origin)
+  const bootstrap = await requestUiBootstrap(child)
+  const response = await fetch(`${origin}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: bootstrap }),
+  })
+  expect(response.status).toBe(200)
+  const cookie = response.headers.get('set-cookie')?.split(';')[0]
+  if (!cookie) throw new Error('Trusted launcher did not produce a UI session')
   return { origin, cookie, output: () => output, stop }
 }
 
@@ -217,7 +238,7 @@ describe.each([
         selection === 'relative' || mode === 'cli' ? fixture.invocationDir : fixture.installDir
       const runtime = await start(fixture, mode, override, undefined, cwd)
       try {
-        const endpoint = `${runtime.origin}/api/settings/app-state/startup-marker`
+        const endpoint = `${runtime.origin}/api/settings/app-state/active_workspace_id`
         const headers = { cookie: runtime.cookie, 'content-type': 'application/json' }
         if (mode === 'cli') {
           const response = await fetch(endpoint, {
@@ -230,7 +251,7 @@ describe.each([
         const response = await fetch(endpoint, { headers })
         expect(response.status).toBe(200)
         expect.soft(await response.json(), `${mode} must reopen ${expectedDir}`).toMatchObject({
-          key: 'startup-marker',
+          key: 'active_workspace_id',
           value: 'saved before restart',
         })
         expect(existsSync(join(expectedDir, 'runtime.sqlite'))).toBe(true)

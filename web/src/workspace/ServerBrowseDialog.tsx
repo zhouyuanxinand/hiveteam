@@ -39,7 +39,7 @@ export const ServerBrowseDialog = ({
   onCreate,
   open,
 }: ServerBrowseDialogProps) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const { browse, loading, navigate, probe, selectEntry, selected } = useFsBrowser(open)
   const [name, setName] = useState('')
   const [advanced, setAdvanced] = useState(false)
@@ -66,7 +66,6 @@ export const ServerBrowseDialog = ({
   const breadcrumbs = buildBreadcrumbs(browse.current_path, browse.root_path)
   const selectedPreset = commandPresets.find((preset) => preset.id === commandPresetId)
   const startupClean = startupCommand.trim()
-  const presetsLoading = commandPresets.length === 0 && !commandPresetError
   const genericPresetNeedsStartup = !commandPresetId && startupClean.length === 0
   const selectedPresetUnavailable = selectedPreset?.available === false && startupClean.length === 0
   const presetAvailabilityError = genericPresetNeedsStartup
@@ -77,16 +76,15 @@ export const ServerBrowseDialog = ({
   const canCreate =
     !creating &&
     name.trim().length > 0 &&
-    (probe?.is_dir === true || (advanced && manualPath.trim().length > 0)) &&
-    !presetsLoading &&
-    !genericPresetNeedsStartup &&
-    !selectedPresetUnavailable
+    (probe?.is_dir === true || (advanced && manualPath.trim().length > 0))
 
   const handleCreate = () => {
     if (!canCreate) return
     const path = advanced && manualPath.trim().length > 0 ? manualPath.trim() : (probe?.path ?? '')
     if (!path) return
     onCreate({
+      initializationMode: 'basic',
+      autostartOrchestrator: false,
       commandPresetId: commandPresetId || null,
       name: name.trim(),
       path,
@@ -280,6 +278,11 @@ export const ServerBrowseDialog = ({
               className="flex shrink-0 items-center justify-end gap-2 border-t px-5 py-3"
               style={{ borderColor: 'var(--border)' }}
             >
+              <span className="mr-auto text-xs text-ter">
+                {language === 'zh'
+                  ? '创建基础工作区，稍后手动启动成员。'
+                  : 'Create a basic workspace. Start agents when ready.'}
+              </span>
               {creating ? (
                 <span role="status" className="mr-auto text-xs text-ter">
                   {t('workspace.confirm.preparing')}

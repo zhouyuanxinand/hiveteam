@@ -35,6 +35,7 @@ export interface TeamMemoryProcedureRef {
 }
 
 export interface TeamMemoryEntry {
+  revision?: number
   body: string
   confidence: number
   createdAt: number

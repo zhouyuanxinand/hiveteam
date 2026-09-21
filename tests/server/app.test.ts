@@ -7,7 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { listenOnFetchSafePort } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -192,11 +192,7 @@ describe('runtime http app', () => {
     store.getWorker(workspace.id, worker.id).status = 'idle'
     store.dispatchTask(workspace.id, worker.id, 'Implement feature')
 
-    const sessionResponse = await fetch(`${baseUrl}/api/ui/session`)
-    const cookie = sessionResponse.headers.get('set-cookie')
-    if (!cookie) {
-      throw new Error('Expected UI session cookie')
-    }
+    const cookie = await getUiCookie(baseUrl)
 
     const response = await fetch(`${baseUrl}/api/ui/workspaces/${workspace.id}/team`, {
       headers: { cookie },
@@ -246,10 +242,14 @@ describe('runtime http app', () => {
     })
   })
 
-  test('GET /api/ui/session issues HttpOnly UI cookie', async () => {
-    const { baseUrl } = await startServer()
+  test('POST /api/ui/session exchanges a launcher bootstrap for an HttpOnly UI cookie', async () => {
+    const { baseUrl, store } = await startServer()
 
-    const response = await fetch(`${baseUrl}/api/ui/session`)
+    const response = await fetch(`${baseUrl}/api/ui/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bootstrap_token: store.createUiBootstrap() }),
+    })
 
     expect(response.status).toBe(200)
     expect(response.headers.get('set-cookie')).toContain('HttpOnly')

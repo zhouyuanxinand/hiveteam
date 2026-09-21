@@ -4,7 +4,9 @@ import type {
 } from '../../../src/shared/verification.js'
 import { apiFetch, readErrorMessage } from '../api.js'
 
-interface RunPayload {
+export interface RunPayload {
+  profile?: DispatchVerification['profile'] | null
+  log_bytes?: number
   id: string
   workspace_id: string
   dispatch_id: string
@@ -32,7 +34,9 @@ interface ViewPayload {
   accepted: boolean
   runs: RunPayload[]
 }
-const fromRun = (run: RunPayload): DispatchVerification => ({
+export const fromRun = (run: RunPayload): DispatchVerification => ({
+  ...(run.profile ? { profile: run.profile } : {}),
+  logBytes: run.log_bytes ?? 0,
   id: run.id,
   workspaceId: run.workspace_id,
   dispatchId: run.dispatch_id,
@@ -71,7 +75,7 @@ export const getDispatchVerifications = async (workspaceId: string, dispatchId: 
 export const startDispatchVerification = async (
   workspaceId: string,
   dispatchId: string,
-  input: { command: string; headSha: string; reportRevision: number }
+  input: { command: string; headSha: string; reportRevision: number; profileId?: string }
 ) =>
   fromRun(
     (await responseJson(
@@ -82,6 +86,7 @@ export const startDispatchVerification = async (
           command: input.command,
           head_sha: input.headSha,
           report_revision: input.reportRevision,
+          ...(input.profileId ? { profile_id: input.profileId } : {}),
         }),
       })
     )) as RunPayload

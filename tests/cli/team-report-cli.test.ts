@@ -4,9 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
-
-import { runHiveCommand } from '../../src/cli/hive.js'
 import { runTeamCommand } from '../../src/cli/team.js'
+import { runAuthorizedTestHiveCommand as runHiveCommand } from '../helpers/authorized-hive.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: terminal control sequences are the value under test.

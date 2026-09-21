@@ -13,8 +13,8 @@ import {
 import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
 import { buildAgentLegacyIdentityMarker } from '../../src/server/agent-startup-instructions.js'
 import { resetSessionCaptureCoordinatorForTests } from '../../src/server/claude-session-coordinator.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { encodeClaudeProjectPath } from '../../src/server/session-capture-claude.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const cleanups: Array<() => void | Promise<void>> = []
 

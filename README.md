@@ -98,8 +98,8 @@ Useful for deciding whether to install a real CLI.
 Prerequisites:
 
 - Node.js 22 or newer.
-- At least one supported agent CLI installed, authenticated, and available on
-  `PATH`.
+- To run real tasks, at least one supported agent CLI installed, authenticated,
+  and available on `PATH`. Basic workspaces can be created before installing a CLI.
 
 Clone, install, and start this fork:
 
@@ -110,8 +110,8 @@ npm install
 npm start
 ```
 
-`npm start` launches both the local HiveTeam runtime and the Vite web app. Open
-the web URL printed by Vite, normally `http://127.0.0.1:5180/`. The existing
+`npm start` launches both the local HiveTeam runtime and the Vite web app, then
+opens an authenticated browser window, normally on `http://127.0.0.1:5180/`. The existing
 `pnpm dev` command remains available for pnpm-based development.
 
 On npm 11, `npm warn allow-scripts` is advisory. npm 12 instead blocks
@@ -127,8 +127,13 @@ npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hi
 See [npm's install-script approval documentation](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/)
 and the troubleshooting section below for details.
 
-For a packaged installation, `hive` still starts the production UI on its
-printed local URL. Use `hive --port 4010` when you need a specific local port.
+For a packaged installation, `hive` starts the production UI and opens an
+authenticated browser window. Use `hive --port 4010` for a specific local port.
+The launcher delivers a one-time sign-in link that expires after 60 seconds;
+the UI removes it from the address bar when signing in. The printed localhost
+URL alone does not issue a management session. After restarting Hive or opening
+a different browser profile, enter `o` in the launcher's terminal or reopen from
+the desktop tray. Existing windows can refresh while their runtime is running.
 
 To update the source-controlled build:
 
@@ -167,22 +172,22 @@ policy, not a Hive bug.
 First-run flow:
 
 1. Create a workspace from a project folder.
-2. Choose an Orchestrator preset.
-3. Hive creates `<workspace>/.hive/tasks.md`, starts the Orchestrator PTY, and
-   injects the internal `team` command into the agent session.
+2. Use the default basic mode for offline initialization; Skill Packs are optional.
+3. Hive creates `<workspace>/.hive/tasks.md`. Choose and check an Orchestrator preset,
+   then start it explicitly (or select the creation dialog's start option). Its session receives the internal `team` command.
 4. Add workers from the Team Members panel.
 5. Ask the Orchestrator to delegate work. It sends tasks with
    `team send <worker-name> "<task>"`; workers report back with `team report`.
 
 If you want the Orchestrator to size the team itself, leave **Auto-staff**
-enabled (it is on by default). It can `team spawn` the right temporary mix of
-coders, testers, and reviewers for the task, then Hive dismisses those
-temporary workers when their work is done.
+enabled (it is on by default). Staffing uses the runtime's team-management interface,
+subject to configured member and managed-execution limits and launch permissions.
+`team send` dispatches to existing members; the CLI has no `team spawn` command.
 
 For stronger automation, enable the experimental **Workflows** toggle in
 settings. The Orchestrator can then author and run multi-agent workflows that
 fan out across implementation, review, testing, or other stages. The topbar
-**Workflows** panel shows runs, phase results, logs, schedules, and stop
+**Workflows** panel shows runs, phase results, logs, and stop
 controls. The same panel also lets you choose which CLI workflow-created
 agents use by default and which CLIs they are allowed to use.
 
@@ -275,21 +280,27 @@ Three details matter:
 
 ## Agent Presets
 
-| Preset | Command expected on `PATH` | Default bypass mode | Session resume |
-| --- | --- | --- | --- |
-| Antigravity CLI | `agy` | `--dangerously-skip-permissions` | `--conversation <session_id>` |
-| Claude Code | `claude` | `--dangerously-skip-permissions`, `--permission-mode=bypassPermissions` | `--resume <session_id>` |
-| Codex | `codex` | `--dangerously-bypass-approvals-and-sandbox` | `resume <session_id>` |
-| OpenCode | `opencode` | Config-driven in `~/.config/opencode/opencode.json` | `--session <session_id>` |
-| Gemini | `gemini` | `--yolo` | `--resume <session_id>` |
-| Hermes | `hermes` | `--yolo` | `--resume <session_id>` |
-| Qwen Code | `qwen` | `--approval-mode yolo` | `--resume <session_id>` |
-| Cursor CLI | `cursor` | `--force` | Session id capture not wired yet |
-| Grok Build | `grok` | `--always-approve` | Session id capture not wired yet |
-| Custom | Any executable | User configured | User configured |
+| Preset | Command expected on `PATH` | Session resume |
+| --- | --- | --- |
+| Antigravity CLI | `agy` | `--conversation <session_id>` |
+| Claude Code | `claude` | `--resume <session_id>` |
+| Codex | `codex` | `resume <session_id>` |
+| OpenCode | `opencode` | `--session <session_id>` |
+| Gemini | `gemini` | `--resume <session_id>` |
+| Hermes | `hermes` | `--resume <session_id>` |
+| Qwen Code | `qwen` | `--resume <session_id>` |
+| Cursor CLI | `agent` / `cursor-agent` | Managed identity and recovery adapters; native releases remain unverified |
+| Grok Build | `grok` | Managed identity and recovery adapters; native releases remain unverified |
+| Custom | Any executable | User configured |
 
 Hive does not install these CLIs for you. Install and authenticate them in the
 same shell environment you use to start Hive.
+
+Presets do not add bypass flags. Agents default to a restricted execution policy;
+the **Permissions** control shows whether that CLI/platform combination can enforce
+it. Unsupported combinations require a local user's explicit unsafe exception for
+that agent. Restricted Codex uses a separate CLI home, so authentication must be
+configured for that home. See [SECURITY.md](SECURITY.md) for the verified boundary.
 
 ## What Hive Provides
 
@@ -298,11 +309,12 @@ same shell environment you use to start Hive.
 - Add Worker flow with role presets for coder, reviewer, tester, and fully
   custom prompts and commands — wire any CLI agent into the role you need.
 - Auto-staff (experimental, on by default): the Orchestrator can create
-  temporary coders, testers, and reviewers based on the task, and Hive cleans
-  them up after their dispatch reports back.
+  temporary coders, testers, and reviewers within the configured member and
+  execution limits. Reporting a result does not itself release a running
+  process or remove its retained worktree.
 - Workflows (experimental, off by default): the Orchestrator can run
   multi-stage, multi-agent workflows while Hive shows runs, logs, results,
-  schedules, and stop controls in the Workflows panel.
+  and stop controls in the Workflows panel. Scheduled workflows are not available.
 - Workflow CLI policy: choose the default CLI for workflow-created agents and
   restrict which CLIs workflow scripts may launch.
 - Team memory: keep workspace constraints, long-running context, and team
@@ -319,7 +331,8 @@ same shell environment you use to start Hive.
 - Local SQLite metadata under `%USERPROFILE%\.config\hive` on Windows and `~/.config/hive`
   on macOS / Linux by default, or `$HIVE_DATA_DIR` when set.
 
-Hive does not provide sandboxing, multi-user auth, or any bundled agent model.
+Hive relies on verified CLI sandbox capabilities for restricted execution; it does
+not implement its own OS sandbox, multi-user auth, or any bundled agent model.
 It coordinates the CLIs you already run locally.
 
 ## Remote Access (optional, off by default)
@@ -327,8 +340,8 @@ It coordinates the CLIs you already run locally.
 If you want to reach your running Hive from your phone while you're away,
 enable optional **Remote access**. After the phone signs in and pairs with the
 desktop, it reaches the Hive Web UI through an end-to-end encrypted tunnel.
-A paired phone is a trusted device with the same authority as the local desktop
-browser.
+The desktop selects each device's visible workspaces. Remote access starts
+read-only; write actions require a local approval lasting at most ten minutes.
 
 Important boundaries:
 
@@ -362,22 +375,27 @@ Hive is a local development tool, not a hosted service.
 - When Remote access is off, the runtime binds to `127.0.0.1`. Do not expose
   the Hive port through a public tunnel, reverse proxy, or shared network
   interface.
-- When Remote access is on, paired phones have the same authority as the local
-  browser. Pair only devices you trust, and revoke or disable Remote access
-  when you no longer need it.
-- Built-in presets intentionally use each CLI's non-interactive or bypass mode
-  where available. Treat workers as able to run arbitrary shell commands inside
-  the selected workspace.
-- Open only trusted workspaces. A worker has the same filesystem access as the
-  shell account running Hive.
+- Remote devices have explicit workspace scopes and temporary action grants;
+  they cannot approve their own permissions or change execution security policy.
+- Restricted workers start only when the required CLI sandbox capabilities are
+  verified. Unsafe exceptions run with the authority of the account running Hive.
+- Open only trusted workspaces. Worktrees alone are not filesystem sandboxes.
 - Agent tokens are session scoped, generated by the local runtime, injected into
   agent process environments, and not intended as internet-facing credentials.
-- Hive has no multi-user authentication boundary. Treat same-machine processes
-  that can reach the local port as trusted local access.
+- Hive authenticates local users, agents, and remote devices separately. It does
+  not provide an OS boundary against unrestricted processes under the same user.
 - The browser UI token is a local session guard, not protection against other
   processes already running as your OS user.
 
 Read [SECURITY.md](SECURITY.md) before using Hive with sensitive repositories.
+
+The local **Resources** panel controls execution limits: eight globally, four per
+workspace, twelve worker members per workspace, and one verification per workspace
+by default. Orchestrators, workers, workspace shells, and verifications share the
+execution budget. Idle processes count until they exit; stopped workers remain
+members until deleted. Queued work resumes when capacity becomes available.
+These are execution-count limits, not CPU or memory limits. Each data directory
+allows one active runtime.
 
 ## Data Locations
 
@@ -411,6 +429,11 @@ honored even when another directory already contains saved data.
 
 See [Workspace and native session recovery](docs/session-recovery.md) for restart
 behavior, per-member conversation bindings, and recovery failure handling.
+
+Local backup, inspection, restore-to-new-directory and reversible dispatch
+archiving are available in the knowledge drawer and through `hive data --help`.
+Backups exclude credentials and do not include workspace source files. See
+[Local backup and recovery](docs/local-data-recovery.md) before migrating data.
 
 ## Troubleshooting
 
