@@ -14,6 +14,7 @@ export const createRecordingAgentManager = () => {
   const sizes = new Map<string, { cols: number; rows: number }>()
 
   const manager: AgentManager = {
+    getTerminalScreen: async (runId) => manager.getRun(runId).output,
     getInputSequence: (runId) => inputSequences.get(runId) ?? 0,
     getTerminalSize: (runId) => sizes.get(runId) ?? { cols: 80, rows: 24 },
     getOutputBus: () => outputBus,

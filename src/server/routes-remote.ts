@@ -101,7 +101,7 @@ export const remoteRoutes: RouteDefinition[] = [
       sendJson(response, 409, { error: 'Run hive remote login before enabling remote access' })
       return
     }
-    store.settings.setAppState('remote_enabled', body.enabled === true ? 'true' : 'false')
+    store.settings.internalAppState.set('remote_enabled', body.enabled === true ? 'true' : 'false')
     store.remote.tunnel?.refresh()
     const status = store.remote.tunnel?.status() ?? 'disabled'
     sendJson(response, 200, {
@@ -225,7 +225,7 @@ export const remoteRoutes: RouteDefinition[] = [
         sendJson(response, 400, { error: 'gateway_url must be an http(s) URL' })
         return
       }
-      store.settings.setAppState('remote_gateway_url', gatewayUrl)
+      store.settings.internalAppState.set('remote_gateway_url', gatewayUrl)
     }
     if (body.enabled === true && isRemoteTunnelRequest(request, store)) {
       throw new ForbiddenError('Remote devices cannot enable remote access')
@@ -235,7 +235,7 @@ export const remoteRoutes: RouteDefinition[] = [
       return
     }
     if (body.enabled !== undefined) {
-      store.settings.setAppState('remote_enabled', body.enabled ? 'true' : 'false')
+      store.settings.internalAppState.set('remote_enabled', body.enabled ? 'true' : 'false')
     }
     store.remote.tunnel?.refresh()
     sendJson(response, 200, {

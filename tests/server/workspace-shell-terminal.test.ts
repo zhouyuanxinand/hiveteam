@@ -7,7 +7,7 @@ import WebSocket from 'ws'
 
 import { getWorkspaceShellAgentId } from '../../src/server/workspace-shell-runtime.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []

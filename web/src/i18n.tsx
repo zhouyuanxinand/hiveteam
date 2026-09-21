@@ -66,6 +66,7 @@ const enMessages = {
   'verification.workspaceBusy':
     'Another verification is running in this workspace. Wait for it to finish.',
   'verification.state.running': 'Running',
+  'verification.state.queued': 'Waiting for execution capacity',
   'verification.state.passed': 'Checks passed',
   'verification.state.failed': 'Checks failed',
   'verification.state.cancelled': 'Cancelled',
@@ -80,7 +81,7 @@ const enMessages = {
   'delivery.summary':
     '{active} in progress · {waiting} awaiting acceptance · {blocked} need attention',
   'delivery.recent':
-    'Latest 100 dispatches. Worker results and human acceptance are shown separately.',
+    'Workspace totals cover all dispatches. History is paginated, newest first; results and acceptance are separate.',
   'delivery.empty': 'Dispatch a task to a team member to track its result here.',
   'delivery.outcome.success': 'Reported success',
   'delivery.outcome.failed': 'Reported failure',
@@ -430,6 +431,12 @@ const enMessages = {
   'pwa.runtimeOffline.retrying': 'Retrying…',
   'pwa.runtimeOffline.title': 'HiveTeam runtime is not running',
   'pwa.runtimeOffline.tryDemo': 'Try Demo instead',
+  'pwa.sessionRequired.title': 'Sign in to HiveTeam again',
+  'pwa.sessionRequired.body':
+    'Your browser session has expired or is missing. Reopen HiveTeam from its local launcher to sign in.',
+  'pwa.sessionRequired.retry': 'Check sign-in',
+  'pwa.sessionRequired.autoReconnect':
+    'This page will reconnect automatically after you sign in through the launcher.',
   'pwa.waitForAgents': 'Wait for agents to finish',
   'remote.audit': 'Audit log',
   'remote.codeCopied': 'Pairing data copied',
@@ -722,9 +729,9 @@ const enMessages = {
   'tasks.placeholder.newTask': 'What needs to be done?',
   'tasks.progress.subtaskTitle': '{done} of {total} direct subtasks complete',
   'tasks.raw.conflictDescription':
-    'Reloading will discard the current draft; Keep local will continue editing it.',
+    'Your draft is preserved. Compare the current file, merge your edits, then acknowledge its version before saving. Reload discards your draft.',
   'tasks.raw.conflictTitle': 'File changed externally',
-  'tasks.raw.keepLocal': 'Keep local',
+  'tasks.raw.keepLocal': 'I reviewed the merge; retry with this version',
   'tasks.raw.label': 'Tasks Markdown',
   'tasks.raw.lineCount': '{count} lines',
   'tasks.raw.reload': 'Reload',
@@ -778,6 +785,10 @@ const enMessages = {
   'notifications.toast.declined': 'Browser notifications were not enabled.',
   'notifications.toast.unsupported': 'This browser does not support notifications.',
   'notifications.workerReported.brief': '{name} reported',
+  'notifications.workerPendingChanged.brief': '{name}: pending tasks updated',
+  'notifications.workerPendingChanged.detail':
+    '{name} now has {count} pending tasks in {workspace}. Check task activity for reports and cancellations.',
+  'notifications.workerPendingChanged.title': 'Task status changed',
   'notifications.workerReported.detail':
     '{name} reported in {workspace}; {count} queued tasks remain.',
   'notifications.workerReported.title': 'Team member report',
@@ -953,6 +964,7 @@ const zhMessages: Record<TranslationKey, string> = {
   'verification.reportRequired': '请先解决任务问题并重新汇报，再运行验证。',
   'verification.workspaceBusy': '工作区中另一项验证正在运行，请等待其结束。',
   'verification.state.running': '正在运行',
+  'verification.state.queued': '等待执行额度',
   'verification.state.passed': '检查通过',
   'verification.state.failed': '检查失败',
   'verification.state.cancelled': '已取消',
@@ -964,7 +976,7 @@ const zhMessages: Record<TranslationKey, string> = {
   'delivery.loading': '正在读取派单…',
   'delivery.loadFailed': '刷新失败 · 展开查看详情',
   'delivery.summary': '进行中 {active} · 待确认 {waiting} · 需处理 {blocked}',
-  'delivery.recent': '最近 100 条派单。成员汇报结果与人工确认分别展示。',
+  'delivery.recent': '摘要统计工作区全部派单。历史最新优先、分页显示；汇报结果与人工确认分别展示。',
   'delivery.empty': '向团队成员派发任务后，可以在这里跟踪结果。',
   'delivery.outcome.success': '汇报成功',
   'delivery.outcome.failed': '汇报失败',
@@ -1299,6 +1311,11 @@ const zhMessages: Record<TranslationKey, string> = {
   'pwa.runtimeOffline.retrying': '重试中…',
   'pwa.runtimeOffline.title': 'HiveTeam 后端未启动',
   'pwa.runtimeOffline.tryDemo': '改试用演示',
+  'pwa.sessionRequired.title': '请重新登录 HiveTeam',
+  'pwa.sessionRequired.body':
+    '浏览器会话已失效或尚未登录。请从本机启动器重新打开 HiveTeam 完成登录。',
+  'pwa.sessionRequired.retry': '检查登录状态',
+  'pwa.sessionRequired.autoReconnect': '通过启动器登录后，此页面会自动重新连接。',
   'pwa.waitForAgents': '等待 Agent 完成',
   'remote.audit': '审计流水',
   'remote.codeCopied': '配对数据已复制',
@@ -1586,9 +1603,10 @@ const zhMessages: Record<TranslationKey, string> = {
   'tasks.placeholder.newSubtask': '新建子任务',
   'tasks.placeholder.newTask': '下一步要做什么？',
   'tasks.progress.subtaskTitle': '已完成 {done} / {total} 个直接子任务',
-  'tasks.raw.conflictDescription': '重新载入会丢弃当前草稿；保留本地会继续编辑当前内容。',
+  'tasks.raw.conflictDescription':
+    '草稿已保留。比较当前文件后合并草稿，再确认使用新版保存；重新载入会丢弃草稿。',
   'tasks.raw.conflictTitle': '文件已在外部变化',
-  'tasks.raw.keepLocal': '保留本地',
+  'tasks.raw.keepLocal': '已核对合并，使用新版重试',
   'tasks.raw.label': '任务 Markdown',
   'tasks.raw.lineCount': '{count} 行',
   'tasks.raw.reload': '重新载入',
@@ -1640,6 +1658,10 @@ const zhMessages: Record<TranslationKey, string> = {
   'notifications.toast.declined': '未启用浏览器通知。',
   'notifications.toast.unsupported': '此浏览器不支持通知。',
   'notifications.workerReported.brief': '{name} 已汇报',
+  'notifications.workerPendingChanged.brief': '{name} 的待办任务已更新',
+  'notifications.workerPendingChanged.detail':
+    '{name} 在 {workspace} 还有 {count} 个待办任务。请在任务活动中查看汇报或取消记录。',
+  'notifications.workerPendingChanged.title': '任务状态变化',
   'notifications.workerReported.detail': '{name} 已在 {workspace} 汇报；还有 {count} 个排队任务。',
   'notifications.workerReported.title': '团队成员汇报',
   'notifications.workerStarted.brief': '{name} 已启动',

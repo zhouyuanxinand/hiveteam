@@ -50,6 +50,7 @@ export interface RemoteTunnelDeps {
   deviceSessions: DeviceSessionProvider
   loopbackSecret: string
   audit: RemoteAuditStore
+  inputEpoch: (deviceId: string) => string
   onStatus: (event: TunnelStatusEvent) => void
   pairing?: RemotePairing
   WebSocketImpl?: typeof WebSocket
@@ -322,6 +323,7 @@ export const createRemoteTunnel = (deps: RemoteTunnelDeps): RemoteTunnel => {
         loopbackSecret: deps.loopbackSecret,
         deviceSessions: deps.deviceSessions,
         audit: deps.audit,
+        inputEpoch: deps.inputEpoch,
         daemonId,
       })
       bridge.attachSocket((frame) => {

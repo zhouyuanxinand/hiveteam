@@ -1,11 +1,18 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { DispatchRecord } from '../../src/server/dispatch-ledger-store.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTeamOperations } from '../../src/server/team-operations.js'
+import { createAuthorizedTestRuntimeStore } from '../helpers/authorized-runtime.js'
 import { rejectUnexpectedTeamSkillOperations } from '../helpers/team-skill-stubs.js'
 
-afterEach(() => {
+const runtimes: Array<ReturnType<typeof createAuthorizedTestRuntimeStore>> = []
+const createRuntimeStore = () => {
+  const store = createAuthorizedTestRuntimeStore()
+  runtimes.push(store)
+  return store
+}
+afterEach(async () => {
+  for (const store of runtimes.splice(0)) await store.close()
   vi.restoreAllMocks()
 })
 
@@ -61,6 +68,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
     const markTaskDispatched = vi.fn()
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         writeSendPrompt,
@@ -131,6 +139,7 @@ describe('team atomicity', () => {
     const deleteMessage = vi.fn()
 
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
@@ -205,6 +214,7 @@ describe('team atomicity', () => {
     }
 
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
@@ -257,6 +267,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => undefined),
@@ -355,6 +366,7 @@ describe('team atomicity', () => {
     const writeReportPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => ({ runId: 'run-1' })),
@@ -414,6 +426,7 @@ describe('team atomicity', () => {
     const reportForwardError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const ops = createTeamOperations({
+      delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
         getActiveRunByAgentId: vi.fn(() => ({ runId: 'run-1' })),

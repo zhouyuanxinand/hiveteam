@@ -1,10 +1,16 @@
 import { join } from 'node:path'
-import type { WorkflowCatalogItem, WorkflowRun } from '../shared/workflows.js'
+import type { WorkflowCatalogItem, WorkflowRun, WorkflowRunStep } from '../shared/workflows.js'
 import { BadRequestError } from './http-errors.js'
+import { requireLocalUser } from './request-principal.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 
+const required = (params: Record<string, string>, key: string) => {
+  const value = params[key]
+  if (!value) throw new BadRequestError(`${key} is required`)
+  return value
+}
 const workspaceIdFrom = (context: Parameters<RouteDefinition['handler']>[0]) =>
   getRequiredParam(context.response, context.params, 'workspaceId', 'Workspace id is required')
 
@@ -18,6 +24,25 @@ const serializeWorkflow = (workflow: WorkflowCatalogItem) => ({
   ...(workflow.validationError ? { validation_error: workflow.validationError } : {}),
 })
 
+const serializeStep = (step: WorkflowRunStep) => ({
+  artifacts: step.artifacts,
+  dispatch_id: step.dispatchId,
+  error: step.error,
+  id: step.id,
+  needs: step.needs,
+  report_text: step.reportText,
+  status: step.status,
+  task: step.task,
+  worker: step.worker,
+  quality: step.quality ?? null,
+  waiting_for: step.waitingFor ?? [],
+  attempt: step.attempt ?? 0,
+  input_version: step.inputVersion ?? null,
+  dependency_versions: step.dependencyVersions ?? {},
+  result_version: step.resultVersion ?? null,
+  rerun_pending: step.rerunPending ?? false,
+  needs_rerun: step.needsRerun ?? false,
+})
 const serializeRun = (run: WorkflowRun) => ({
   created_at: run.createdAt,
   ended_at: run.endedAt,
@@ -26,17 +51,7 @@ const serializeRun = (run: WorkflowRun) => ({
   name: run.name,
   started_at: run.startedAt,
   status: run.status,
-  steps: run.steps.map((step) => ({
-    artifacts: step.artifacts,
-    dispatch_id: step.dispatchId,
-    error: step.error,
-    id: step.id,
-    needs: step.needs,
-    report_text: step.reportText,
-    status: step.status,
-    task: step.task,
-    worker: step.worker,
-  })),
+  steps: run.steps.map(serializeStep),
   updated_at: run.updatedAt,
   workflow_id: run.workflowId,
   workspace_id: run.workspaceId,
@@ -50,6 +65,55 @@ const getWorkflowRoot = (context: Parameters<RouteDefinition['handler']>[0]) => 
 }
 
 export const workflowRoutes: RouteDefinition[] = [
+  route(
+    'POST',
+    '/api/ui/workspaces/:workspaceId/workflows/runs/:runId/steps/:stepId/rerun',
+    async ({ request, response, params, store }) => {
+      requireLocalUser(request, store)
+      const body = await readJsonBody<{
+        expected_attempt?: unknown
+        reason?: unknown
+        acknowledge_external_effects?: unknown
+      }>(request)
+      if (
+        !Number.isSafeInteger(body.expected_attempt) ||
+        typeof body.reason !== 'string' ||
+        (body.acknowledge_external_effects !== undefined &&
+          typeof body.acknowledge_external_effects !== 'boolean')
+      )
+        throw new BadRequestError(
+          'expected_attempt, reason and an optional boolean acknowledge_external_effects are required'
+        )
+      sendJson(
+        response,
+        202,
+        serializeRun(
+          store.workflows.rerun(
+            required(params, 'workspaceId'),
+            required(params, 'runId'),
+            required(params, 'stepId'),
+            body.expected_attempt as number,
+            body.reason,
+            body.acknowledge_external_effects === true
+          )
+        )
+      )
+    }
+  ),
+  route(
+    'GET',
+    '/api/ui/workspaces/:workspaceId/workflows/runs/:runId/attempts',
+    ({ request, response, params, store }) => {
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      sendJson(
+        response,
+        200,
+        store.workflows
+          .attempts(required(params, 'workspaceId'), required(params, 'runId'))
+          .map((entry) => ({ ...entry, snapshot: serializeStep(entry.snapshot) }))
+      )
+    }
+  ),
   route('GET', '/api/ui/workspaces/:workspaceId/workflows', async (context) => {
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
     const resolved = getWorkflowRoot(context)
@@ -90,7 +154,7 @@ export const workflowRoutes: RouteDefinition[] = [
     )
     sendJson(context.response, 201, serializeRun(run))
   }),
-  route('GET', '/api/ui/workspaces/:workspaceId/workflows/runs/:runId', (context) => {
+  route('GET', '/api/ui/workspaces/:workspaceId/workflows/runs/:runId', async (context) => {
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
     const workspaceId = workspaceIdFrom(context)
     const runId = getRequiredParam(

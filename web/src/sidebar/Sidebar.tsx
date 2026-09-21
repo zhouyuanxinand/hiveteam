@@ -12,6 +12,7 @@ import { WorkspaceAvatar } from './WorkspaceAvatar.js'
 type SidebarProps = {
   activeWorkspaceId: string | null
   createDisabledReason?: string | undefined
+  loadingError?: string | undefined
   onCreateClick: () => void
   onDeleteWorkspace: (workspace: WorkspaceSummary) => void | Promise<void>
   onSelectWorkspace: (workspaceId: string) => void
@@ -49,6 +50,7 @@ const readGithubDismissed = (): boolean => {
 export const Sidebar = ({
   activeWorkspaceId,
   createDisabledReason,
+  loadingError,
   onCreateClick,
   onDeleteWorkspace,
   onSelectWorkspace,
@@ -143,7 +145,7 @@ export const Sidebar = ({
         </div>
       </div>
       {workspaces === null ? (
-        <p className="px-3 py-2 text-xs text-ter">{t('common.loading')}</p>
+        <p className="px-3 py-2 text-xs text-ter">{loadingError ?? t('common.loading')}</p>
       ) : workspaces.length === 0 ? (
         <div className="flex-1 px-2 py-4">
           <EmptyState

@@ -2,7 +2,7 @@ import '../helpers/mock-node-pty.ts'
 
 import { describe, expect, test, vi } from 'vitest'
 
-import { createAgentRuntime } from '../../src/server/agent-runtime.js'
+import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
 import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
@@ -190,7 +190,7 @@ describe('agent runtime races (unit)', () => {
       hivePort: '4010',
     })
 
-    expect(() =>
+    await expect(
       runtime.writeSendPrompt(
         'ws-1',
         'agent-1',
@@ -199,7 +199,7 @@ describe('agent runtime races (unit)', () => {
         'Coder role',
         'Implement login'
       )
-    ).toThrow(/EPIPE/)
+    ).rejects.toThrow(/EPIPE/)
 
     expect(writes).toHaveLength(1)
     expect(writes[0]).toContain('Implement login')

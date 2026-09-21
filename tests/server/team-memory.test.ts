@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { TEAM_MEMORY_BODY_MAX_CHARS } from '../../src/shared/team-memory.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []

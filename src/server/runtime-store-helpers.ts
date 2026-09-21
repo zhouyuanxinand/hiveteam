@@ -12,9 +12,14 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
 import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
 import { createDispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
+import {
+  createExecutionPolicyRuntime,
+  type ExecutionPolicyRuntime,
+} from './execution-policy-runtime.js'
 import { createExternalGoalStore } from './external-goal-store.js'
 import { createGitTurnCoordinator, type GitTurnCoordinator } from './git-turn-coordinator.js'
 import { createGitWorkspaceService } from './git-workspace-service.js'
+import { ConflictError } from './http-errors.js'
 import { createMessageLogStore } from './message-log-store.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
@@ -31,8 +36,21 @@ import {
   type RemoteDeviceStore,
 } from './remote-device-store.js'
 import { createRemotePairing, type RemotePairing } from './remote-pairing.js'
+import {
+  createRemotePermissionStore,
+  type RemotePermissionStore,
+} from './remote-permission-store.js'
 import { createReportOutboxStore } from './report-outbox-store.js'
+import { recoverRuntimeResources } from './resource-budget-recovery.js'
+import {
+  createResourceBudgetStore,
+  type ResourceBudgetStore,
+  ResourceLimitError,
+} from './resource-budget-store.js'
+import { createResourceQueueAuthorization } from './resource-queue-authorization.js'
+import { createResourceStartQueue, type ResourceStartQueue } from './resource-start-queue.js'
 import { openRuntimeDatabase } from './runtime-database.js'
+import { acquireRuntimeOwner, type RuntimeOwner } from './runtime-owner-lock.js'
 import { buildRuntimeRestartPolicy } from './runtime-restart-policy.js'
 import { createSettingsStore } from './settings-store.js'
 import { createSkillPackChangeStore } from './skill-pack-change-store.js'
@@ -41,6 +59,7 @@ import { createSkillPackResolver, type SkillPackResolver } from './skill-pack-re
 import { createSkillSnapshotStore } from './skill-snapshot-store.js'
 import { createTasksFileService } from './tasks-file.js'
 import { createTasksFileWatcher } from './tasks-file-watcher.js'
+import { createTeamDeliveryRuntime, type TeamDeliveryRuntime } from './team-delivery-runtime.js'
 import { createTeamMemoryDigestProvider } from './team-memory-digest.js'
 import { createTeamMemoryDreamStore } from './team-memory-dream-store.js'
 import { createTeamMemoryStore } from './team-memory-store.js'
@@ -58,6 +77,11 @@ import { createWorkspaceShellRuntime } from './workspace-shell-runtime.js'
 import { createWorkspaceStore } from './workspace-store.js'
 
 export interface RuntimeStoreServices {
+  dispatchDelivery: TeamDeliveryRuntime
+  resourceQueue: ResourceStartQueue
+  resources: ResourceBudgetStore
+  owner: RuntimeOwner
+  executionPolicies: ExecutionPolicyRuntime
   worktrees: WorkerWorktreeRuntime
   agentRunStore: ReturnType<typeof createAgentRunStore>
   git: ReturnType<typeof createGitWorkspaceService>
@@ -78,6 +102,7 @@ export interface RuntimeStoreServices {
   remoteDevices: RemoteDeviceStore
   remoteSessions: DeviceSessionProvider
   remotePairing: RemotePairing
+  remotePermissions: RemotePermissionStore
   settings: ReturnType<typeof createSettingsStore>
   skillPackChangeStore: ReturnType<typeof createSkillPackChangeStore>
   skillPackReleaseStore: ReturnType<typeof createSkillPackReleaseStore>
@@ -107,6 +132,7 @@ interface CreateRuntimeStoreLifecycleOptions {
 }
 
 export interface AutoResumeResult {
+  queueId?: string
   agentId: string
   error: string | null
   ok: boolean
@@ -127,7 +153,25 @@ const notifyTasksUpdated = (
 export const createRuntimeStoreServices = (
   options: CreateRuntimeStoreServicesOptions = {}
 ): RuntimeStoreServices => {
-  const db = openRuntimeDatabase(options.dataDir)
+  const owner = acquireRuntimeOwner(options.dataDir)
+  let db: ReturnType<typeof openRuntimeDatabase> | undefined
+  try {
+    db = openRuntimeDatabase(owner.dataDir ?? undefined)
+    const resources = createResourceBudgetStore(db, { runtimeInstanceId: owner.runtimeInstanceId })
+    return buildRuntimeStoreServices(options, db, resources, owner)
+  } catch (error) {
+    if (db?.open) db.close()
+    owner.close()
+    throw error
+  }
+}
+
+const buildRuntimeStoreServices = (
+  options: CreateRuntimeStoreServicesOptions,
+  db: ReturnType<typeof openRuntimeDatabase>,
+  resources: ResourceBudgetStore,
+  owner: RuntimeOwner
+): RuntimeStoreServices => {
   const git = createGitWorkspaceService(db)
   const messageLogStore = createMessageLogStore(db)
   const dispatchLedgerStore = createDispatchLedgerStore(db)
@@ -148,13 +192,23 @@ export const createRuntimeStoreServices = (
   const skillSnapshotStore = createSkillSnapshotStore(db)
   const memoryStore = createTeamMemoryStore(db)
   const memoryDreamStore = createTeamMemoryDreamStore(db, memoryStore)
-  if (!settings.getAppState(REMOTE_DAEMON_ID_KEY)?.value) {
-    settings.setAppState(REMOTE_DAEMON_ID_KEY, randomUUID())
+  if (!settings.internalAppState.get(REMOTE_DAEMON_ID_KEY)?.value) {
+    settings.internalAppState.set(REMOTE_DAEMON_ID_KEY, randomUUID())
   }
-  const remoteConfig = createRemoteConfigSource({ get: settings.getAppState })
+  const remoteConfig = createRemoteConfigSource({ get: settings.internalAppState.get })
   const remoteDevices = createRemoteDeviceStore(db)
   const remoteSessions = createPersistentDeviceSessionProvider(remoteDevices)
-  const remoteAudit = createRemoteAuditStore(db)
+  const remoteAudit: RemoteAuditStore = createRemoteAuditStore(db, (error) =>
+    remotePermissions.blockAfterAuditFailure(error)
+  )
+  const remotePermissions: RemotePermissionStore = createRemotePermissionStore(db, remoteAudit)
+  const queueAuthorization = createResourceQueueAuthorization(db, remotePermissions, remoteAudit)
+  const resourceQueue = createResourceStartQueue({
+    db,
+    budget: resources,
+    validateRemoteGrant: queueAuthorization.validate,
+    auditExecution: queueAuthorization.auditExecution,
+  })
   const remotePairing = createRemotePairing({
     audit: remoteAudit,
     deviceStore: remoteDevices,
@@ -169,9 +223,12 @@ export const createRuntimeStoreServices = (
     },
   })
   const uiAuth = createUiAuth()
-  const shellRuntime = createWorkspaceShellRuntime(options.agentManager)
+  const shellRuntime = createWorkspaceShellRuntime(options.agentManager, resources)
 
-  agentRunStore.markUnfinishedRunsStale()
+  resources.withTransaction(() => {
+    recoverRuntimeResources(db, resources)
+    agentRunStore.markUnfinishedRunsStale()
+  })
 
   const workspaceStore = createWorkspaceStore(db, dispatchLedgerStore.listOpenDispatchKinds())
   const worktrees = createWorkerWorktreeRuntime(db, options.dataDir ?? null)
@@ -205,6 +262,18 @@ export const createRuntimeStoreServices = (
     outputBus: options.agentManager?.getOutputBus() ?? null,
     workspaceStore,
   })
+  const executionPolicies = createExecutionPolicyRuntime({
+    db,
+    dataDir: options.dataDir ?? null,
+    worktrees,
+    sessionStore: agentSessionStore,
+    getWorkspace: (workspaceId) => workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
+    getWorkspacePaths: () => workspaceStore.listWorkspaces().map((workspace) => workspace.path),
+    getAgent: workspaceStore.getAgent,
+    getConfig: (workspaceId, agentId) => agentRuntime.peekAgentLaunchConfig(workspaceId, agentId),
+    getActiveRun: (workspaceId, agentId) =>
+      agentRuntime.getActiveRunByAgentId(workspaceId, agentId),
+  })
   const agentRuntime = createAgentRuntime(
     options.agentManager,
     agentRunStore,
@@ -222,9 +291,28 @@ export const createRuntimeStoreServices = (
     createTeamMemoryDigestProvider(memoryStore, settings),
     (workspaceId): WorkspaceLanguage =>
       workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh',
-    worktrees.withLaunchWorkspace
+    worktrees.withLaunchWorkspace,
+    executionPolicies,
+    resources
   )
+  const dispatchDelivery = createTeamDeliveryRuntime({
+    db,
+    agentRuntime,
+    workspaceStore,
+    ledger: dispatchLedgerStore,
+    outbox: reportOutbox,
+    activations: dispatchSkillActivationStore,
+    authorize: queueAuthorization.deliverDispatch,
+    onSubmitted: (dispatch) =>
+      workflowRuntime.recordDispatchSubmitted(dispatch.workspaceId, dispatch.id),
+  })
   const teamOps = createTeamOperations({
+    isWorkflowDispatch: (id) =>
+      !!db.prepare('SELECT 1 FROM workflow_step_attempts WHERE dispatch_id=? LIMIT 1').get(id),
+    delivery: dispatchDelivery,
+    resourceQueue,
+    captureDispatchAuthorization: queueAuthorization.captureDispatch,
+    withDispatchAuthorization: queueAuthorization.deliverDispatch,
     assertWorkspaceWritable: worktrees.assertIdle,
     agentRuntime,
     captureBaseHeadSha: (workspaceId, workerId) => {
@@ -257,6 +345,8 @@ export const createRuntimeStoreServices = (
     markDispatchDeliveryFailed: dispatchLedgerStore.markDeliveryFailed,
     markDispatchReportedByWorker: dispatchLedgerStore.markReportedByWorker,
     markDispatchSubmitted: dispatchLedgerStore.markSubmitted,
+    onDispatchSubmitted: (dispatch) =>
+      workflowRuntime.recordDispatchSubmitted(dispatch.workspaceId, dispatch.id),
     reportOutbox,
     resolveDispatchActivation: teamSkillRuntime.resolveDispatchActivation,
     reopenReportedDispatch: dispatchLedgerStore.reopenReportedDispatch,
@@ -268,10 +358,24 @@ export const createRuntimeStoreServices = (
     db,
     teamOps,
     workspaceStore,
+    getDispatch: dispatchLedgerStore.getDispatchById,
+    cancellationConfirmed: (id) =>
+      dispatchDelivery.health.get(id)?.cancellation_confirmed_at != null,
+    canDispatch: (id) => !worktrees.isBusy(id),
+  })
+  resourceQueue.setAgentCancellation((workspaceId, agentId, pause) => {
+    if (pause && workspaceStore.hasAgent(workspaceId, agentId))
+      workspaceStore.markAgentManuallyStopped(workspaceId, agentId)
+    agentRuntime.cancelPendingStart(workspaceId, agentId)
   })
   startExistingWorkspaceWatches()
 
   return {
+    dispatchDelivery,
+    resourceQueue,
+    resources,
+    owner,
+    executionPolicies,
     worktrees,
     agentRunStore,
     git,
@@ -290,6 +394,7 @@ export const createRuntimeStoreServices = (
     remoteAudit,
     remoteConfig,
     remoteDevices,
+    remotePermissions,
     remoteSessions,
     remotePairing,
     settings,
@@ -317,19 +422,68 @@ export const createRuntimeStoreLifecycle = ({
 }: CreateRuntimeStoreLifecycleOptions) => {
   const AUTO_RESUME_INTERVAL_MS = 500
   let autoResumePromise: Promise<AutoResumeResult[]> | null = null
+  let runtimeHivePort = ''
+  let handlersInstalled = false
+  const installQueueHandlers = (hivePort: string) => {
+    if (!hivePort) return
+    runtimeHivePort ||= hivePort
+    services.workflowRuntime.resume(runtimeHivePort)
+    if (handlersInstalled) return
+    handlersInstalled = true
+    for (const source of ['dispatch', 'scenario', 'recovery'] as const) {
+      services.resourceQueue.registerHandler(source, async (entry) => {
+        if (
+          !entry.agent_id ||
+          services.workspaceStore.isAgentManuallyStopped(entry.workspace_id, entry.agent_id)
+        )
+          throw new ConflictError('Agent was manually stopped; start it explicitly to resume')
+        if (
+          source === 'recovery' &&
+          entry.payload.auto_resume === true &&
+          !services.workspaceStore.getWorkspaceRecoverySettings(entry.workspace_id)
+            .autoResumeOnRestart
+        )
+          throw new ConflictError('Workspace auto-resume is disabled')
+        const run = await startAgent(entry.workspace_id, entry.agent_id, {
+          hivePort: runtimeHivePort,
+          ...(entry.payload.auto_resume === true ? { autoResume: true } : {}),
+        })
+        if (run.status === 'error') throw new ConflictError('Queued agent failed to start')
+        return { runId: run.runId }
+      })
+    }
+  }
+  const enqueueRecovery = (
+    workspaceId: string,
+    agentId: string,
+    error: ResourceLimitError,
+    autoResume = false
+  ) => {
+    const agent = services.workspaceStore.getAgent(workspaceId, agentId)
+    return services.resourceQueue.enqueue({
+      workspaceId,
+      agentId,
+      executionKey: `agent:${agentId}`,
+      kind: agent.role === 'orchestrator' ? 'orchestrator' : 'worker',
+      source: 'recovery',
+      payload: { auto_resume: autoResume },
+      reason: error.reason,
+    })
+  }
 
   const startAgent = async (
     workspaceId: string,
     agentId: string,
     input: { autoResume?: boolean; hivePort: string }
   ): Promise<LiveAgentRun> => {
+    installQueueHandlers(input.hivePort)
     services.workspaceStore.getAgent(workspaceId, agentId)
     services.workspaceStore.markAgentStarted(workspaceId, agentId)
     try {
       const run = await services.agentRuntime.startAgent(
         services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
         agentId,
-        input
+        { ...input, hivePort: runtimeHivePort || input.hivePort }
       )
       if (run.status === 'error') {
         services.workspaceStore.markAgentStopped(workspaceId, agentId)
@@ -348,15 +502,15 @@ export const createRuntimeStoreLifecycle = ({
           ),
         })
         queueMicrotask(() => {
-          try {
-            services.teamOps.replayQueuedDispatches(workspaceId, agentId)
-          } catch (error) {
-            console.error('[hive] queued dispatch replay failed after agent start', {
-              agentId,
-              error: error instanceof Error ? error.message : String(error),
-              workspaceId,
+          void services.teamOps
+            .replayQueuedDispatches(workspaceId, agentId)
+            .catch((error: unknown) => {
+              console.error('[hive] queued dispatch replay failed after agent start', {
+                agentId,
+                error: error instanceof Error ? error.message : String(error),
+                workspaceId,
+              })
             })
-          }
           if (onAgentStarted) {
             void Promise.resolve(onAgentStarted(workspaceId, agentId)).catch((error: unknown) => {
               console.error('[hive] post-agent-start bookkeeping failed', {
@@ -375,7 +529,11 @@ export const createRuntimeStoreLifecycle = ({
     }
   }
 
+  services.teamOps.setAgentStarter((workspaceId, agentId, hivePort) =>
+    startAgent(workspaceId, agentId, { hivePort })
+  )
   const autostartConfiguredAgents = async (input: { hivePort: string }) => {
+    installQueueHandlers(input.hivePort)
     if (!agentManager) return []
     const starts = services.workspaceStore.listWorkspaces().flatMap((workspace) => {
       seedOrchestratorLaunchConfig(services.agentRuntime, services.settings, workspace.id)
@@ -398,7 +556,12 @@ export const createRuntimeStoreLifecycle = ({
               workspace_id: workspace.id,
             }
           } catch (error) {
+            const queued =
+              error instanceof ResourceLimitError
+                ? enqueueRecovery(workspace.id, agent.id, error)
+                : null
             return {
+              ...(queued ? { queue_id: queued.id } : {}),
               agent_id: agent.id,
               error: error instanceof Error ? error.message : String(error),
               ok: false,
@@ -412,6 +575,7 @@ export const createRuntimeStoreLifecycle = ({
   }
 
   const autoResumeInterruptedAgents = (input: { hivePort: string }) => {
+    installQueueHandlers(input.hivePort)
     if (autoResumePromise) return autoResumePromise
 
     autoResumePromise = (async () => {
@@ -515,9 +679,14 @@ export const createRuntimeStoreLifecycle = ({
             workspaceId: candidate.workspaceId,
           })
         } catch (error) {
+          const queued =
+            error instanceof ResourceLimitError
+              ? enqueueRecovery(candidate.workspaceId, candidate.agentId, error, true)
+              : null
           const message = error instanceof Error ? error.message : String(error)
           console.error(`[hive] auto-resume failed: ${candidate.agentId}`, error)
           results.push({
+            ...(queued ? { queueId: queued.id } : {}),
             agentId: candidate.agentId,
             error: message,
             ok: false,
@@ -536,15 +705,19 @@ export const createRuntimeStoreLifecycle = ({
 
   return {
     close: async () => {
+      await services.resourceQueue.close()
       await services.shellRuntime.close()
       await services.agentRuntime.close()
+      await services.executionPolicies.close()
       await services.tasksFileWatcher.close()
       services.workerOutputTracker?.closeAll()
       services.gitTurnCoordinator.close()
       services.agentRunStore.close?.()
       services.remotePairing.dispose()
       await services.remoteAudit.flush()
+      services.remotePermissions.close()
       services.db.close()
+      services.owner.close()
     },
     configureAgentLaunch: (workspaceId: string, agentId: string, input: AgentLaunchConfigInput) => {
       services.workspaceStore.getAgent(workspaceId, agentId)

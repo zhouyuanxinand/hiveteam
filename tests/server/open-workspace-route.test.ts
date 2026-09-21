@@ -8,7 +8,7 @@ import type {
   OpenCommandResult,
   OpenWorkspaceInput,
 } from '../../src/server/open-target-commands.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const cleanup: Array<() => Promise<void>> = []

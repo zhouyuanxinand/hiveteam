@@ -1,20 +1,25 @@
 import { randomUUID } from 'node:crypto'
 
+import { ForbiddenError } from './http-errors.js'
+
 export interface UiAuth {
   getSupervisorToken: () => string
   getToken: () => string
+  createBootstrap: () => string
+  exchangeBootstrap: (token: string) => string
   validate: (token: string | undefined) => boolean
   getRemoteTunnelSecret: () => string
   validateRemoteTunnelSecret: (secret: string | undefined) => boolean
   validateSupervisorToken: (token: string | undefined) => boolean
 }
 
-export const createUiAuth = (): UiAuth => {
+export const createUiAuth = (now: () => number = Date.now): UiAuth => {
   const token = randomUUID()
+  const sessions = new Set<string>([token])
+  const bootstraps = new Map<string, number>()
   const remoteTunnelSecret = randomUUID()
-  // This is deliberately process-local. The MCP client gets it from a
-  // loopback-only endpoint on every call, so it never becomes a persisted
-  // credential and cannot be recovered through the remote tunnel.
+  // Process-local supervisor credentials are issued only through an
+  // authenticated desktop action; the remote tunnel cannot retrieve them.
   const supervisorToken = randomUUID()
 
   return {
@@ -24,8 +29,28 @@ export const createUiAuth = (): UiAuth => {
     getToken() {
       return token
     },
+    createBootstrap() {
+      for (const [value, expiresAt] of bootstraps) {
+        if (expiresAt <= now()) bootstraps.delete(value)
+      }
+      const bootstrap = randomUUID()
+      bootstraps.set(bootstrap, now() + 60_000)
+      return bootstrap
+    },
+    exchangeBootstrap(bootstrap) {
+      const expiresAt = bootstraps.get(bootstrap)
+      bootstraps.delete(bootstrap)
+      if (expiresAt === undefined || expiresAt <= now()) {
+        throw new ForbiddenError(
+          'UI bootstrap is invalid or expired; reopen Hive from its launcher'
+        )
+      }
+      const session = randomUUID()
+      sessions.add(session)
+      return session
+    },
     validate(input) {
-      return input === token
+      return input !== undefined && sessions.has(input)
     },
     getRemoteTunnelSecret() {
       return remoteTunnelSecret

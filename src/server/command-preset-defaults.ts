@@ -10,11 +10,11 @@ export interface BuiltinCommandPresetDefaults {
   yoloArgsTemplate: string[] | null
 }
 
-const CODEX_DEFAULT_YOLO_ARGS = ['--dangerously-bypass-approvals-and-sandbox']
+const CODEX_DEFAULT_YOLO_ARGS: string[] = []
 const OPENCODE_DEFAULT_YOLO_ARGS: string[] = []
-const GEMINI_DEFAULT_YOLO_ARGS = ['--yolo']
+const GEMINI_DEFAULT_YOLO_ARGS: string[] = []
 const QWEN_DEFAULT_YOLO_ARGS: string[] = []
-const PI_DEFAULT_YOLO_ARGS = ['--approve']
+const PI_DEFAULT_YOLO_ARGS: string[] = []
 const ZCODE_DEFAULT_YOLO_ARGS: string[] = []
 const KIMI_DEFAULT_YOLO_ARGS: string[] = []
 
@@ -94,6 +94,22 @@ export const BUILTIN_COMMAND_PRESETS: BuiltinCommandPresetDefaults[] = [
     resumeArgsTemplate: null,
     sessionIdCapture: null,
     yoloArgsTemplate: KIMI_DEFAULT_YOLO_ARGS,
+  },
+  {
+    command: 'agent',
+    displayName: 'Cursor',
+    id: 'cursor',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: [],
+  },
+  {
+    command: 'grok',
+    displayName: 'Grok',
+    id: 'grok',
+    resumeArgsTemplate: null,
+    sessionIdCapture: null,
+    yoloArgsTemplate: [],
   },
 ]
 

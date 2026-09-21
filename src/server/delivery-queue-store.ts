@@ -30,7 +30,7 @@ const query = `WITH queue AS (
   LEFT JOIN workers a ON a.id = d.to_agent_id AND a.workspace_id = d.workspace_id
   LEFT JOIN dispatch_delivery_failures f ON f.dispatch_id = d.id
   LEFT JOIN dispatch_verifications v ON v.id = (
-    SELECT id FROM dispatch_verifications WHERE dispatch_id = d.id ORDER BY started_at DESC, rowid DESC LIMIT 1
+    SELECT id FROM dispatch_verifications WHERE dispatch_id = d.id AND subject_json IS NULL ORDER BY started_at DESC, rowid DESC LIMIT 1
   )
   LEFT JOIN worker_worktrees t ON t.worker_id = d.to_agent_id AND t.workspace_id = d.workspace_id
   LEFT JOIN worker_branch_updates u ON u.worker_id = t.worker_id

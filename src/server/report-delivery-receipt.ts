@@ -19,6 +19,12 @@ export interface ReportDeliveryReceipt {
 export interface SystemMessageDeliveryOptions {
   requireActiveRun?: boolean
   receipt?: ReportDeliveryReceipt
+  delivery?: {
+    signal: AbortSignal
+    timeoutMs: number
+    beforeWrite: () => void
+    nativeReceipt: () => void
+  }
 }
 
 export const reportReceiptMarker = (id: string) => `[Hive report receipt: ${id}]`

@@ -10,7 +10,7 @@ import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
 import { App } from '../../web/src/app.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 // These flow tests isolate terminal rendering; real parser coverage lives in terminal-theme.test.
 vi.mock('../../web/src/terminal/input-highlights.js', () => ({
@@ -19,6 +19,7 @@ vi.mock('../../web/src/terminal/input-highlights.js', () => ({
 
 vi.mock('@xterm/xterm', () => ({
   Terminal: class {
+    options = { disableStdin: false }
     cols = 80
     rows = 24
     buffer = {
@@ -151,7 +152,11 @@ beforeEach(async () => {
   serverContext = server
   cleanupServer = server.close
   let cookie = ''
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
   uiCookie = cookie

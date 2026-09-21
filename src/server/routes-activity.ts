@@ -31,7 +31,8 @@ export const activityRoutes: RouteDefinition[] = [
       requireUiTokenFromRequest(request, store.validateUiToken)
       const workspace = store.getWorkspaceSnapshot(workspaceId)
       const limit = readLimit(request.url)
-      const dispatches = store.listDispatches(workspaceId, { limit, offset: 0 })
+      const delivery = store.deliveryHistory.page(workspaceId, { limit })
+      const dispatches = delivery.items
       const workers = store.listWorkers(workspaceId)
       const messages = store.listMessagesForRecovery(
         workspaceId,
@@ -83,6 +84,7 @@ export const activityRoutes: RouteDefinition[] = [
       }
 
       sendJson(response, 200, {
+        delivery_summary: delivery.summary,
         dispatches: dispatches.map(serializeDispatchRecord),
         generated_at: Date.now(),
         git,

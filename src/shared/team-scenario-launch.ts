@@ -2,6 +2,7 @@ import type { TeamScenarioDefinition } from './team-scenarios.js'
 import type { TeamListItemPayload, WorkerRole } from './types.js'
 
 export interface ScenarioStartResult {
+  queue_id?: string
   id: string
   error: string | null
   ok: boolean

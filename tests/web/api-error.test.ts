@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { createWorkspace, startAgentRun } from '../../web/src/api.js'
@@ -41,7 +43,7 @@ describe('api error messages', () => {
     )
   })
 
-  test('startAgentRun refreshes stale UI session token and retries once', async () => {
+  test('an expired UI session requires the launcher and does not retry a rejected action', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -50,60 +52,52 @@ describe('api error messages', () => {
           status: 403,
         })
       )
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ run_id: 'run-after-session-refresh' }), {
+        new Response(JSON.stringify({ error: 'UI bootstrap required' }), {
           headers: { 'content-type': 'application/json' },
-          status: 201,
+          status: 403,
         })
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(startAgentRun('workspace-1', 'workspace-1:orchestrator')).resolves.toEqual({
-      runId: 'run-after-session-refresh',
-      threadId: null,
-    })
+    await expect(startAgentRun('workspace-1', 'workspace-1:orchestrator')).rejects.toThrow(
+      'Reopen Hive from its launcher'
+    )
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/workspaces/workspace-1/agents/workspace-1:orchestrator/start',
       '/api/ui/session',
-      '/api/workspaces/workspace-1/agents/workspace-1:orchestrator/start',
     ])
   })
 
-  test('concurrent stale UI session retries share one refresh request', async () => {
-    let staleResponses = 0
-    let retryResponses = 0
+  test('concurrent stale UI sessions share a status check and both require the launcher', async () => {
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       if (url === '/api/ui/session') {
-        return new Response(JSON.stringify({ ok: true }), { status: 200 })
-      }
-      if (staleResponses < 2) {
-        staleResponses += 1
-        return new Response(JSON.stringify({ error: 'UI endpoint requires valid UI token' }), {
+        return new Response(JSON.stringify({ error: 'UI bootstrap required' }), {
           headers: { 'content-type': 'application/json' },
           status: 403,
         })
       }
-      retryResponses += 1
-      return new Response(JSON.stringify({ run_id: `run-${retryResponses}` }), {
+      return new Response(JSON.stringify({ error: 'UI endpoint requires valid UI token' }), {
         headers: { 'content-type': 'application/json' },
-        status: 201,
+        status: 403,
       })
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(
-      Promise.all([
-        startAgentRun('workspace-1', 'workspace-1:orchestrator'),
-        startAgentRun('workspace-1', 'worker-a'),
-      ])
-    ).resolves.toEqual([
-      { runId: 'run-1', threadId: null },
-      { runId: 'run-2', threadId: null },
+    const results = await Promise.allSettled([
+      startAgentRun('workspace-1', 'workspace-1:orchestrator'),
+      startAgentRun('workspace-1', 'worker-a'),
     ])
+    expect(results).toHaveLength(2)
+    for (const result of results) {
+      expect(result.status).toBe('rejected')
+      if (result.status === 'rejected') {
+        expect(result.reason.message).toContain('Reopen Hive from its launcher')
+      }
+    }
 
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/ui/session')).toHaveLength(1)
-    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })

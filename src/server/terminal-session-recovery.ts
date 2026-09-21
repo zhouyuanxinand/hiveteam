@@ -113,7 +113,7 @@ export const createTerminalSessionRecovery = ({
       publish(recovery)
       if (recovery && unchanged) send(socket, { type: 'session_recovery', recovery })
     },
-    async retry(socket: WebSocket, requestId: string) {
+    async retry(socket: WebSocket, requestId: string, executeWrite?: (write: () => void) => void) {
       const reply = (status: TerminalSessionRetryStatus) =>
         send(socket, { type: 'session_retry', request_id: requestId, status })
       if (!getThreadId || closed) {
@@ -138,7 +138,9 @@ export const createTerminalSessionRecovery = ({
         }
         // No await between the fresh screen check and the write. Concurrent
         // viewers share this guard; stale clicks never type into a composer.
-        store.writeRunInput(runId, 'r')
+        const write = () => store.writeRunInput(runId, 'r')
+        if (executeWrite) executeWrite(write)
+        else write()
         await new Promise<void>((resolve) => {
           finishSettle = resolve
           settleTimer = setTimeout(resolve, RETRY_SETTLE_MS)

@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import * as resolvers from '../../src/server/skill-pack-resolver.js'
 import type { TeamSkillRuntimeError } from '../../src/server/team-skill-runtime.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { createRecordingAgentManager } from '../helpers/recording-agent-manager.js'
 
 const tempDirs: string[] = []

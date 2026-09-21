@@ -73,7 +73,7 @@ Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在�
 前置条件：
 
 - Node.js 22 或更新版本
-- 至少一个支持的 Agent CLI 已经安装好、登录过、在 `PATH` 上可调用
+- 执行真实任务时，至少一个支持的 Agent CLI 已安装、已登录且在 `PATH` 上可调用；基础工作区可在安装 CLI 前创建
 
 克隆、安装并启动本分支：
 
@@ -84,8 +84,8 @@ npm install
 npm start
 ```
 
-`npm start` 会同时启动本机 HiveTeam Runtime 和 Vite Web 页面。请打开 Vite
-打印出的地址，通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
+`npm start` 会同时启动本机 HiveTeam Runtime 和 Vite Web 页面，并自动打开已认证的浏览器窗口，
+地址通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
 习惯 pnpm 的开发流程。
 
 npm 11 的 `npm warn allow-scripts` 只是审查提示；npm 12 则会默认阻止未批准的依赖安装脚本，即使命令最后显示 `added ... packages` 也不代表原生模块可用。本仓库已为源码安装仅批准经过审查的 `node-pty`、`better-sqlite3` 和 `esbuild`。如果是全局安装包，请显式批准同一条已知运行时链路：
@@ -96,7 +96,10 @@ npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hi
 
 具体规则见 [npm 安装脚本批准文档](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/) 和下方故障排查。
 
-通过安装包运行时，`hive` 仍会在终端打印生产页面地址。如果你想指定端口，可以用 `hive --port 4010`。
+通过安装包运行时，`hive` 会启动生产页面并自动打开已认证的浏览器窗口。如果你想指定端口，可以用 `hive --port 4010`。
+启动器通过有效期 60 秒的一次性链接完成登录，页面登录时会清除地址栏中的引导凭据。
+仅打开终端打印的 localhost 地址不会获得新的管理会话。Hive 重启后或换用浏览器配置时，
+在启动器终端输入 `o`，或从桌面托盘重新打开；同一 Runtime 运行期间，已有窗口可直接刷新。
 
 更新源码驱动的构建：
 
@@ -119,14 +122,14 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 首次使用流程：
 
 1. 选择一个项目目录作为 workspace。
-2. 挑一个 Orchestrator 预设。
-3. Hive 会创建 `<workspace>/.hive/tasks.md`，启动 Orchestrator 的 PTY，把内部的 `team` 命令注入这个 agent 会话。
+2. 默认使用可离线完成的基础初始化；Skill Packs 可按需选择。
+3. Hive 创建 `<workspace>/.hive/tasks.md`。挑选并检查 Orchestrator 预设后手动启动，或勾选创建弹窗的启动选项；启动后注入内部 `team` 命令。
 4. 在 Team Members 面板里添加 Worker。
 5. 跟 Orchestrator 说一声让它派活，它会用 `team send <worker-name> "<task>"` 发任务，Worker 完事后用 `team report` 回报。
 
-想让 Orchestrator 自己决定团队规模，可以保留 **自动组队** 开关开启（默认开启）：它会按任务需要临时 `team spawn` 合适数量的 coder / tester / reviewer，任务结束后自动收回临时成员。
+想让 Orchestrator 自己决定团队规模，可以保留 **自动组队** 开关开启（默认开启）。组队使用 Runtime 的团队管理接口，受成员上限、执行额度与启动权限约束。`team send` 只派单给已有成员；CLI 没有 `team spawn` 命令。
 
-想试更强的自动化，可以在右上角设置里开启实验性的 **Workflow** 开关。开启后，Orchestrator 可以编写并运行多 agent workflow，把一个目标拆成 fan-out / review / test 等阶段；顶部的 **Workflows** 面板会显示运行记录、阶段结果、定时任务和停止按钮。Workflow 创建的新 agent 默认使用哪种 CLI、允许使用哪些 CLI，也可以在 Workflows 面板里配置。
+想试更强的自动化，可以在右上角设置里开启实验性的 **Workflow** 开关。开启后，Orchestrator 可以编写并运行多 agent workflow，把一个目标拆成 fan-out / review / test 等阶段；顶部的 **Workflows** 面板会显示运行记录、阶段结果和停止按钮。Workflow 创建的新 agent 默认使用哪种 CLI、允许使用哪些 CLI，也可以在 Workflows 面板里配置。当前不提供定时任务。
 
 ## 用 Skill Pack 给团队共享 Skills
 
@@ -200,28 +203,30 @@ Workspace 任务图：
 
 ## Agent 预设
 
-| 预设 | `PATH` 上的命令 | 默认 bypass 模式 | 会话恢复 |
-| --- | --- | --- | --- |
-| Antigravity CLI | `agy` | `--dangerously-skip-permissions` | `--conversation <session_id>` |
-| Claude Code | `claude` | `--dangerously-skip-permissions`、`--permission-mode=bypassPermissions` | `--resume <session_id>` |
-| Codex | `codex` | `--dangerously-bypass-approvals-and-sandbox` | `resume <session_id>` |
-| OpenCode | `opencode` | 由 `~/.config/opencode/opencode.json` 配置 | `--session <session_id>` |
-| Gemini | `gemini` | `--yolo` | `--resume <session_id>` |
-| Hermes | `hermes` | `--yolo` | `--resume <session_id>` |
-| Qwen Code | `qwen` | `--approval-mode yolo` | `--resume <session_id>` |
-| Cursor CLI | `cursor` | `--force` | 暂未自动捕获 session id |
-| Grok Build | `grok` | `--always-approve` | 暂未自动捕获 session id |
-| 自定义 | 任意可执行文件 | 自己配 | 自己配 |
+| 预设 | `PATH` 上的命令 | 会话恢复 |
+| --- | --- | --- |
+| Antigravity CLI | `agy` | `--conversation <session_id>` |
+| Claude Code | `claude` | `--resume <session_id>` |
+| Codex | `codex` | `resume <session_id>` |
+| OpenCode | `opencode` | `--session <session_id>` |
+| Gemini | `gemini` | `--resume <session_id>` |
+| Hermes | `hermes` | `--resume <session_id>` |
+| Qwen Code | `qwen` | `--resume <session_id>` |
+| Cursor CLI | `agent` / `cursor-agent` | 已有身份与恢复适配，真实发行版未认证，自动恢复保持阻止 |
+| Grok Build | `grok` | 已有身份与恢复适配，真实发行版未认证，自动恢复保持阻止 |
+| 自定义 | 任意可执行文件 | 自己配 |
 
 Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里先装好、登录好。
+
+预设不再自动添加 bypass 参数。Agent 默认使用受限执行策略；「执行权限」中可查看当前 CLI 与平台能否强制落实。未验证组合默认拒绝启动，需要本机用户明确授权该 Agent 的不受限例外。受限 Codex 使用独立 CLI 目录，认证也须配置在对应目录。实际边界见 [SECURITY.md](SECURITY.md)。
 
 ## Hive 提供什么
 
 - Workspace 侧边栏，方便在多个本机项目之间切换。
 - Orchestrator 和 Worker 终端都是真实 PTY 支撑的。
 - Add Worker 预置 coder / reviewer / tester 等角色模板，也支持完全自定义 prompt 与命令——把任何 CLI agent 编排成你需要的角色。
-- 自动组队（实验性，默认开启）：Orchestrator 可以根据任务动态创建临时 coder / tester / reviewer，完成后自动回收。
-- Workflows（实验性，默认关闭）：Orchestrator 可以运行多阶段、多 agent 的 workflow，Hive 在 Workflows 面板里展示运行、日志、结果、定时任务和停止控制。
+- 自动组队（实验性，默认开启）：Orchestrator 可在成员和执行额度内，根据任务创建临时 coder / tester / reviewer。提交报告不会直接释放仍在运行的进程，也不会删除保留的 worktree。
+- Workflows（实验性，默认关闭）：Orchestrator 可以运行多阶段、多 agent 的 workflow，Hive 在 Workflows 面板里展示运行、日志、结果和停止控制。
 - Workflow CLI 策略：为 workflow 创建的 agent 选择默认 CLI，并限制允许使用的 CLI，避免脚本误启未配置的 agent。
 - 团队记忆：把 workspace 约束、长期上下文和团队共识留在 Hive 里，后续派单时更容易把背景带给正确的 agent。
 - 派单改动审查：在 Git 工作区里，Hive 会在创建派单时记录 HEAD 提交，活动中心可以查看该派单处理期间产生的工作区 diff（含新增未跟踪文件），不必再盲信成员的口头汇报；审查反馈可以直接发回该成员的终端，派单会重新打开、让成员改完再次汇报。
@@ -230,11 +235,11 @@ Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里�
 - 升级后的 What's New 弹窗，用简短 release highlights 告诉你新版改了什么。
 - 元数据存在本机 SQLite，Windows 默认在 `%USERPROFILE%\.config\hive`，macOS / Linux 默认在 `~/.config/hive`，也可以通过 `$HIVE_DATA_DIR` 指定。
 
-Hive **不**提供 sandbox 隔离、多用户认证，也不自带任何 agent 模型。它只负责调度你已经在用的本机 CLI。
+Hive 的受限执行复用经过验证的 CLI 沙箱能力；它不自研操作系统沙箱、不提供多用户认证，也不自带任何 agent 模型。
 
 ## 远程访问（可选，默认关闭）
 
-如果想在外面用手机查看、操作正在本机跑着的 Hive，可以开启可选的 **Remote access**。开启后，手机浏览器登录、跟桌面完成一次配对，就能通过端到端加密隧道访问 Hive Web UI。已配对的手机是与本地浏览器**等权**的受信任设备。
+如果想在外面用手机查看、操作正在本机跑着的 Hive，可以开启可选的 **Remote access**。手机配对后，由本机选择该设备可见的工作区。远程默认只读；写操作须由本机按设备、工作区和具体动作批准，最长十分钟，通过端到端加密隧道访问 Hive Web UI。
 
 需要清楚的几点：
 
@@ -252,14 +257,19 @@ Hive **不**提供 sandbox 隔离、多用户认证，也不自带任何 agent �
 Hive 是本机开发工具，**不是**托管服务。
 
 - Remote access 关闭时，runtime 只监听 `127.0.0.1`。不要把 Hive 端口通过公网隧道、反向代理或任何共享网络接口暴露出去。
-- Remote access 开启后，已配对手机与本地浏览器等权；只给你信任的设备配对，不用时及时关闭或吊销。
-- 内置预设会主动传 CLI 的 non-interactive / bypass flag。Worker 在选中的 workspace 里有跟启动 shell **同等**的执行权限——把它当成"会自动跑命令的你自己"。
-- 只打开你信任的 workspace。Worker 拥有跟你登录账户一样的文件系统访问权限。
+- 远程设备按工作区授权可见范围，按动作临时授权写操作；不能批准自己的权限，也不能更改执行安全策略。
+- 受限 Worker 只在 CLI 沙箱能力验证通过后启动。不受限例外拥有启动 Hive 的账户权限，须由本机明确授权。
+- 只打开你信任的 workspace。worktree 本身不构成文件系统沙箱。
 - Agent token 是 session 级的，由本机 runtime 生成，注入到 agent 进程环境变量里，**不**用于跨网络通信。
-- Hive 不做多用户认证。任何能从本机访问到端口的进程都视为可信本地访问。
+- Hive 分别认证本机用户、Agent 与远程设备；它不提供针对同一系统账户下不受限进程的 OS 安全边界。
 - 浏览器 UI token 只是本机会话保护，不是用来防同一系统账户下其他进程的安全边界。
 
 在敏感仓库里用 Hive 之前，请先读 [SECURITY.md](SECURITY.md)。
+
+本机顶部的**资源**面板显示并设置运行上限：默认全局 8 个执行、每工作区 4 个执行、
+12 个 Worker 成员和 1 个验证执行。Orchestrator、Worker、工作区终端与验证共享执行额度。
+idle 进程退出后才释放执行额度，stopped 成员删除后才释放成员名额；等待资源的任务由后台队列调度。
+这限制的是 Hive 管理的执行数量，不是 CPU 或内存。每个数据目录只允许一个活动 Runtime。
 
 ## 数据位置
 
@@ -291,6 +301,8 @@ Hive 不会在两者之间转换路径，也不会自动查找、复制或合并
 
 重启后的成员恢复、原生会话绑定与恢复失败处理，参见
 [Workspace 与原生会话恢复说明](docs/session-recovery.md)。
+
+知识抽屉与 `hive data --help` 提供本机备份、校验、恢复到新目录和可撤销归档。备份不包含认证凭据及工作区源码；恢复后成员保持停止，原数据目录保留。迁移步骤与范围见 [本地备份与恢复说明](docs/local-data-recovery.md)。
 
 ## 故障排查
 

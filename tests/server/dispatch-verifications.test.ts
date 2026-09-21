@@ -2,15 +2,26 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { runGit } from '../../src/server/git-command.js'
 import { openRuntimeDatabase } from '../../src/server/runtime-database.js'
 import { createVerificationStore } from '../../src/server/verification-store.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
 const roots: string[] = []
+const readReservation = (dataDir: string, id: string) => {
+  const db = new BetterSqlite3(join(dataDir, 'runtime.sqlite'), { readonly: true })
+  try {
+    return db
+      .prepare('SELECT * FROM resource_reservations WHERE execution_key = ?')
+      .get(`verification:${id}`)
+  } finally {
+    db.close()
+  }
+}
 afterEach(async () => {
   while (servers.length) await servers.pop()?.close()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -93,7 +104,98 @@ const setup = async () => {
   }
 }
 
-describe('version-bound dispatch verification', () => {
+describe('version-bound dispatch verification', { timeout: 60_000 }, () => {
+  test('shares admission with a live shell and resumes the same queued verification after shell exit', async () => {
+    const ctx = await setup()
+    ctx.server.store.resources.updateLimits(
+      { max_running_total: 2, max_running_per_workspace: 2 },
+      { actor: 'local_user' }
+    )
+    const shell = await ctx.server.store.startWorkspaceShell(ctx.workspace.id)
+    expect(ctx.server.store.resources.getSnapshot().occupancy.global).toBe(2)
+    const queued = await (await ctx.start()).json()
+    expect(queued.state).toBe('queued')
+    expect(() => ctx.server.store.deleteWorker(ctx.workspace.id, ctx.worker.id)).toThrow(
+      'queued verification'
+    )
+    expect(ctx.server.store.getWorker(ctx.workspace.id, ctx.worker.id).id).toBe(ctx.worker.id)
+    expect(ctx.server.store.resourceQueue.list(ctx.workspace.id)).toContainEqual(
+      expect.objectContaining({
+        execution_key: `verification:${queued.id}`,
+        source: 'verification',
+        status: 'queued',
+      })
+    )
+    expect(
+      (await runGit(ctx.project, ['worktree', 'list', '--porcelain'])).match(/^worktree /gm)
+    ).toHaveLength(1)
+    expect(ctx.server.store.closeWorkspaceShell(ctx.workspace.id, shell.runId)).toBe(true)
+    const result = await ctx.done()
+    expect(result.runs[0]).toMatchObject({ id: queued.id, state: 'passed', exit_code: 0 })
+    expect(result.runs).toHaveLength(1)
+    await vi.waitFor(() =>
+      expect(ctx.server.store.resources.getSnapshot().occupancy.global).toBe(1)
+    )
+    expect(readReservation(ctx.dataDir, queued.id)).toMatchObject({
+      state: 'released',
+      run_id: queued.id,
+      kind: 'verification',
+    })
+    expect(ctx.server.store.resourceQueue.list(ctx.workspace.id)).toContainEqual(
+      expect.objectContaining({
+        execution_key: `verification:${queued.id}`,
+        status: 'started',
+        run_id: queued.id,
+        attempts: 1,
+      })
+    )
+  })
+
+  test('keeps a queued verification across runtime restart and revalidates its original revision', async () => {
+    const ctx = await setup()
+    ctx.server.store.resources.updateLimits({ max_running_total: 1 }, { actor: 'local_user' })
+    const queued = await (await ctx.start()).json()
+    expect(queued.state).toBe('queued')
+    await servers.pop()?.close()
+    const restarted = await startTestServer({ dataDir: ctx.dataDir })
+    servers.push(restarted)
+    await vi.waitFor(
+      async () => {
+        const result = await restarted.store.verifications.view(ctx.workspace.id, ctx.dispatch.id)
+        expect(result.runs[0]).toMatchObject({ id: queued.id, state: 'passed', exitCode: 0 })
+      },
+      { timeout: 15_000 }
+    )
+    expect(restarted.store.resourceQueue.list(ctx.workspace.id)).toContainEqual(
+      expect.objectContaining({
+        execution_key: `verification:${queued.id}`,
+        status: 'started',
+        attempts: 1,
+      })
+    )
+  })
+
+  test('a queued verification whose source changes fails without spawning the requested command', async () => {
+    const ctx = await setup()
+    ctx.server.store.resources.updateLimits({ max_running_total: 1 }, { actor: 'local_user' })
+    const queued = await (await ctx.start()).json()
+    expect(queued.state).toBe('queued')
+    writeFileSync(join(ctx.project, 'value.txt'), 'new uncommitted value')
+    const workerRun = ctx.server.store.getActiveRunByAgentId(ctx.workspace.id, ctx.worker.id)
+    if (!workerRun) throw new Error('Missing synthetic worker')
+    ctx.server.store.stopAgentRun(workerRun.runId)
+    const result = await ctx.done()
+    expect(result.runs[0]).toMatchObject({
+      id: queued.id,
+      state: 'failed',
+      exit_code: null,
+      output: '',
+    })
+    expect(result.runs[0].error).toContain('Commit all changes')
+    const reservation = readReservation(ctx.dataDir, queued.id)
+    expect(reservation).toMatchObject({ state: 'released', pid: null, run_id: null })
+  })
+
   test('rehydrates an unfinished stored run as interrupted without accepting it', async () => {
     const ctx = await setup()
     await servers.pop()?.close()
@@ -236,7 +338,7 @@ describe('version-bound dispatch verification', () => {
     expect((await runGit(ctx.project, ['diff', 'HEAD'])).trim()).toBe('')
   })
 
-  test('cancels a live process, rejects overlapping runs, and removes the temporary checkout', async () => {
+  test('cancels queued and live processes without replay and removes the temporary checkout', async () => {
     const ctx = await setup()
     const started = await (await ctx.start('node wait.cjs')).json()
     await vi.waitFor(
@@ -246,10 +348,19 @@ describe('version-bound dispatch verification', () => {
         ),
       { timeout: 10_000 }
     )
-    expect((await ctx.start()).status).toBe(409)
+    const queuedResponse = await ctx.start()
+    expect(queuedResponse.status).toBe(202)
+    const queued = await queuedResponse.json()
+    expect(queued.state).toBe('queued')
+    expect(ctx.server.store.resources.getSnapshot().occupancy.by_kind.verification).toBe(1)
+    expect((await ctx.request(`/verifications/${queued.id}/cancel`, {})).status).toBe(200)
     expect((await ctx.request(`/verifications/${started.id}/cancel`, {})).status).toBe(200)
     const result = await ctx.done()
-    expect(result.runs[0].state).toBe('cancelled')
+    expect(
+      result.runs
+        .filter((run: { id: string }) => [queued.id, started.id].includes(run.id))
+        .map((run: { state: string }) => run.state)
+    ).toEqual(['cancelled', 'cancelled'])
     expect(result.can_accept).toBe(false)
     expect(
       (await runGit(ctx.project, ['worktree', 'list', '--porcelain'])).match(/^worktree /gm)

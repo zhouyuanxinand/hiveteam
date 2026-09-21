@@ -9,9 +9,9 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createGitTurnCoordinator } from '../../src/server/git-turn-coordinator.js'
 import type { GitWorkspaceService } from '../../src/server/git-workspace-service.js'
 import { createPtyOutputBus } from '../../src/server/pty-output-bus.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import type { WorkspaceStore } from '../../src/server/workspace-store-contract.js'
 import type { WorkspaceGitStatus } from '../../src/shared/git.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []

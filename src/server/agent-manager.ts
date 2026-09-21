@@ -1,12 +1,21 @@
 import { randomUUID } from 'node:crypto'
-import { spawn } from 'node-pty'
+import { type IPty, spawn } from 'node-pty'
 import { resolveSpawnCommand } from './agent-command-resolver.js'
 import { attachAgentPty, toAgentRunSnapshot } from './agent-manager-support.js'
+import { createExecutionEnvironment } from './execution-environment.js'
+import type { ManagedExecution } from './managed-execution.js'
+import { withoutManagementCredentials } from './management-environment.js'
 import { createPtyOutputBus, type PtyOutputBus } from './pty-output-bus.js'
+import { executeRemoteInput } from './remote-action-context.js'
+import { ResourceReservationError } from './resource-budget-store.js'
+import { isTerminalReplyOnly } from './terminal-input-classification.js'
+import { TerminalStateMirror } from './terminal-state-mirror.js'
 
 type RunStatus = 'starting' | 'running' | 'exited' | 'error'
 
 interface StartAgentInput {
+  afterNativeExit?: () => Promise<void>
+  execution: ManagedExecution
   agentId: string
   command: string
   args?: string[]
@@ -40,6 +49,7 @@ interface AgentRunRecord extends AgentRunSnapshot {
 }
 
 interface AgentManager {
+  getTerminalScreen: (runId: string) => Promise<string>
   getInputSequence: (runId: string) => number
   getTerminalSize: (runId: string) => { cols: number; rows: number }
   getOutputBus: () => PtyOutputBus
@@ -57,11 +67,6 @@ interface AgentManager {
 
 const createRunId = () => randomUUID()
 const WINDOWS_PTY_RELEASE_SETTLE_MS = 500
-// Focus and terminal capability replies are not edits to the composer. Any
-// other input (including mixed reply + text chunks) invalidates auto-submit.
-const TERMINAL_REPLIES =
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: recognize non-editing terminal protocol replies.
-  /^(?:\x1b\[[IO]|\x1b\[\d+;\d+R|\x1b\[[?>]?[\d;]*c|\x1b\](?:10|11);[^\x07\x1b]*(?:\x07|\x1b\\))+$/u
 const isClosedPtyResizeError = (error: unknown) =>
   /cannot resize a pty that has already exited|pty seems to have been killed already|pty is not active|already exited/i.test(
     error instanceof Error ? error.message : String(error)
@@ -73,11 +78,7 @@ const waitForWindowsPtyRelease = async () => {
 }
 
 const createSpawnEnv = (inputEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
-  const env = { ...process.env, ...inputEnv }
-  for (const key of Object.keys(env)) {
-    if (env[key] === undefined) delete env[key]
-  }
-  return env
+  return withoutManagementCredentials(createExecutionEnvironment(inputEnv))
 }
 
 export const createAgentManager = ({
@@ -86,6 +87,7 @@ export const createAgentManager = ({
   ptyOutputBus?: PtyOutputBus
 } = {}): AgentManager => {
   const runs = new Map<string, AgentRunRecord>()
+  const screens = new Map<string, TerminalStateMirror>()
   const runExitPromises = new Map<string, Promise<void>>()
   const runExitResolvers = new Map<string, () => void>()
 
@@ -103,8 +105,19 @@ export const createAgentManager = ({
       getRunRecord(runId).process.pause()
     },
     async startAgent(input) {
+      if (!input.execution)
+        throw new ResourceReservationError(
+          'A valid resource reservation is required to spawn a PTY.'
+        )
       const env = createSpawnEnv(input.env)
-      const spawnCommand = resolveSpawnCommand(input.command, input.cwd, env, input.args ?? [])
+      let spawnCommand: ReturnType<typeof resolveSpawnCommand>
+      try {
+        input.execution.assertReserved()
+        spawnCommand = resolveSpawnCommand(input.command, input.cwd, env, input.args ?? [])
+      } catch (error) {
+        input.execution.cancelBeforeSpawn()
+        throw error
+      }
 
       const runId = createRunId()
       let resolveRunExit = () => {}
@@ -136,18 +149,10 @@ export const createAgentManager = ({
         },
       }
 
-      run.onExit = (event) => {
-        try {
-          input.onExit?.(event)
-        } finally {
-          void waitForWindowsPtyRelease().then(() => {
-            runExitResolvers.delete(runId)
-            resolveRunExit()
-          })
-        }
-      }
+      if (input.onExit) run.onExit = input.onExit
 
-      runs.set(runId, run)
+      let pty: IPty | undefined
+      const stopOnAbort = () => run.process.stop()
 
       try {
         const ptyOptions = {
@@ -159,13 +164,66 @@ export const createAgentManager = ({
           // node-pty's modern ConPTY default unless explicitly overridden.
           ...(process.env.HIVE_TEST_PTY_BACKEND === 'winpty' ? { useConpty: false } : {}),
         }
-        attachAgentPty(
-          run,
-          spawn(spawnCommand.command, spawnCommand.args, ptyOptions),
-          ptyOutputBus
-        )
+        input.execution.beginSpawn()
+        runs.set(runId, run)
+        pty = spawn(spawnCommand.command, spawnCommand.args, ptyOptions)
+        const screen = new TerminalStateMirror(run.terminalSize)
+        screens.set(runId, screen)
+        pty.onData((chunk) => screen.write(chunk))
+        pty.onExit(() => {
+          screen.dispose()
+          screens.delete(runId)
+        })
+        const pid = pty.pid
+        let nativeExitObserved = false
+        pty.onExit(() => {
+          if (nativeExitObserved) return
+          nativeExitObserved = true
+          input.execution.signal?.removeEventListener('abort', stopOnAbort)
+          void (async () => {
+            try {
+              await waitForWindowsPtyRelease()
+              await input.afterNativeExit?.()
+              input.execution.confirmExit(runId, pid)
+            } catch (error) {
+              try {
+                input.execution.markUnconfirmed(
+                  'Native exit cleanup or resource release could not be completed.'
+                )
+              } catch (markError) {
+                console.error('[hive] could not persist exit recovery marker', { runId, markError })
+              }
+              console.error('[hive] cleanup or resource release failed after PTY exit', {
+                runId,
+                error,
+              })
+            } finally {
+              runExitResolvers.delete(runId)
+              resolveRunExit()
+            }
+          })()
+        })
+        attachAgentPty(run, pty, ptyOutputBus)
+        input.execution.markStarted({ runId, pid, startedAt: Date.now() })
+        input.execution.signal?.addEventListener('abort', stopOnAbort, { once: true })
+        if (input.execution.signal?.aborted) stopOnAbort()
       } catch (error) {
+        if (pty) {
+          try {
+            if (run.process.pid === null) pty.kill('SIGKILL')
+            else run.process.stop()
+          } catch (cleanupError) {
+            input.execution.markUnconfirmed(`PTY cleanup failed for run ${runId}, PID ${pty.pid}`)
+            throw new AggregateError(
+              [error, cleanupError],
+              'PTY startup failed and process exit could not be confirmed.'
+            )
+          }
+          await runExitPromise
+        } else input.execution.spawnFailed()
         runs.delete(runId)
+        screens.get(runId)?.dispose()
+        screens.delete(runId)
         runExitPromises.delete(runId)
         runExitResolvers.delete(runId)
         throw error
@@ -184,6 +242,9 @@ export const createAgentManager = ({
       try {
         run.process.resize(cols, rows)
         run.terminalSize = { cols, rows }
+        // Apply geometry before the child can emit a frame for that size.
+        // Replaying old ANSI output at the latest dimensions loses this order.
+        screens.get(runId)?.resize(cols, rows)
       } catch (error) {
         if (!isClosedPtyResizeError(error)) throw error
       }
@@ -194,9 +255,11 @@ export const createAgentManager = ({
     },
 
     writeInput(runId, text) {
-      const run = getRunRecord(runId)
-      if (!TERMINAL_REPLIES.test(text.toString())) run.inputSequence += 1
-      run.process.write(text)
+      executeRemoteInput(runId, Buffer.byteLength(text), () => {
+        const run = getRunRecord(runId)
+        if (!isTerminalReplyOnly(text.toString())) run.inputSequence += 1
+        run.process.write(text)
+      })
     },
 
     getInputSequence(runId) {
@@ -205,15 +268,22 @@ export const createAgentManager = ({
     getTerminalSize(runId) {
       return { ...getRunRecord(runId).terminalSize }
     },
+    getTerminalScreen(runId) {
+      getRunRecord(runId)
+      const screen = screens.get(runId)
+      if (!screen) throw new Error(`Terminal screen is unavailable for run: ${runId}`)
+      return screen.getScreenText()
+    },
 
     getRun(runId) {
       return toAgentRunSnapshot(getRunRecord(runId))
     },
 
     removeRun(runId) {
+      screens.get(runId)?.dispose()
+      screens.delete(runId)
       runs.delete(runId)
-      runExitPromises.delete(runId)
-      runExitResolvers.delete(runId)
+      if (!runExitResolvers.has(runId)) runExitPromises.delete(runId)
     },
 
     stopRun(runId) {

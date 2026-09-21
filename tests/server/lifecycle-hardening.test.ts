@@ -7,11 +7,11 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { type AgentManager, createAgentManager } from '../../src/server/agent-manager.js'
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
-import { createAgentRuntime } from '../../src/server/agent-runtime.js'
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { createWorkspaceStore } from '../../src/server/workspace-store.js'
+import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const sessionStore = {
@@ -64,6 +64,7 @@ const createAgentManagerWithDuplicatedOnExit = (): AgentManager => {
   const manager = createAgentManager()
 
   return {
+    ...manager,
     getRun: manager.getRun,
     getOutputBus: manager.getOutputBus,
     pauseRun: manager.pauseRun,
@@ -96,6 +97,7 @@ const createDelayedStartAgentManager = (manager = createAgentManager()) => {
   })
 
   const delayedManager: AgentManager = {
+    ...manager,
     getRun: manager.getRun,
     getOutputBus: manager.getOutputBus,
     pauseRun: manager.pauseRun,
@@ -534,7 +536,7 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     expect(closeResult).toBe('closed')
   })
 
-  test('close waits for an in-flight agent start before tearing down live runs', async () => {
+  test('close cancels an in-flight start and waits for its preparation without creating a PTY', async () => {
     const { dataDir, workspacePath } = prepareWorkspace()
     const script = join(workspacePath, 'delayed-start.js')
     writeFileSync(script, "console.log('delayed-started'); setInterval(() => {}, 1000)\n")
@@ -549,6 +551,10 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     })
 
     const startPromise = store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    const startResult = startPromise.then(
+      (run) => ({ run }),
+      (error: unknown) => ({ error })
+    )
     await waitFor(() => {
       expect(delayed.startRequested()).toBe(true)
     })
@@ -562,16 +568,27 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     const resolvedBeforeRelease = closeResolved
     delayed.releaseStart()
 
-    let runId: string | undefined
+    let result: Awaited<typeof startResult>
     try {
-      runId = (await startPromise).runId
+      result = await startResult
     } finally {
       await closePromise
     }
 
     expect(resolvedBeforeRelease).toBe(false)
-    if (!runId) throw new Error('Expected delayed start to resolve')
-    expect(() => delayed.manager.getRun(runId)).toThrow(/Run not found/)
+    expect(result).toMatchObject({ error: { code: 'execution_cancelled' } })
+    expect(store.getAgent(workspace.id, worker.id).status).toBe('stopped')
+    const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    try {
+      expect(db.prepare('SELECT * FROM agent_runs WHERE agent_id = ?').all(worker.id)).toEqual([])
+      expect(
+        db
+          .prepare('SELECT state FROM resource_reservations WHERE execution_key = ?')
+          .all(`agent:${worker.id}`)
+      ).toEqual([{ state: 'released' }])
+    } finally {
+      db.close()
+    }
   })
 
   test('close force-kills child processes that outlive the PTY leader', async () => {

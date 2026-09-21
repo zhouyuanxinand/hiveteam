@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
@@ -93,16 +93,12 @@ describe('settings api', () => {
         expect.objectContaining({
           id: 'claude',
           display_name: 'Claude Code (CC)',
-          yolo_args_template: [
-            '--dangerously-skip-permissions',
-            '--permission-mode=bypassPermissions',
-            '--disallowedTools=Task',
-          ],
+          yolo_args_template: [],
         }),
         expect.objectContaining({
           id: 'codex',
           display_name: 'Codex',
-          yolo_args_template: ['--dangerously-bypass-approvals-and-sandbox'],
+          yolo_args_template: [],
         }),
         expect.objectContaining({
           id: 'opencode',
@@ -112,7 +108,7 @@ describe('settings api', () => {
         expect.objectContaining({
           id: 'gemini',
           display_name: 'Gemini',
-          yolo_args_template: ['--yolo'],
+          yolo_args_template: [],
         }),
       ])
     )

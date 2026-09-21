@@ -16,7 +16,7 @@ import { SkillPackChangeError } from '../../src/server/skill-pack-operation-erro
 import { SkillPackResolutionError } from '../../src/server/skill-pack-source.js'
 import { defaultSkillPackSelection } from '../../src/shared/skill-pack-defaults.js'
 import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 vi.unmock('../../src/server/default-workspace-skill-pack.js')

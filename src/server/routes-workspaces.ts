@@ -8,6 +8,7 @@ import {
 import { BadRequestError } from './http-errors.js'
 import { autostartAgent } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
+import { getRequestPrincipal } from './request-principal.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type {
   CreateWorkerBody,
@@ -49,7 +50,18 @@ const getRuntimePort = (request: IncomingMessage) => String(request.socket.local
 export const workspaceRoutes: RouteDefinition[] = [
   route('GET', '/api/workspaces', ({ request, response, store }) => {
     requireUiTokenFromRequest(request, store.validateUiToken)
-    sendJson(response, 200, store.listWorkspaces())
+    const principal = getRequestPrincipal(request)
+    sendJson(
+      response,
+      200,
+      store
+        .listWorkspaces()
+        .filter(
+          (workspace) =>
+            principal?.kind !== 'remote_device' ||
+            store.remote.permissions.canRead(principal.deviceId, workspace.id)
+        )
+    )
   }),
   route(
     'GET',
@@ -157,6 +169,12 @@ export const workspaceRoutes: RouteDefinition[] = [
       .filter((id) => id.length > 0)
     const workersByWorkspaceId: Record<string, ReturnType<typeof serializeTeamListItem>[]> = {}
     for (const workspaceId of workspaceIds) {
+      const principal = getRequestPrincipal(request)
+      if (
+        principal?.kind === 'remote_device' &&
+        !store.remote.permissions.canRead(principal.deviceId, workspaceId)
+      )
+        continue
       try {
         workersByWorkspaceId[workspaceId] = enrichTeamList(
           workspaceId,
@@ -185,6 +203,7 @@ export const workspaceRoutes: RouteDefinition[] = [
     const agentId = request.headers['x-hive-agent-id']
     const token = request.headers['x-hive-agent-token']
     const agent = authenticateCliAgent({
+      request,
       fromAgentId: typeof agentId === 'string' ? agentId : undefined,
       getAgent: store.getAgent,
       token: typeof token === 'string' ? token : undefined,

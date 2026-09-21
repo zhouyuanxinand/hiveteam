@@ -14,9 +14,8 @@ import { dirname, join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import type { InternalSkillChangeOperation } from '../../src/server/skill-pack-change-types.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []

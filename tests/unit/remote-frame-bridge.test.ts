@@ -52,6 +52,7 @@ const createHttpBridgeHarness = () => {
     deviceSessions: sessions,
     audit,
     daemonId: 'daemon-1',
+    inputEpoch: () => 'test-grant-epoch',
     generateConnSalt: () => fixedSalt(4),
     loopbackTransports: {
       openHttp: (args, handlers) => {

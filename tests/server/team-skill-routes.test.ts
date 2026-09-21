@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { createRecordingAgentManager } from '../helpers/recording-agent-manager.js'
 import { listenOnFetchSafePort } from '../helpers/test-server.js'
 

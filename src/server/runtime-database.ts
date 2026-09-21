@@ -13,11 +13,18 @@ export const openRuntimeDatabase = (dataDir?: string): Database => {
     // WAL lets the 500ms UI polls read without queueing behind dispatch writes,
     // and NORMAL sync trades an fsync per commit for one per checkpoint. Both
     // settings live in the database file header, so they survive restarts.
-    database.pragma('journal_mode = WAL')
-    database.pragma('synchronous = NORMAL')
   } else {
     database = new BetterSqlite3(':memory:')
   }
-  initializeRuntimeDatabase(database)
-  return database
+  try {
+    if (dataDir) {
+      database.pragma('journal_mode = WAL')
+      database.pragma('synchronous = NORMAL')
+    }
+    initializeRuntimeDatabase(database)
+    return database
+  } catch (error) {
+    database.close()
+    throw error
+  }
 }

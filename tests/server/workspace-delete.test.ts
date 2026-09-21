@@ -5,7 +5,7 @@ import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 
 import { getOrchestratorId } from '../../src/server/workspace-store-support.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const waitFor = async (
@@ -108,7 +108,7 @@ describe('workspace delete API', () => {
       )
       server.store.recordUserInput(workspace.id, orchestratorId, 'delete me')
       await server.store.dispatchTask(workspace.id, worker.id, 'queued work')
-      server.store.settings.setAppState('active_workspace_id', workspace.id)
+      server.store.settings.publicAppState.set('active_workspace_id', workspace.id)
 
       const db = new Database(join(server.dataDir, 'runtime.sqlite'))
       db.prepare(

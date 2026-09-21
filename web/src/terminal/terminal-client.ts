@@ -1,9 +1,15 @@
 import type {
+  RemoteAction,
+  RemoteTerminalPermissions,
+} from '../../../src/shared/remote-permissions.js'
+import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
 } from '../../../src/shared/terminal-recovery.js'
+import { isRemoteMode } from '../remote/remote-permissions-api.js'
 
 type TerminalControlServerMessage =
+  | RemoteTerminalPermissions
   | { type: 'error'; message: string }
   | { type: 'exit'; code: number | null }
   | { type: 'restore'; snapshot: string }
@@ -29,6 +35,7 @@ interface TerminalClientOptions {
   onRestore: (snapshot: string) => void | Promise<void>
   onRecovery?: (recovery: TerminalSessionRecovery | null) => void
   onConnectionChange?: (status: TerminalConnectionStatus) => void
+  onInputPermissionChange?: (allowed: boolean) => void
   runId: string
 }
 
@@ -57,10 +64,11 @@ export const createTerminalClient = ({
   onRestore,
   onRecovery,
   onConnectionChange,
+  onInputPermissionChange,
   runId,
 }: TerminalClientOptions): TerminalClient => {
   const clientId = crypto.randomUUID()
-  const connectionParams = { ...initialSize, clientId }
+  const connectionParams = { ...initialSize, clientId, snapshot: 1 }
   const ioSocket = new WebSocket(toWebSocketUrl(`/ws/terminal/${runId}/io`, connectionParams))
   const controlSocket = new WebSocket(
     toWebSocketUrl(`/ws/terminal/${runId}/control`, connectionParams)
@@ -69,6 +77,19 @@ export const createTerminalClient = ({
   let restored = false
   let restoring = false
   let exited = false
+  const remote = isRemoteMode()
+  let remoteActions: RemoteAction[] = []
+  let permissionDeadline = 0
+  let permissionTimer: ReturnType<typeof setTimeout> | undefined
+  const permits = (action: RemoteAction) =>
+    !remote || (performance.now() < permissionDeadline && remoteActions.includes(action))
+  const clearPermissions = () => {
+    if (permissionTimer) clearTimeout(permissionTimer)
+    remoteActions = []
+    permissionDeadline = 0
+    onInputPermissionChange?.(!remote)
+  }
+  onInputPermissionChange?.(!remote)
   let pendingRetry:
     | {
         requestId: string
@@ -95,11 +116,15 @@ export const createTerminalClient = ({
           ? 'connected'
           : 'connecting'
     )
-    if (disconnected) rejectRetry('Terminal connection closed. Reconnect and retry.')
+    if (disconnected) {
+      clearPermissions()
+      rejectRetry('Terminal connection closed. Reconnect and retry.')
+    }
   }
   const connectionFailed = () => {
     if (disposed || exited) return
     onConnectionChange?.('disconnected')
+    clearPermissions()
     rejectRetry('Terminal connection failed. Reconnect and retry.')
   }
   ioSocket.onopen = updateConnection
@@ -108,6 +133,7 @@ export const createTerminalClient = ({
   ioSocket.onerror = connectionFailed
   controlSocket.onerror = connectionFailed
   const pendingOutput: Array<{ chunk: string; acknowledge: (bytes: number) => void }> = []
+  let pendingBytes = 0
   let pendingResize: {
     cols: number
     rows: number
@@ -117,6 +143,7 @@ export const createTerminalClient = ({
 
   const sendResize = () => {
     if (!pendingResize || controlSocket.readyState !== controlSocket.OPEN) return
+    if (!permits('terminal_resize')) return
     controlSocket.send(JSON.stringify({ type: 'resize', ...pendingResize }))
     pendingResize = null
   }
@@ -128,6 +155,16 @@ export const createTerminalClient = ({
       controlSocket.send(JSON.stringify({ type: 'output_ack', bytes }))
     }
     if (!restored) {
+      pendingBytes += new TextEncoder().encode(chunk).length
+      if (pendingBytes > 512 * 1024) {
+        pendingOutput.length = 0
+        onError(
+          'Terminal restore buffer exceeded. Reconnect to the current snapshot; continuous history may be missing.'
+        )
+        ioSocket.close()
+        controlSocket.close()
+        return
+      }
       pendingOutput.push({ chunk, acknowledge })
       return
     }
@@ -148,10 +185,20 @@ export const createTerminalClient = ({
     for (const output of pendingOutput.splice(0)) {
       onOutput(output.chunk, output.acknowledge)
     }
+    pendingBytes = 0
   }
 
   controlSocket.onmessage = (event) => {
     const message = JSON.parse(String(event.data)) as TerminalControlServerMessage
+    if (message.type === 'permissions') {
+      clearPermissions()
+      remoteActions = message.actions
+      permissionDeadline = performance.now() + Math.max(0, message.remaining_ms)
+      onInputPermissionChange?.(permits('terminal_input'))
+      if (message.remaining_ms > 0)
+        permissionTimer = setTimeout(clearPermissions, message.remaining_ms)
+      sendResize()
+    }
     if (message.type === 'exit') {
       exited = true
       rejectRetry('The terminal has stopped.')
@@ -194,6 +241,7 @@ export const createTerminalClient = ({
   return {
     dispose() {
       disposed = true
+      if (permissionTimer) clearTimeout(permissionTimer)
       rejectRetry('Terminal disconnected.')
       ioSocket.close()
       controlSocket.close()
@@ -205,6 +253,10 @@ export const createTerminalClient = ({
       sendResize()
     },
     sendBinaryInput(chunk) {
+      if (!permits('terminal_input')) {
+        onError('Read-only terminal. Request temporary input access from the local computer.')
+        return
+      }
       if (ioSocket.readyState !== ioSocket.OPEN) return
       const bytes = new Uint8Array(chunk.length)
       for (let index = 0; index < chunk.length; index++) {
@@ -213,10 +265,16 @@ export const createTerminalClient = ({
       ioSocket.send(bytes)
     },
     sendInput(chunk) {
+      if (!permits('terminal_input')) {
+        onError('Read-only terminal. Request temporary input access from the local computer.')
+        return
+      }
       if (ioSocket.readyState !== ioSocket.OPEN) return
       ioSocket.send(chunk)
     },
     retrySession() {
+      if (!permits('session_retry'))
+        return Promise.reject(new Error('Session retry requires local approval.'))
       if (pendingRetry) return Promise.resolve('retry_pending')
       if (
         disposed ||

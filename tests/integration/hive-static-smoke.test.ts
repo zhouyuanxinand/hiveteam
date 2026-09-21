@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { requestUiBootstrap } from '../../scripts/ui-launcher.mjs'
+
 const tempDirs: string[] = []
 
 afterEach(async () => {
@@ -48,10 +50,10 @@ describe('hive static smoke', () => {
     const { execFile, spawn } = await import('node:child_process')
     const processHandle = spawn(process.execPath, ['--import', 'tsx', modulePath, '--port', '0'], {
       env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     let stdout = ''
-    processHandle.stdout.on('data', (chunk) => {
+    processHandle.stdout?.on('data', (chunk) => {
       stdout += chunk.toString()
     })
 
@@ -77,6 +79,10 @@ describe('hive static smoke', () => {
 
       const sessionResponse = await curl([
         '-i',
+        '-H',
+        'content-type: application/json',
+        '-d',
+        JSON.stringify({ bootstrap_token: await requestUiBootstrap(processHandle) }),
         '-c',
         cookieJar,
         `http://127.0.0.1:${port}/api/ui/session`,

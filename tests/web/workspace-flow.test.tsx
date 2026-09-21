@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { seedOrchestratorLaunchConfig } from '../../src/server/orchestrator-launch.js'
 import { App } from '../../web/src/app.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 let cleanupServer: (() => Promise<void>) | undefined
 let serverContext: Awaited<ReturnType<typeof startTestServer>> | undefined
@@ -41,7 +41,11 @@ beforeEach(async () => {
   }).id
   cleanupServer = server.close
   let cookie = ''
-  await nativeFetch(`${server.baseUrl}/api/ui/session`).then((response) => {
+  await nativeFetch(`${server.baseUrl}/api/ui/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
+  }).then((response) => {
     cookie = response.headers.get('set-cookie') ?? ''
   })
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
@@ -190,6 +194,11 @@ describe('workspace flow with real server', () => {
     })
     fireEvent.click(within(confirm).getByTestId('workspace-command-preset'))
     fireEvent.click(within(confirm).getByTestId(`workspace-command-preset-option-${dummyPresetId}`))
+    fireEvent.click(
+      within(confirm).getByRole('checkbox', {
+        name: 'Try starting the Orchestrator after creation',
+      })
+    )
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
 
     await waitFor(

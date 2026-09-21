@@ -2,7 +2,7 @@ import '../helpers/mock-node-pty.ts'
 
 import { describe, expect, test } from 'vitest'
 
-import { createAgentManager } from '../../src/server/agent-manager.js'
+import { createBudgetedTestAgentManager as createAgentManager } from '../helpers/budgeted-agent-manager.js'
 
 describe('agent manager output buffer (unit)', () => {
   test('caps output at 1MB while collecting PTY data', async () => {

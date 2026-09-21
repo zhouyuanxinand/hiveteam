@@ -14,6 +14,8 @@ interface StartAgentOptions {
 
 export interface AgentRuntime {
   close: () => Promise<void>
+  cancelPendingStart: (workspaceId: string, agentId: string) => boolean
+  cancelAllPendingStarts: () => void
   configureAgentLaunch: (
     workspaceId: string,
     agentId: string,
@@ -77,8 +79,9 @@ export interface AgentRuntime {
     workerDescription: string,
     text: string,
     language?: WorkspaceLanguage,
-    skillActivation?: ResolvedSkillActivation
-  ) => void
+    skillActivation?: ResolvedSkillActivation,
+    deliveryOptions?: SystemMessageDeliveryOptions
+  ) => Promise<void>
   writeCancelPrompt: (
     workspaceId: string,
     workerId: string,

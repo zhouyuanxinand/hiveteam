@@ -136,6 +136,13 @@ export const buildAgentStartupInstructions = ({
     )
     lines.push(...formatSkillCatalog(skillCatalog ?? [], english))
   } else {
+    if (agent.role === 'coder')
+      lines.push(
+        english
+          ? 'For an isolated worker branch, use `team git commit --expected-head <current-head-sha> "<message>"` to commit through Hive. A rejected expected HEAD requires inspecting the current branch before retrying.'
+          : '独立工位提交使用 `team git commit --expected-head <当前HEAD的SHA> "<提交说明>"`；由 Hive 校验自己的分支。HEAD 不匹配时先检查当前分支，再决定是否重试。',
+        ''
+      )
     lines.push(
       english ? 'Available team commands:' : '可用 team 命令：',
       english
@@ -151,11 +158,17 @@ export const buildAgentStartupInstructions = ({
         ? '- team report --stdin [--dispatch <id>] [--artifact <path>]         same, read a multi-line body from stdin'
         : '- team report --stdin [--dispatch <id>] [--artifact <path>]         同上，从 stdin 读正文（适合多行/含引号/特殊字符）',
       english
-        ? '- team status "<current state>" [--artifact <path>]                  progress/readiness/status update'
-        : '- team status "<当前状态>" [--artifact <path>]                       中段进度/待命/接入状态',
+        ? '- team status "<current state>" [--dispatch <id>] [--progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]'
+        : '- team status "<当前状态>" [--dispatch <id>] [--progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]',
+      english
+        ? '- Acknowledge task receipt with --progress accepted; send task-scoped progress or waiting states as work changes. Use --progress cancelled only after that task has actually stopped. `team deliveries` shows delivery evidence and health.'
+        : '- 用 --progress accepted 确认接到任务，随后按任务发送进展或等待状态；只有该任务实际停止后才用 --progress cancelled。`team deliveries` 可查看交付证据与健康状态。',
       english
         ? '- team status --stdin [--artifact <path>]                            same, read the body from stdin'
         : '- team status --stdin [--artifact <path>]                          同上，从 stdin 读正文',
+      english
+        ? '- Reviewer: team review context --dispatch <source-dispatch-id> reads a version-bound diff. Use team review file/submit (see team help) with that exact version object. Review submission does not accept reports, integrate code, or finish your own assigned dispatch; use team report separately. Reviewer evidence requires an enforced read-only run; acceptance is a separate desktop action.'
+        : '- Reviewer：team review context --dispatch <被审查的派单 ID> 获取绑定版本的差异；team review file/submit（见 team help）必须携带原 version 对象。审查意见不代表接受报告、集成代码或完成自己的派单；仍需单独 team report。审查证据要求已强制只读的运行，接受由本机用户另行操作。',
       english
         ? '- team list                                                        list workspace workers and status'
         : '- team list                                                        查看 workspace 内的 worker（含状态）',

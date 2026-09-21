@@ -25,21 +25,23 @@ export const serializeWorkspaceMemoryDreamEnabled = (enabled: boolean) =>
   enabled ? 'true' : 'false'
 
 export const isWorkspaceMemoryEnabled = (settings: SettingsStore, workspaceId: string) =>
-  readWorkspaceMemoryEnabled(settings.getAppState(workspaceMemoryEnabledKey(workspaceId))?.value)
+  readWorkspaceMemoryEnabled(
+    settings.internalAppState.get(workspaceMemoryEnabledKey(workspaceId))?.value
+  )
 
 export const setWorkspaceMemoryEnabled = (
   settings: SettingsStore,
   workspaceId: string,
   enabled: boolean
 ) =>
-  settings.setAppState(
+  settings.internalAppState.set(
     workspaceMemoryEnabledKey(workspaceId),
     serializeWorkspaceMemoryEnabled(enabled)
   )
 
 export const isWorkspaceMemoryDreamEnabled = (settings: SettingsStore, workspaceId: string) =>
   readWorkspaceMemoryDreamEnabled(
-    settings.getAppState(workspaceMemoryDreamEnabledKey(workspaceId))?.value
+    settings.internalAppState.get(workspaceMemoryDreamEnabledKey(workspaceId))?.value
   )
 
 export const setWorkspaceMemoryDreamEnabled = (
@@ -47,7 +49,7 @@ export const setWorkspaceMemoryDreamEnabled = (
   workspaceId: string,
   enabled: boolean
 ) =>
-  settings.setAppState(
+  settings.internalAppState.set(
     workspaceMemoryDreamEnabledKey(workspaceId),
     serializeWorkspaceMemoryDreamEnabled(enabled)
   )
@@ -57,7 +59,7 @@ export const readWorkspaceMemoryDreamLastScheduledAt = (
   workspaceId: string
 ) => {
   const value = Number(
-    settings.getAppState(workspaceMemoryDreamLastScheduledAtKey(workspaceId))?.value ?? ''
+    settings.internalAppState.get(workspaceMemoryDreamLastScheduledAtKey(workspaceId))?.value ?? ''
   )
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null
 }
@@ -67,7 +69,7 @@ export const setWorkspaceMemoryDreamLastScheduledAt = (
   workspaceId: string,
   timestamp: number
 ) =>
-  settings.setAppState(
+  settings.internalAppState.set(
     workspaceMemoryDreamLastScheduledAtKey(workspaceId),
     String(Math.max(0, Math.floor(timestamp)))
   )

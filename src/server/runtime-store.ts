@@ -11,6 +11,10 @@ import { createAgentConversationReader } from './agent-conversation-reader.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import { type CliReadinessRuntime, createCliReadiness } from './cli-readiness.js'
+import { type CodeReviewRuntime, createCodeReviewRuntime } from './code-review-runtime.js'
+import { createDataBackup } from './data-backup.js'
+import { createDataRetention, type DataRetention } from './data-retention.js'
 import { createDeliveryQueueStore, type DeliveryQueueStore } from './delivery-queue-store.js'
 import {
   createDispatchIntegrationRuntime,
@@ -20,21 +24,29 @@ import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-st
 import type { GitWorkspaceService } from './git-workspace-service.js'
 import type { GitHubClient } from './github-pull-requests.js'
 import { ConflictError, ForbiddenError, HttpError } from './http-errors.js'
+import {
+  createIntegrationCandidateRuntime,
+  type IntegrationCandidateRuntime,
+} from './integration-candidate-runtime.js'
 import type { RecoveryMessage } from './message-log-store.js'
+import { createNativeSessionControl, type NativeSessionControl } from './native-session-control.js'
 import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 import { createPullRequestRuntime, type PullRequestRuntime } from './pull-request-runtime.js'
+import { createRecoveryIndex, type RecoveryIndex } from './recovery-index.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import type { RemoteConfigSource } from './remote-config-keys.js'
 import type { DeviceSessionProvider } from './remote-device-session.js'
 import type { RemoteDeviceStore } from './remote-device-store.js'
 import type { RemotePairing } from './remote-pairing.js'
+import type { RemotePermissionStore } from './remote-permission-store.js'
 import type { RemoteTunnel } from './remote-tunnel.js'
 import { createRuntimeStoreExternalGoalMethods } from './runtime-store-external-goals.js'
 import {
   type AutoResumeResult,
   createRuntimeStoreLifecycle,
   createRuntimeStoreServices,
+  type RuntimeStoreServices,
 } from './runtime-store-helpers.js'
 import { getCodexHome } from './session-capture-codex.js'
 import type { SettingsStore } from './settings-store.js'
@@ -61,7 +73,13 @@ import type { TerminalRunSummary } from './terminal-input-profile.js'
 import { createVerificationRuntime, type VerificationRuntime } from './verification-runtime.js'
 import { createWorkerBranchRuntime, type WorkerBranchRuntime } from './worker-branch-runtime.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
+import { createWorkflowEvidenceReader } from './workflow-evidence.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
+import {
+  createWorkspaceDeliveryQuery,
+  type WorkspaceDeliveryQuery,
+} from './workspace-delivery-query.js'
+import { createWorkspaceOnboarding, type WorkspaceOnboarding } from './workspace-onboarding.js'
 import { createWorkspaceReview, type WorkspaceReview } from './workspace-review.js'
 import {
   createWorkspaceSkillManager,
@@ -82,13 +100,27 @@ export interface LocalRetentionDiagnostics {
 }
 
 interface RuntimeStore {
+  cliReadiness: CliReadinessRuntime
+  onboarding: WorkspaceOnboarding
+  deliveryHistory: WorkspaceDeliveryQuery
+  recoveryIndex: RecoveryIndex
+  dataRetention: DataRetention
+  createBackup: (output: string, nativeIds?: string[]) => ReturnType<typeof createDataBackup>
+  nativeSessions: NativeSessionControl
+  dispatchDelivery: import('./team-delivery-runtime.js').TeamDeliveryRuntime
+  resources: RuntimeStoreServices['resources']
+  resourceQueue: RuntimeStoreServices['resourceQueue']
+  cancelPendingAgentStart: (workspaceId: string, agentId: string) => void
   readAgentConversation: (
     workspaceId: string,
     agentId: string
   ) => Promise<import('../shared/agent-conversation.js').AgentConversation>
   verifications: VerificationRuntime
+  codeReviews: CodeReviewRuntime
+  executionPolicies: RuntimeStoreServices['executionPolicies']
   worktrees: WorkerWorktreeRuntime
   integrations: DispatchIntegrationRuntime
+  candidates: IntegrationCandidateRuntime
   pullRequests: PullRequestRuntime
   deliveryQueue: DeliveryQueueStore
   branches: WorkerBranchRuntime
@@ -101,6 +133,11 @@ interface RuntimeStore {
   deleteWorkspace: (workspaceId: string) => Promise<void>
   listWorkspaces: () => WorkspaceSummary[]
   addWorker: (workspaceId: string, input: WorkerInput) => AgentSummary
+  addWorkers: (
+    workspaceId: string,
+    inputs: WorkerInput[],
+    launchConfig?: AgentLaunchConfigInput
+  ) => AgentSummary[]
   deleteWorker: (workspaceId: string, workerId: string) => void
   renameWorker: (workspaceId: string, workerId: string, name: string) => AgentSummary
   setWorkerAvatar: (workspaceId: string, workerId: string, avatar: string | null) => AgentSummary
@@ -200,6 +237,7 @@ interface RuntimeStore {
   startExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['startExternalGoal']
   waitExternalGoal: ReturnType<typeof createRuntimeStoreExternalGoalMethods>['waitExternalGoal']
   remote: {
+    permissions: RemotePermissionStore
     audit: RemoteAuditStore
     config: RemoteConfigSource
     devices: RemoteDeviceStore
@@ -211,6 +249,8 @@ interface RuntimeStore {
   writeRunInput: (runId: string, input: Buffer | string) => void
   getSupervisorToken: () => string
   getUiToken: () => string
+  createUiBootstrap: () => string
+  exchangeUiBootstrap: (token: string) => string
   getRemoteTunnelSecret: () => string
   stopAgentRun: (runId: string) => void
   validateRemoteTunnelSecret: (secret: string | undefined) => boolean
@@ -259,6 +299,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const verifications = createVerificationRuntime({
     db: services.db,
     dataDir: services.dataDir,
+    resources: services.resources,
+    resourceQueue: services.resourceQueue,
     getWorkspacePath: getDispatchWorkspacePath,
     isIsolated: (workspaceId, dispatchId) => {
       const dispatch = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
@@ -270,7 +312,29 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     onAccepted: (id, dispatch) => {
       services.workflowRuntime.recordDispatchReport(id, dispatch)
     },
+    onChanged: services.workflowRuntime.evidenceChanged,
   })
+  const codeReviews = createCodeReviewRuntime({
+    db: services.db,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
+    source: (workspaceId, dispatch) => {
+      const tree = services.worktrees.get(workspaceId, dispatch.toAgentId)
+      return {
+        sourcePath: getDispatchWorkspacePath(workspaceId, dispatch.id),
+        targetPath: services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path,
+        ...(tree ? { targetBranch: tree.targetBranch } : {}),
+      }
+    },
+    assertReviewer: services.executionPolicies.assertReadOnlyReviewer,
+    onChanged: services.workflowRuntime.evidenceChanged,
+    withOperation: (workspaceId, operation) =>
+      services.worktrees.exclusive(workspaceId, () =>
+        services.git.withWorkspaceOperation(workspaceId, operation)
+      ),
+  })
+  services.workflowRuntime.setEvidenceReader(
+    createWorkflowEvidenceReader(codeReviews, verifications)
+  )
   const integrations = createDispatchIntegrationRuntime({
     db: services.db,
     worktrees: services.worktrees,
@@ -278,6 +342,19 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     agentRuntime: services.agentRuntime,
     git: services.git,
     verifications,
+    getDispatch: services.dispatchLedgerStore.getDispatchById,
+  })
+  const candidates = createIntegrationCandidateRuntime({
+    db: services.db,
+    dataDir: services.dataDir,
+    resources: services.resources,
+    resourceQueue: services.resourceQueue,
+    reviews: codeReviews,
+    verifications,
+    worktrees: services.worktrees,
+    workspaceStore: services.workspaceStore,
+    agentRuntime: services.agentRuntime,
+    git: services.git,
     getDispatch: services.dispatchLedgerStore.getDispatchById,
   })
   const pullRequests = createPullRequestRuntime({
@@ -387,9 +464,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
             .getWorkspaceSnapshot(workspace.id)
             .agents.find((candidate) => candidate.id === liveRun.agentId)
           if (!agent) continue
-          if (agent.role !== 'orchestrator') {
-            services.workspaceStore.markAgentManuallyStopped(workspace.id, agent.id)
-          }
+          services.workspaceStore.markAgentManuallyStopped(workspace.id, agent.id)
+          services.resourceQueue.cancelAgent(workspace.id, agent.id)
+          services.agentRuntime.cancelPendingStart(workspace.id, agent.id)
           break
         }
       }
@@ -402,6 +479,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const close = () => {
     if (closePromise) return closePromise
     closePromise = (async () => {
+      services.agentRuntime.cancelAllPendingStarts()
+      const closeWorkflows = services.workflowRuntime.close()
+      const closeResourceQueue = services.resourceQueue.close()
       review.close()
       // Stop new dispatches immediately and drain any task that already began.
       // A dispatch captures its Git baseline asynchronously; closing SQLite
@@ -418,6 +498,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         await Promise.all(Array.from(pendingGitScans))
       }
       await closeTeamOperations
+      await closeWorkflows
+      await closeResourceQueue
       await closeVerifications
       await closeWorktrees
       await memoryDreamScheduler?.close()
@@ -557,7 +639,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   const reportTask = (workspaceId: string, workerId: string, input?: ReportTaskInput) => {
     services.worktrees.assertIdle(workspaceId)
     const result = services.teamOps.reportTask(workspaceId, workerId, input)
-    if (result.dispatch) {
+    if (result.dispatch && !result.duplicate) {
       try {
         services.memoryDreamStore.recordWorkerReview(
           workspaceId,
@@ -577,11 +659,53 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   }
   let remoteTunnel: RemoteTunnel | null = null
   return {
+    cliReadiness: createCliReadiness({
+      policies: services.executionPolicies,
+      resources: services.resources,
+      dataDir: services.dataDir,
+      getConfig: services.agentRuntime.peekAgentLaunchConfig,
+      getCwd: (workspaceId, agentId) => {
+        if (!services.workspaceStore.hasAgent(workspaceId, agentId))
+          throw new HttpError(404, 'Member not found in this workspace')
+        return (
+          services.worktrees.get(workspaceId, agentId)?.checkoutPath ??
+          services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path
+        )
+      },
+    }),
+    nativeSessions: createNativeSessionControl({
+      sessions: services.agentSessionStore.native,
+      policies: services.executionPolicies,
+      resources: services.resources,
+      getConfig: services.agentRuntime.peekAgentLaunchConfig,
+      getCwd: (workspaceId, agentId) => {
+        if (
+          !services.workspaceStore.listWorkspaces().some((item) => item.id === workspaceId) ||
+          !services.workspaceStore.hasAgent(workspaceId, agentId)
+        )
+          throw new HttpError(404, 'Member not found in this workspace')
+        return (
+          services.worktrees.get(workspaceId, agentId)?.checkoutPath ??
+          services.workspaceStore.getWorkspaceSnapshot(workspaceId).summary.path
+        )
+      },
+    }),
+    dispatchDelivery: services.dispatchDelivery,
+    executionPolicies: services.executionPolicies,
+    resources: services.resources,
+    resourceQueue: services.resourceQueue,
+    cancelPendingAgentStart(workspaceId, agentId) {
+      services.workspaceStore.markAgentManuallyStopped(workspaceId, agentId)
+      services.resourceQueue.cancelAgent(workspaceId, agentId)
+      services.agentRuntime.cancelPendingStart(workspaceId, agentId)
+    },
     close,
     review,
+    codeReviews,
     verifications,
     worktrees: services.worktrees,
     integrations,
+    candidates,
     pullRequests,
     deliveryQueue,
     branches,
@@ -630,8 +754,16 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       services.worktrees.exclusive(workspaceId, async () => {
         const workspace = services.workspaceStore.getWorkspaceSnapshot(workspaceId)
         await verifications.deleteWorkspace(workspaceId)
+        for (const entry of services.resourceQueue.list(workspaceId))
+          if (
+            entry.source === 'integration_candidate' &&
+            (entry.status === 'queued' || entry.status === 'starting')
+          )
+            services.resourceQueue.cancel(entry.id)
         await lifecycle.deleteWorkspaceShell(workspaceId)
         for (const agent of workspace.agents) {
+          services.resourceQueue.cancelAgent(workspaceId, agent.id)
+          services.agentRuntime.cancelPendingStart(workspaceId, agent.id)
           const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, agent.id)
           if (activeRun) {
             services.agentRuntime.stopAgentRun(activeRun.runId)
@@ -652,16 +784,24 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
           services.skillSnapshotStore.deleteWorkspace(workspaceId)
           services.workspaceStore.deleteWorkspace(workspaceId)
         })
-        if (services.settings.getAppState('active_workspace_id')?.value === workspaceId) {
-          services.settings.setAppState('active_workspace_id', null)
+        if (services.settings.publicAppState.get('active_workspace_id')?.value === workspaceId) {
+          services.settings.publicAppState.set('active_workspace_id', null)
         }
       }),
     addWorker: (workspaceId, input) => services.workspaceStore.addWorker(workspaceId, input),
+    addWorkers: (workspaceId, inputs, launchConfig) =>
+      services.workspaceStore.addWorkers(workspaceId, inputs, (workers) => {
+        if (launchConfig)
+          for (const worker of workers)
+            services.agentRunStore.saveLaunchConfig(workspaceId, worker.id, launchConfig)
+      }),
     renameWorker: (workspaceId, workerId, name) =>
       services.workspaceStore.renameWorker(workspaceId, workerId, name),
     setWorkerAvatar: (workspaceId, workerId, avatar) =>
       services.workspaceStore.setWorkerAvatar(workspaceId, workerId, avatar),
     deleteWorker: (workspaceId, workerId) => {
+      services.resourceQueue.cancelAgent(workspaceId, workerId)
+      services.agentRuntime.cancelPendingStart(workspaceId, workerId)
       services.worktrees.assertCanChangeWorkers(workspaceId)
       verifications.assertWorkerIdle(workspaceId, workerId)
       const activeRun = services.agentRuntime.getActiveRunByAgentId(workspaceId, workerId)
@@ -684,6 +824,14 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     dispatchTaskByWorkerName: services.teamOps.dispatchTaskByWorkerName,
     reportTask,
     statusTask: services.teamOps.statusTask,
+    deliveryHistory: createWorkspaceDeliveryQuery(services.db, services.dispatchLedgerStore),
+    recoveryIndex: createRecoveryIndex(services.db, services.tasksFileService.readTasks),
+    dataRetention: createDataRetention(services.db),
+    createBackup: (output, nativeIds) => {
+      if (!services.dataDir) throw new ConflictError('Backups require a persistent data directory')
+      return createDataBackup(services.db, services.dataDir, output, nativeIds)
+    },
+    onboarding: createWorkspaceOnboarding(services.db),
     listDispatches: services.dispatchLedgerStore.listWorkspaceDispatches,
     getDispatch: services.dispatchLedgerStore.getDispatchById,
     acceptDispatchReport: (workspaceId, dispatchId, reportRevision) => {
@@ -698,6 +846,11 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     sendDispatchFeedback: (workspaceId, dispatchId, text) => {
       services.worktrees.assertIdle(workspaceId)
       const previous = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+      if (
+        previous?.status === 'reported' &&
+        services.workflowRuntime.rerunForDispatch(workspaceId, dispatchId, text)
+      )
+        return previous
       try {
         return services.teamOps.sendDispatchFeedback(workspaceId, dispatchId, text)
       } finally {
@@ -708,9 +861,6 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       }
     },
     listWorkers: (workspaceId) => {
-      // `team list` is the Orchestrator's normal first call after a restart.
-      // Use it as the durable report replay trigger.
-      services.teamOps.drainReportOutbox(workspaceId)
       // A single GROUP BY replaces hydrating every dispatch row on this
       // twice-a-second UI poll path.
       const pendingByWorker = services.dispatchLedgerStore.countPendingByWorker(workspaceId)
@@ -777,6 +927,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     workflows: services.workflowRuntime,
     ...externalGoals,
     remote: {
+      permissions: services.remotePermissions,
       audit: services.remoteAudit,
       config: services.remoteConfig,
       devices: services.remoteDevices,
@@ -792,13 +943,14 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     writeRunInput: lifecycle.writeRunInput,
     getSupervisorToken: () => services.uiAuth.getSupervisorToken(),
     getUiToken: () => services.uiAuth.getToken(),
+    createUiBootstrap: () => services.uiAuth.createBootstrap(),
+    exchangeUiBootstrap: (token) => services.uiAuth.exchangeBootstrap(token),
     getRemoteTunnelSecret: () => services.uiAuth.getRemoteTunnelSecret(),
     stopAgentRun: stopTerminalRun,
     validateRemoteTunnelSecret: (secret) => services.uiAuth.validateRemoteTunnelSecret(secret),
     validateAgentToken: (agentId, token) =>
       services.agentRuntime.validateAgentToken(agentId, token),
     validateSupervisorToken: (token) => services.uiAuth.validateSupervisorToken(token),
-    validateUiToken: (token) =>
-      services.uiAuth.validate(token) || services.uiAuth.validateRemoteTunnelSecret(token),
+    validateUiToken: (token) => services.uiAuth.validate(token),
   }
 }

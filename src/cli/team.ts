@@ -8,6 +8,8 @@ import {
 } from '../server/hive-team-guidance.js'
 import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
 import { fetchLocalRuntime, type LocalHttpResponse } from './local-http.js'
+import { CODE_REVIEW_USAGE, parseCodeReviewArgs } from './team-code-review.js'
+import { fetchTeamMailbox } from './team-mailbox-client.js'
 
 const REQUIRED_ENV_KEYS = [
   'HIVE_PORT',
@@ -28,6 +30,12 @@ interface HiveEnv {
 const TEAM_USAGE = [
   'Usage:',
   '  team list',
+  '  team deliveries',
+  '  team tasks read',
+  '  team recovery [--cursor <cursor>]',
+  '  team tasks write --expected-version <version> --stdin',
+  ...CODE_REVIEW_USAGE.split('\n').map((line) => `  ${line}`),
+  '  team git commit --expected-head <sha> "<message>"',
   `  team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`,
   '  team send "<worker-name>" "<task>" [--skill <pack/skill>]',
   '  team skill list',
@@ -38,7 +46,7 @@ const TEAM_USAGE = [
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed --stdin',
   '  team report "<result>" [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
   '  team report --stdin [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
-  '  team status "<current status>" [--artifact <path>]',
+  '  team status "<current status>" [--dispatch <id> --progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]',
   '  team status --stdin [--artifact <path>]',
   '',
   'Flags can appear in any order. Use --stdin to pipe long bodies and avoid shell-escaping issues.',
@@ -79,6 +87,8 @@ const fetchRuntime = async (
   init: { body?: string; headers?: Record<string, string>; method?: string }
 ) => {
   try {
+    if (process.env.HIVE_TEAM_MAILBOX)
+      return await fetchTeamMailbox(process.env.HIVE_TEAM_MAILBOX, path, init)
     return await fetchLocalRuntime(`${baseUrl}${path}`, init)
   } catch (error) {
     throw new Error(describeFetchError(baseUrl, error))
@@ -145,7 +155,8 @@ export interface ParsedSendArgs {
 
 const REPORT_USAGE =
   'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]'
-const STATUS_USAGE = 'Usage: team status (<current status> | --stdin) [--artifact <path>]'
+const STATUS_USAGE =
+  'Usage: team status (<current status> | --stdin) [--dispatch <id>] [--progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]'
 const CANCEL_USAGE = 'Usage: team cancel --dispatch <dispatch-id> <reason>'
 const GUIDE_USAGE = `Usage: team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`
 const GOAL_REPORT_USAGE =
@@ -156,6 +167,7 @@ const SKILL_USAGE =
   'Usage: team skill (list | load (<pack/skill> | --dispatch <dispatch-id>) | read --dispatch <dispatch-id> <relative-text-path>)'
 
 const usageFor = (command: string) => {
+  if (command === 'review') return CODE_REVIEW_USAGE
   if (command === 'status') return STATUS_USAGE
   if (command === 'goal report') return GOAL_REPORT_USAGE
   return REPORT_USAGE
@@ -180,6 +192,13 @@ const readGeneratedProtocolGuide = (topic: string) => {
 }
 
 export interface ParsedReportArgs {
+  progressState?:
+    | 'accepted'
+    | 'progress'
+    | 'waiting_input'
+    | 'waiting_permission'
+    | 'paused'
+    | 'cancelled'
   outcome?: ReportOutcome
   artifacts: string[]
   dispatchId: string | undefined
@@ -201,11 +220,34 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
   let dispatchId: string | undefined
   let useStdin = false
   let outcome: ReportOutcome | undefined
+  let progressState: ParsedReportArgs['progressState']
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === undefined) continue
 
+    if (arg === '--progress') {
+      const value = args[index + 1]
+      if (
+        command !== 'status' ||
+        progressState !== undefined ||
+        !value ||
+        ![
+          'accepted',
+          'progress',
+          'waiting_input',
+          'waiting_permission',
+          'paused',
+          'cancelled',
+        ].includes(value)
+      )
+        throw new Error(
+          withUsage('Invalid --progress value; only team status supports it', command)
+        )
+      progressState = value as ParsedReportArgs['progressState']
+      index += 1
+      continue
+    }
     if (arg === '--outcome') {
       if (command !== 'report')
         throw new Error(withUsage('--outcome is only supported by team report', command))
@@ -240,14 +282,6 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
     }
 
     if (arg === '--dispatch') {
-      if (command === 'status') {
-        throw new Error(
-          withUsage(
-            'team status does not accept --dispatch; use team report for assigned work',
-            command
-          )
-        )
-      }
       const next = args[index + 1]
       if (next === undefined || next.startsWith('--')) {
         throw new Error(withUsage('--dispatch requires a value', command))
@@ -264,6 +298,8 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
     positionals.push(arg)
   }
 
+  if (progressState && !dispatchId)
+    throw new Error(withUsage('--progress requires --dispatch', command))
   if (useStdin && positionals.length > 0) {
     throw new Error(
       withUsage(
@@ -295,6 +331,7 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
     dispatchId,
     useStdin,
     ...(outcome ? { outcome } : {}),
+    ...(progressState ? { progressState } : {}),
   }
 }
 
@@ -449,7 +486,10 @@ export const parseGoalReportArgs = (args: string[]): ParsedGoalReportArgs => {
   return { artifacts, goalId, result: useStdin ? null : (positionals[0] ?? null), status, useStdin }
 }
 
-export const readStdinToString = async (command = 'report'): Promise<string> => {
+export const readStdinToString = async (
+  command = 'report',
+  allowEmpty = false
+): Promise<string> => {
   if (process.stdin.isTTY) {
     throw new Error(
       withUsage(
@@ -463,7 +503,7 @@ export const readStdinToString = async (command = 'report'): Promise<string> => 
     chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
   }
   const content = Buffer.concat(chunks).toString('utf8')
-  if (!content.trim()) {
+  if (!allowEmpty && !content.trim()) {
     throw new Error(withUsage('--stdin received empty input', command))
   }
   return content
@@ -486,16 +526,112 @@ export const runTeamCommand = async (argv: string[]) => {
     return
   }
 
-  if (command === 'list') {
+  if (command === 'review') {
+    const parsed = parseCodeReviewArgs(args)
+    const env = getHiveEnv()
+    if (parsed.useStdin) parsed.body.summary = await readStdinToString('review')
+    const response = await postJson(getBaseUrl(env), `/api/team/review/${parsed.action}`, {
+      ...parsed.body,
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+
+  if (command === 'recovery') {
+    if (args.length && !(args.length === 2 && args[0] === '--cursor' && args[1]))
+      throw new Error('Usage: team recovery [--cursor <cursor>]')
+    const env = getHiveEnv()
+    const response = await postJson(getBaseUrl(env), '/api/team/recovery', {
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+      ...(args[1] ? { cursor: args[1] } : {}),
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+  if (command === 'tasks') {
+    const [action, flag, version, stdin, ...extra] = args
+    if (
+      !(action === 'read' && args.length === 1) &&
+      !(
+        action === 'write' &&
+        flag === '--expected-version' &&
+        /^sha256:[a-f0-9]{64}$/u.test(version ?? '') &&
+        stdin === '--stdin' &&
+        !extra.length
+      )
+    )
+      throw new Error(
+        'Usage: team tasks read | team tasks write --expected-version <version> --stdin'
+      )
+    const env = getHiveEnv()
+    const response = await postJson(getBaseUrl(env), `/api/team/tasks/${action}`, {
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+      ...(action === 'write'
+        ? { expected_version: version, content: await readStdinToString('tasks', true) }
+        : {}),
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+
+  if (command === 'git') {
+    const [action, flag, expectedHead, message, ...extra] = args
+    if (
+      action !== 'commit' ||
+      flag !== '--expected-head' ||
+      !/^[0-9a-f]{40,64}$/iu.test(expectedHead ?? '') ||
+      !message?.trim() ||
+      extra.length
+    )
+      throw new Error('Usage: team git commit --expected-head <sha> "<message>"')
+    const env = getHiveEnv()
+    const response = await postJson(getBaseUrl(env), '/api/team/git/commit', {
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+      expected_head: expectedHead,
+      message,
+    })
+    const result = (await response.json()) as {
+      commit_sha: string
+      index_sync_required?: true
+      temporary_cleanup_required?: true
+    }
+    console.log(JSON.stringify(result))
+    if (result.index_sync_required)
+      console.error(
+        'Commit succeeded. Ask the local user to synchronize this worktree index with git reset --mixed HEAD before verification. Do not retry the commit.'
+      )
+    if (result.temporary_cleanup_required)
+      console.error(
+        'Commit succeeded. Temporary Git files require local cleanup; do not retry the commit.'
+      )
+    return
+  }
+
+  if (command === 'list' || command === 'deliveries') {
     const env = getHiveEnv()
     const baseUrl = getBaseUrl(env)
-    const response = await fetchRuntime(baseUrl, `/api/workspaces/${env.HIVE_PROJECT_ID}/team`, {
-      method: 'GET',
-      headers: {
-        'x-hive-agent-id': env.HIVE_AGENT_ID,
-        'x-hive-agent-token': env.HIVE_AGENT_TOKEN,
-      },
-    })
+    const response = await fetchRuntime(
+      baseUrl,
+      command === 'deliveries'
+        ? `/api/team/deliveries?project_id=${encodeURIComponent(env.HIVE_PROJECT_ID)}`
+        : `/api/workspaces/${env.HIVE_PROJECT_ID}/team`,
+      {
+        method: 'GET',
+        headers: {
+          'x-hive-agent-id': env.HIVE_AGENT_ID,
+          'x-hive-agent-token': env.HIVE_AGENT_TOKEN,
+        },
+      }
+    )
 
     if (!response.ok) {
       await throwHttpError(response)
@@ -624,6 +760,8 @@ export const runTeamCommand = async (argv: string[]) => {
     const env = getHiveEnv()
     const baseUrl = getBaseUrl(env)
     const response = await postJson(baseUrl, '/api/team/status', {
+      ...(report.dispatchId ? { dispatch_id: report.dispatchId } : {}),
+      ...(report.progressState ? { progress_state: report.progressState } : {}),
       project_id: env.HIVE_PROJECT_ID,
       from_agent_id: env.HIVE_AGENT_ID,
       token: env.HIVE_AGENT_TOKEN,

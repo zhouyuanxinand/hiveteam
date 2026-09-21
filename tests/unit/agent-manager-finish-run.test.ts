@@ -22,11 +22,11 @@ const waitFor = async (assertion: () => void, timeoutMs = 1000, intervalMs = 10)
 vi.mock('node-pty', () => ({
   spawn: () => {
     const exitCodes = exitSequences.shift() ?? [0, 0]
-    let exitHandler: ((event: { exitCode: number | null }) => void) | undefined
+    const exitHandlers: Array<(event: { exitCode: number | null }) => void> = []
 
     queueMicrotask(() => {
       for (const exitCode of exitCodes) {
-        exitHandler?.({ exitCode })
+        for (const handler of exitHandlers) handler({ exitCode })
       }
     })
 
@@ -35,14 +35,14 @@ vi.mock('node-pty', () => ({
       kill() {},
       onData() {},
       onExit(handler: (event: { exitCode: number | null }) => void) {
-        exitHandler = handler
+        exitHandlers.push(handler)
       },
       write() {},
     }
   },
 }))
 
-import { createAgentManager } from '../../src/server/agent-manager.js'
+import { createBudgetedTestAgentManager as createAgentManager } from '../helpers/budgeted-agent-manager.js'
 
 afterEach(() => {
   exitSequences.length = 0

@@ -6,9 +6,9 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import type { AgentManager, AgentRunSnapshot } from '../../src/server/agent-manager.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { createWorkspaceStore } from '../../src/server/workspace-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const outputBus = {
@@ -23,6 +23,13 @@ const createFakeAgentManager = (): AgentManager => {
   const runs = new Map<string, AgentRunSnapshot>()
 
   return {
+    getTerminalScreen: async (runId) => {
+      const run = runs.get(runId)
+      if (!run) throw new Error(`Run not found: ${runId}`)
+      return run.output
+    },
+    getInputSequence: () => 0,
+    getTerminalSize: () => ({ cols: 80, rows: 24 }),
     getOutputBus() {
       return outputBus
     },

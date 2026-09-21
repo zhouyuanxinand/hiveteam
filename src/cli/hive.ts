@@ -9,11 +9,13 @@ import { createApp } from '../server/app.js'
 import { readPackageVersion } from '../server/package-version.js'
 import { createRemoteTunnel } from '../server/remote-tunnel.js'
 import { createRuntimeStore, type RuntimeStore } from '../server/runtime-store.js'
+import { runHiveDataCommand } from './hive-data.js'
 import { resolveDataDir } from './hive-data-dir.js'
 import { DEFAULT_HIVE_PORT } from './hive-defaults.js'
 import { runHiveMcpCommand } from './hive-mcp.js'
 import { runHiveRemoteCommand } from './hive-remote.js'
 import { runHiveUpdateCommand } from './hive-update.js'
+import { installUiLauncher } from './ui-launcher.js'
 
 interface RunHiveCommandResult {
   port: number
@@ -32,6 +34,7 @@ export const HIVE_USAGE = [
   '  hive [--port <port>]',
   '  hive mcp [--base-url <url>]',
   '  hive update',
+  '  hive data --help',
   '',
   'Options:',
   `  --port <port>   Bind the local runtime to a specific port (default: ${DEFAULT_HIVE_PORT}).`,
@@ -146,6 +149,7 @@ export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResu
     deviceSessions: app.store.remote.sessions,
     loopbackSecret: app.store.getRemoteTunnelSecret(),
     audit: app.store.remote.audit,
+    inputEpoch: app.store.remote.permissions.inputEpoch,
     pairing: app.store.remote.pairing,
     onStatus: (event) => {
       if (event.status === 'reconnecting') {
@@ -219,7 +223,12 @@ const isMainModule = process.argv[1]
 
 if (isMainModule) {
   const argv = process.argv.slice(2)
-  if (argv[0] === 'remote') {
+  if (argv[0] === 'data') {
+    runHiveDataCommand(argv.slice(1)).catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exitCode = 1
+    })
+  } else if (argv[0] === 'remote') {
     runHiveRemoteCommand(argv.slice(1))
       .then((code) => process.exit(code))
       .catch((error) => {
@@ -238,9 +247,11 @@ if (isMainModule) {
   } else if (handleHiveInfoCommand(argv)) {
     process.exit(0)
   } else {
-    runHiveCommand(argv).catch((error) => {
-      console.error(error instanceof Error ? error.message : error)
-      process.exit(1)
-    })
+    runHiveCommand(argv)
+      .then(({ store, port }) => installUiLauncher(store, port))
+      .catch((error) => {
+        console.error(error instanceof Error ? error.message : error)
+        process.exit(1)
+      })
   }
 }

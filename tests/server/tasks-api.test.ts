@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTasksFileService } from '../../src/server/tasks-file.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -73,17 +73,22 @@ describe('tasks api', () => {
     })
 
     expect(initialResponse.status).toBe(200)
-    await expect(initialResponse.json()).resolves.toEqual({ content: '' })
+    const initial = await initialResponse.json()
+    expect(initial).toEqual({ content: '', version: expect.stringMatching(/^sha256:/u) })
 
     const updateResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/tasks`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', cookie },
-      body: JSON.stringify({ content: '- [ ] implement login\n' }),
+      body: JSON.stringify({
+        content: '- [ ] implement login\n',
+        expected_version: initial.version,
+      }),
     })
 
     expect(updateResponse.status).toBe(200)
     await expect(updateResponse.json()).resolves.toEqual({
       content: '- [ ] implement login\n',
+      version: expect.stringMatching(/^sha256:/u),
     })
     expect(readFileSync(hiveTasksPath, 'utf8')).toBe('- [ ] implement login\n')
     expect(existsSync(legacyTasksPath)).toBe(false)
@@ -94,6 +99,7 @@ describe('tasks api', () => {
 
     await expect(readBackResponse.json()).resolves.toEqual({
       content: '- [ ] implement login\n',
+      version: expect.stringMatching(/^sha256:/u),
     })
   })
 })

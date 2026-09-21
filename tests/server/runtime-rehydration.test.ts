@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
@@ -6,18 +6,33 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
+import { normalizePtyText } from '../helpers/platform-cli.js'
 
 const tempDirs: string[] = []
 const originalPath = process.env.PATH
+const originalClaudeProjectsDir = process.env.HIVE_CLAUDE_PROJECTS_DIR
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
-const FAKE_CLAUDE_EXIT_MS = 250
+const SESSION_ID = '11111111-1111-4111-8111-111111111111'
 
 const writeFakeClaudeCli = (binDir: string) => {
   const scriptPath = join(binDir, 'fake-claude.js')
   writeFileSync(
     scriptPath,
-    `process.stdin.resume(); setTimeout(() => process.exit(0), ${FAKE_CLAUDE_EXIT_MS})\n`
+    [
+      "const { mkdirSync, writeFileSync } = require('node:fs')",
+      "const { join } = require('node:path')",
+      'const root = process.env.HIVE_CLAUDE_PROJECTS_DIR',
+      "if (!root) throw new Error('Missing synthetic Claude session directory')",
+      "const encodedCwd = [...process.cwd()].map((char) => [32, 47, 58, 92].includes(char.charCodeAt(0)) ? '-' : char).join('')",
+      'const directory = join(root, encodedCwd)',
+      'mkdirSync(directory, { recursive: true })',
+      "const marker = 'Hive session binding: workspace_id=' + process.env.HIVE_PROJECT_ID + '; agent_id=' + process.env.HIVE_AGENT_ID",
+      `writeFileSync(join(directory, '${SESSION_ID}.jsonl'), JSON.stringify({ message: { content: marker, role: 'user' } }) + '\\n')`,
+      "console.log('ARGS:' + JSON.stringify(process.argv.slice(2)))",
+      "console.log('CWD:' + process.cwd())",
+      'process.stdin.resume()',
+    ].join('\n')
   )
 
   const unixCli = join(binDir, 'claude')
@@ -33,14 +48,15 @@ afterEach(async () => {
     await store.close()
   }
   process.env.PATH = originalPath
-  delete process.env.HIVE_CLAUDE_PROJECTS_DIR
+  if (originalClaudeProjectsDir === undefined) delete process.env.HIVE_CLAUDE_PROJECTS_DIR
+  else process.env.HIVE_CLAUDE_PROJECTS_DIR = originalClaudeProjectsDir
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true })
   }
 })
 
 describe('runtime rehydration', () => {
-  test('restores workers and pending task counts from sqlite state', () => {
+  test('restores workers and pending task counts from sqlite state', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-runtime-'))
     tempDirs.push(dataDir)
 
@@ -54,6 +70,7 @@ describe('runtime rehydration', () => {
     firstStore.dispatchTask(workspace.id, bob.id, 'Write tests')
     firstStore.reportTask(workspace.id, bob.id)
 
+    await firstStore.close()
     const secondStore = createRuntimeStore({ dataDir })
     stores.push(secondStore)
 
@@ -75,7 +92,7 @@ describe('runtime rehydration', () => {
     ])
   })
 
-  test('restores pending task counts from dispatches instead of legacy message replay', () => {
+  test('restores pending task counts from dispatches instead of legacy message replay', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-runtime-dispatch-pending-'))
     tempDirs.push(dataDir)
 
@@ -114,6 +131,7 @@ describe('runtime rehydration', () => {
     )
     db.close()
 
+    await firstStore.close()
     const secondStore = createRuntimeStore({ dataDir })
     stores.push(secondStore)
 
@@ -152,13 +170,13 @@ describe('runtime rehydration', () => {
     tempDirs.push(dataDir)
     mkdirSync(workspacePath, { recursive: true })
     mkdirSync(binDir, { recursive: true })
-    mkdirSync(join(claudeProjectsDir, '-tmp-hive-alpha'), { recursive: true })
+    mkdirSync(claudeProjectsDir, { recursive: true })
     writeFakeClaudeCli(binDir)
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`
 
     const firstStore = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
     stores.push(firstStore)
-    const workspace = firstStore.createWorkspace('/tmp/hive-alpha', 'Alpha')
+    const workspace = firstStore.createWorkspace(realpathSync(workspacePath), 'Alpha')
     const worker = firstStore.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
     firstStore.configureAgentLaunch(workspace.id, worker.id, {
       command: 'claude',
@@ -171,82 +189,51 @@ describe('runtime rehydration', () => {
     })
 
     process.env.HIVE_CLAUDE_PROJECTS_DIR = claudeProjectsDir
-    const sessionFile = join(
-      claudeProjectsDir,
-      '-tmp-hive-alpha',
-      '11111111-1111-4111-8111-111111111111.jsonl'
-    )
-    const workerPromptMarker = `Hive session binding: workspace_id=${workspace.id}; agent_id=${worker.id}`
     const manager = createAgentManager()
-    const startSpy = vi.spyOn(manager, 'startAgent')
 
+    await firstStore.close()
     const secondStore = createRuntimeStore({ agentManager: manager, dataDir })
     stores.push(secondStore)
-    secondStore.configureAgentLaunch(workspace.id, worker.id, {
-      command: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      resumeArgsTemplate: '--resume {session_id}',
-      sessionIdCapture: {
-        pattern: '~/.claude/projects/{encoded_cwd}/*.jsonl',
-        source: 'claude_project_jsonl_dir',
-      },
+    const firstRun = await secondStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    await vi.waitFor(() => {
+      const output = normalizePtyText(secondStore.getLiveRun(firstRun.runId).output)
+      expect(output).toContain('ARGS:["--dangerously-skip-permissions"]')
+      expect(output).toContain(`CWD:${workspace.path}`)
     })
 
-    const startPromise = secondStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
-    writeFileSync(
-      sessionFile,
-      `${JSON.stringify({ message: { content: workerPromptMarker, role: 'user' } })}\n`
-    )
-    await startPromise
+    const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    try {
+      await vi.waitFor(
+        () => {
+          expect(
+            db
+              .prepare(
+                'SELECT last_session_id FROM agent_sessions WHERE workspace_id = ? AND agent_id = ?'
+              )
+              .get(workspace.id, worker.id)
+          ).toEqual({ last_session_id: SESSION_ID })
+          expect(
+            db
+              .prepare('SELECT last_session_id FROM workers WHERE workspace_id = ? AND id = ?')
+              .get(workspace.id, worker.id)
+          ).toEqual({ last_session_id: SESSION_ID })
+        },
+        { timeout: 5000 }
+      )
+    } finally {
+      db.close()
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, 150))
-
-    const db = new Database(join(dataDir, 'runtime.sqlite'))
-    const persistedSession = db
-      .prepare('SELECT last_session_id FROM agent_sessions WHERE agent_id = ?')
-      .get(worker.id) as { last_session_id: string } | undefined
-    const mirroredWorkerSession = db
-      .prepare('SELECT last_session_id FROM workers WHERE id = ?')
-      .get(worker.id) as { last_session_id: string | null } | undefined
-    db.close()
-
+    await secondStore.close()
     const thirdStore = createRuntimeStore({ agentManager: manager, dataDir })
     stores.push(thirdStore)
-    thirdStore.configureAgentLaunch(workspace.id, worker.id, {
-      command: 'claude',
-      args: ['--dangerously-skip-permissions'],
-      resumeArgsTemplate: '--resume {session_id}',
-      sessionIdCapture: {
-        pattern: '~/.claude/projects/{encoded_cwd}/*.jsonl',
-        source: 'claude_project_jsonl_dir',
-      },
+    const secondRun = await thirdStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    await vi.waitFor(() => {
+      const output = normalizePtyText(thirdStore.getLiveRun(secondRun.runId).output)
+      expect(output).toContain(
+        `ARGS:${JSON.stringify(['--resume', SESSION_ID, '--dangerously-skip-permissions'])}`
+      )
+      expect(output).toContain(`CWD:${workspace.path}`)
     })
-    await thirdStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
-
-    const firstCallArgs = startSpy.mock.calls[0]?.[0]?.args ?? []
-    const secondCallArgs = startSpy.mock.calls[1]?.[0]?.args ?? []
-
-    expect(firstCallArgs).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-    ])
-    expect(secondCallArgs).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-      '--resume',
-      '11111111-1111-4111-8111-111111111111',
-    ])
-    expect(persistedSession).toEqual({ last_session_id: '11111111-1111-4111-8111-111111111111' })
-    expect(mirroredWorkerSession).toEqual({
-      last_session_id: '11111111-1111-4111-8111-111111111111',
-    })
-
-    // The fake CLI only needs to stay up long enough for spawn + session capture.
-    // Let it exit naturally so Windows ConPTY cleanup does not need a forced kill.
-    await new Promise((resolve) => setTimeout(resolve, FAKE_CLAUDE_EXIT_MS + 250))
-
-    delete process.env.HIVE_CLAUDE_PROJECTS_DIR
   })
 })

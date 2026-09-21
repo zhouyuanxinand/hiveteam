@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync } from 'node:fs'
+import { accessSync, constants, existsSync, lstatSync } from 'node:fs'
 import { basename, delimiter, dirname, extname, isAbsolute, join } from 'node:path'
 
 import { discoverWindowsCommandPath } from './command-discovery.js'
@@ -117,6 +117,13 @@ export const resolveCommandPath = (
   let packagedDesktopAppPath: string | undefined
   const findExecutable = (candidate: string): string | undefined => {
     if (platform === 'win32' && isWindowsAppPackagePath(candidate)) {
+      try {
+        lstatSync(candidate)
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code === 'ENOENT' || code === 'ENOTDIR') return undefined
+        throw error
+      }
       protectedWindowsAppPath ??= candidate
       return undefined
     }

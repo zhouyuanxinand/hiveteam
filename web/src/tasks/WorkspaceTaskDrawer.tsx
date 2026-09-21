@@ -59,6 +59,8 @@ export const WorkspaceTaskDrawer = ({
     <TaskGraphDrawer
       content={tasksFile.content}
       hasConflict={tasksFile.hasConflict}
+      remoteContent={tasksFile.remoteContent}
+      error={tasksFile.error}
       onClose={onClose}
       onContentChange={tasksFile.onChange}
       onKeepLocal={tasksFile.onKeepLocal}

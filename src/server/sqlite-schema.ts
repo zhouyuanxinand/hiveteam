@@ -42,8 +42,20 @@ import { applySchemaVersion44 } from './sqlite-schema-v44.js'
 import { applySchemaVersion45 } from './sqlite-schema-v45.js'
 import { applySchemaVersion46 } from './sqlite-schema-v46.js'
 import { applySchemaVersion47 } from './sqlite-schema-v47.js'
+import { applySchemaVersion48 } from './sqlite-schema-v48.js'
+import { applySchemaVersion49 } from './sqlite-schema-v49.js'
+import { applySchemaVersion50 } from './sqlite-schema-v50.js'
+import { applySchemaVersion51 } from './sqlite-schema-v51.js'
+import { applySchemaVersion52 } from './sqlite-schema-v52.js'
+import { applySchemaVersion53 } from './sqlite-schema-v53.js'
+import { applySchemaVersion54 } from './sqlite-schema-v54.js'
+import { applySchemaVersion55 } from './sqlite-schema-v55.js'
+import { applySchemaVersion56 } from './sqlite-schema-v56.js'
+import { applySchemaVersion57 } from './sqlite-schema-v57.js'
+import { applySchemaVersion58 } from './sqlite-schema-v58.js'
+import { applySchemaVersion59 } from './sqlite-schema-v59.js'
 
-export const CURRENT_SCHEMA_VERSION = 47
+export const CURRENT_SCHEMA_VERSION = 59
 
 export const initializeRuntimeDatabase = (db: Database) => {
   db.exec(`
@@ -501,4 +513,47 @@ export const initializeRuntimeDatabase = (db: Database) => {
   if (!appliedVersions.has(47)) {
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(47, Date.now())
   }
+  applySchemaVersion48(db)
+  if (!appliedVersions.has(48)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(48, Date.now())
+  }
+  applySchemaVersion49(db)
+  if (!appliedVersions.has(49)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(49, Date.now())
+  }
+  applySchemaVersion50(db)
+  if (!appliedVersions.has(50)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(50, Date.now())
+  }
+  applySchemaVersion51(db)
+  if (!appliedVersions.has(51)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(51, Date.now())
+  }
+  applySchemaVersion52(db)
+  if (!appliedVersions.has(52)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(52, Date.now())
+  }
+  applySchemaVersion53(db)
+  if (!appliedVersions.has(53)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(53, Date.now())
+  }
+  applySchemaVersion54(db)
+  if (!appliedVersions.has(54)) {
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(54, Date.now())
+  }
+  applySchemaVersion55(db)
+  if (!appliedVersions.has(55))
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(55, Date.now())
+  applySchemaVersion56(db)
+  if (!appliedVersions.has(56))
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(56, Date.now())
+  applySchemaVersion57(db)
+  if (!appliedVersions.has(57))
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(57, Date.now())
+  applySchemaVersion58(db)
+  if (!appliedVersions.has(58))
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(58, Date.now())
+  applySchemaVersion59(db)
+  if (!appliedVersions.has(59))
+    db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(59, Date.now())
 }

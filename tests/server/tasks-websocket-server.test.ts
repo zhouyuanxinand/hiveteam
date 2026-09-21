@@ -33,7 +33,7 @@ afterEach(async () => {
 })
 
 describe('tasks websocket server', () => {
-  test('falls back to an empty snapshot when reading tasks fails', async () => {
+  test('reports a read failure without presenting an empty authoritative file', async () => {
     const httpServer = createServer()
     const tasksServer = createTasksWebSocketServer(
       httpServer,
@@ -55,8 +55,8 @@ describe('tasks websocket server', () => {
     )
 
     expect(JSON.parse(message)).toEqual({
-      type: 'tasks-snapshot',
-      content: '',
+      type: 'tasks-error',
+      error: 'permission denied',
     })
     socket.close()
   })

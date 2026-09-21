@@ -10,6 +10,8 @@ import {
   buildAgentSessionBindingMarker,
 } from './agent-startup-instructions.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
+import { NativeSessionError } from './native-session-error.js'
+import { nativeSessionHarness } from './native-session-profile.js'
 import { withPresetResumeArgs } from './preset-launch-support.js'
 import {
   captureSessionIdForCapture,
@@ -25,7 +27,7 @@ const resolveHiveBinDir = () => {
     : resolve(packageRoot, 'dist/bin')
 }
 
-const HIVE_BIN_DIR = resolveHiveBinDir()
+export const HIVE_BIN_DIR = resolveHiveBinDir()
 const SESSION_CAPTURE_INTERVAL_MS = 1000
 
 type LaunchPreset = Pick<
@@ -80,6 +82,24 @@ export const buildAgentRunBootstrap = (
   agent?: AgentSummary
 ) => {
   const preset = resolveLaunchPreset(config, getCommandPreset)
+  if (!nativeSessionHarness(config) && sessionStore.native?.current(workspace.id, agentId))
+    throw new NativeSessionError(
+      'session_environment_mismatch',
+      'This member has a managed native session binding for another harness. Restore its harness or use a separate member; the existing ID cannot be reused by another CLI.'
+    )
+  if (nativeSessionHarness(config))
+    return {
+      commitSessionContext: () => {},
+      sessionCaptureSnapshot: undefined,
+      startConfig: config,
+      startEnv: {
+        HIVE_PORT: '',
+        HIVE_PROJECT_ID: workspace.id,
+        HIVE_AGENT_ID: agentId,
+        HIVE_AGENT_TOKEN: '',
+        PATH: `${HIVE_BIN_DIR}${delimiter}${process.env.PATH ?? ''}`,
+      },
+    }
   const capture = config.sessionIdCapture ?? preset?.sessionIdCapture
   const discriminator = createSessionCaptureDiscriminator(workspace, agent)
   const recovery = prepareAgentSessionRecovery({

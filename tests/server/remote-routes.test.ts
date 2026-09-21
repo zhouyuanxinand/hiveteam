@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto'
+
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<Awaited<ReturnType<typeof startTestServer>>> = []
@@ -43,9 +45,9 @@ describe('remote access routes', () => {
     const server = await startTestServer()
     servers.push(server)
     const cookie = await getUiCookie(server.baseUrl)
-    server.store.settings.setAppState('remote_gateway_url', 'https://gateway.test')
-    server.store.settings.setAppState('remote_daemon_token', 'daemon-token')
-    server.store.settings.setAppState('remote_enabled', 'true')
+    server.store.settings.internalAppState.set('remote_gateway_url', 'https://gateway.test')
+    server.store.settings.internalAppState.set('remote_daemon_token', 'daemon-token')
+    server.store.settings.internalAppState.set('remote_enabled', 'true')
 
     const ticketResponse = await fetch(`${server.baseUrl}/api/remote/pairings`, {
       method: 'POST',
@@ -60,15 +62,23 @@ describe('remote access routes', () => {
     }
     expect(ticket).toMatchObject({ pairing_id: expect.any(String), code: expect.any(String) })
 
+    const device = server.store.remote.devices.insert({
+      id: randomUUID(),
+      name: 'Synthetic device',
+      keys: { d2p: new Uint8Array(32).fill(1), p2d: new Uint8Array(32).fill(2) },
+      devicePublicKey: new Uint8Array(32).fill(3),
+    })
+
     const remoteAttempt = await fetch(`${server.baseUrl}/api/remote/pairings`, {
       method: 'POST',
       headers: {
         'x-hive-remote-secret': server.store.getRemoteTunnelSecret(),
+        'x-hive-remote-device': device.id,
       },
     })
     expect(remoteAttempt.status).toBe(403)
-    await expect(remoteAttempt.json()).resolves.toEqual({
-      error: 'Device approval is desktop-only',
+    await expect(remoteAttempt.json()).resolves.toMatchObject({
+      code: 'remote_endpoint_forbidden',
     })
   })
 })

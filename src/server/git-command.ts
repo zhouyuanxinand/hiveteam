@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { recheckRemoteAction } from './remote-action-context.js'
 
 const execFileP = promisify(execFile)
 const GIT_TIMEOUT_MS = 10_000
@@ -39,6 +40,7 @@ export const runGit = async (
   args: string[],
   options: { timeout?: number; maxBuffer?: number; env?: NodeJS.ProcessEnv } = {}
 ): Promise<string> => {
+  recheckRemoteAction()
   try {
     const result = await execFileP('git', args, {
       cwd,

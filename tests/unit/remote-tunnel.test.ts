@@ -51,11 +51,18 @@ describe('remote tunnel lifecycle', () => {
     FakeSocket.instances = []
     const config = makeConfig()
     const tunnel = createRemoteTunnel({
+      inputEpoch: () => 'test-grant-epoch',
       loopbackPort: 4010,
       config,
       deviceSessions: { get: () => null, candidates: () => [] },
       loopbackSecret: 'boot-secret',
-      audit: { enqueue: () => {}, flush: async () => {}, list: () => [], listForDevice: () => [] },
+      audit: {
+        append: () => 1,
+        enqueue: () => {},
+        flush: async () => {},
+        list: () => [],
+        listForDevice: () => [],
+      },
       onStatus: () => {},
       WebSocketImpl: FakeSocket as unknown as typeof import('ws').WebSocket,
     })
@@ -73,6 +80,7 @@ describe('remote tunnel lifecycle', () => {
     const audit = createRemoteAuditStore(db)
     const statuses: string[] = []
     const tunnel = createRemoteTunnel({
+      inputEpoch: () => 'test-grant-epoch',
       loopbackPort: 4010,
       config,
       deviceSessions: { get: () => null, candidates: () => [] },

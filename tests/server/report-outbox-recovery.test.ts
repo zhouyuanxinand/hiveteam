@@ -6,7 +6,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
@@ -44,7 +44,7 @@ afterEach(async () => {
 })
 
 describe('report outbox recovery', () => {
-  test('drains an in-flight report delivery before closing its runtime database', async () => {
+  test('checkpoints an in-flight report before closing its runtime database', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-report-outbox-close-'))
     const workspacePath = join(dataDir, 'workspace')
     mkdirSync(workspacePath, { recursive: true })
@@ -96,13 +96,22 @@ describe('report outbox recovery', () => {
       const entry = db
         .prepare('SELECT delivered_at FROM report_outbox WHERE workspace_id = ?')
         .get(workspace.id) as { delivered_at: number | null } | undefined
-      expect(entry?.delivered_at).toEqual(expect.any(Number))
+      expect(entry?.delivered_at).toBeNull()
+      const delivery = db
+        .prepare("SELECT state,write_started FROM message_deliveries WHERE kind='report'")
+        .get() as { state: string; write_started: number }
+      expect(delivery.state).toBe(delivery.write_started ? 'unknown' : 'pending')
+      expect(
+        db
+          .prepare("SELECT COUNT(*) AS count FROM message_deliveries WHERE state='attempting'")
+          .get()
+      ).toEqual({ count: 0 })
     } finally {
       db.close()
     }
   })
 
-  test('replays a queued report when the restarted Orchestrator next lists its team', async () => {
+  test('replays a queued report after the Orchestrator starts without a team-list poll', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-report-outbox-'))
     const workspacePath = join(dataDir, 'workspace')
     mkdirSync(workspacePath, { recursive: true })
@@ -137,10 +146,6 @@ describe('report outbox recovery', () => {
       command: process.execPath,
     })
     await store.startAgent(workspace.id, orchestrator.id, { hivePort: '4010' })
-
-    // The startup instructions direct an Orchestrator to call `team list`.
-    // That poll is also the durable report replay trigger.
-    store.listWorkers(workspace.id)
 
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)

@@ -34,6 +34,9 @@ import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
 import { Confirm } from '../ui/Confirm.js'
 import { Tooltip } from '../ui/Tooltip.js'
+import { RemoteDevicePermissions } from './RemoteDevicePermissions.js'
+import { RemotePermissionStatus } from './RemotePermissionStatus.js'
+import { isRemoteMode } from './remote-permissions-api.js'
 
 const statusColor = (status: RemoteConnectionStatus, enabled: boolean) => {
   if (!enabled || status === 'disabled') return 'var(--text-tertiary)'
@@ -137,13 +140,17 @@ const AuditRows = ({ records, language }: { records: RemoteAuditRecord[]; langua
           style={{ borderColor: 'var(--border)' }}
         >
           <span className="mono shrink-0 text-ter">{formatAuditTime(record.ts, language)}</span>
-          <span className="min-w-0 flex-1 truncate text-sec">
-            {record.action} {record.endpoint ?? ''}
+          <span className="min-w-0 flex-1 break-words text-sec">
+            {record.businessAction ?? record.action} {record.method ?? ''} {record.endpoint ?? ''}
+            {record.resourceId ? <span className="block text-ter">{record.resourceId}</span> : null}
+            {record.byteCount !== null ? (
+              <span className="block text-ter">{record.byteCount} bytes</span>
+            ) : null}
           </span>
           <span
             style={{ color: record.result === 'ok' ? 'var(--status-green)' : 'var(--status-red)' }}
           >
-            {record.result}
+            {record.statusCode ?? record.result}
           </span>
         </div>
       ))
@@ -151,7 +158,10 @@ const AuditRows = ({ records, language }: { records: RemoteAuditRecord[]; langua
   </div>
 )
 
-export const RemoteAccessButton = () => {
+export const RemoteAccessButton = () =>
+  isRemoteMode() ? <RemotePermissionStatus /> : <LocalRemoteAccessButton />
+
+const LocalRemoteAccessButton = () => {
   const { language, t } = useI18n()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<RemoteStatus | null>(null)
@@ -558,12 +568,14 @@ export const RemoteAccessButton = () => {
                         </div>
                       ) : (
                         devices.map((device) => (
-                          <DeviceRow
-                            key={device.id}
-                            device={device}
-                            onRevoke={setRevokeTarget}
-                            revokeLabel={t('remote.revoke')}
-                          />
+                          <div key={device.id} className="space-y-1">
+                            <DeviceRow
+                              device={device}
+                              onRevoke={setRevokeTarget}
+                              revokeLabel={t('remote.revoke')}
+                            />
+                            <RemoteDevicePermissions device={device} />
+                          </div>
                         ))
                       )}
                     </div>

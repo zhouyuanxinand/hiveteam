@@ -8,17 +8,21 @@ import { useDemoMode } from './demo/useDemoMode.js'
 import { useDemoReplay } from './demo/useDemoReplay.js'
 import { useEffectiveWorkspaceState } from './demo/useEffectiveWorkspaceState.js'
 import { DesktopFolderDropTarget } from './desktop/DesktopFolderDropTarget.js'
+import { useI18n } from './i18n.js'
 import type { KnowledgeTab } from './knowledge/WorkspaceKnowledgeDrawer.js'
 import { MainLayout } from './layout/MainLayout.js'
 import { RuntimeOfflinePage } from './pwa/RuntimeOfflinePage.js'
 import { UpdateAvailableToast } from './pwa/UpdateAvailableToast.js'
 import { useShortcutAction } from './pwa/use-shortcut-action.js'
+import { isRemoteMode } from './remote/remote-permissions-api.js'
+import { useRemoteWorkspaceSync } from './remote/useRemoteWorkspaceSync.js'
 import { Sidebar } from './sidebar/Sidebar.js'
 import { parseTaskMarkdown } from './tasks/task-markdown.js'
 import { useTasksFile } from './tasks/useTasksFile.js'
 import { useOptimisticTerminalRuns } from './terminal/useOptimisticTerminalRuns.js'
 import { useTerminalRuns } from './terminal/useTerminalRuns.js'
 import { useToast } from './ui/useToast.js'
+import { UiSessionRequiredError } from './ui-session.js'
 import { useAppShortcuts } from './useAppShortcuts.js'
 import { useBeforeUnloadGuard } from './useBeforeUnloadGuard.js'
 import { useInitializeUiSession } from './useInitializeUiSession.js'
@@ -32,6 +36,7 @@ import { useWorkerActions } from './worker/useWorkerActions.js'
 import { OpenWorkspaceButton } from './workspace/OpenWorkspaceButton.js'
 
 export const AppInner = () => {
+  const { t } = useI18n()
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[] | null>(null)
   const { activeWorkspaceId, selectWorkspace, setActiveWorkspaceId } = useWorkspaceSelection()
   const { demoMode, enableDemo, exitDemo } = useDemoMode()
@@ -76,15 +81,22 @@ export const AppInner = () => {
     (message: string) => toast.show({ kind: 'error', message }),
     [toast]
   )
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null)
+  const [bootstrapFailure, setBootstrapFailure] = useState<Error | null>(null)
+  const sessionRequired = bootstrapFailure instanceof UiSessionRequiredError
+  const bootstrapError = sessionRequired
+    ? t('pwa.sessionRequired.body')
+    : (bootstrapFailure?.message ?? null)
   const onBootstrapError = useCallback(
-    (message: string) => {
-      setBootstrapError(message)
-      toast.show({ kind: 'error', message })
+    (error: Error) => {
+      setBootstrapFailure(error)
+      if (!(error instanceof UiSessionRequiredError)) {
+        toast.show({ kind: 'error', message: error.message })
+      }
     },
     [toast]
   )
   useInitializeUiSession(setWorkspaces, setActiveWorkspaceId, onBootstrapError)
+  useRemoteWorkspaceSync(setWorkspaces, setActiveWorkspaceId)
   const wsCreate = useWorkspaceCreate({
     onWorkspaceCreated: (ws) => {
       setAddDialogTrigger(0)
@@ -160,11 +172,11 @@ export const AppInner = () => {
     ready: demoMode || workspaces !== null || bootstrapError !== null,
   })
   const handleSelectOwner = useWorkerHighlight()
-  // Only escalate to the full-screen offline page when bootstrap explicitly
+  // Only escalate to the full-screen recovery page when bootstrap explicitly
   // failed AND we have no cached workspace data to fall back on AND the user
   // isn't already in demo mode. Mid-session API failures keep the existing
   // toast-based handling.
-  const runtimeOffline = bootstrapError !== null && !demoMode && workspaces === null
+  const bootstrapFailed = bootstrapFailure !== null && !demoMode && workspaces === null
   return (
     <>
       <MainLayout
@@ -215,7 +227,12 @@ export const AppInner = () => {
         sidebar={
           <Sidebar
             activeWorkspaceId={eff.effectiveActiveWorkspaceId}
-            createDisabledReason={bootstrapError ?? undefined}
+            loadingError={bootstrapError ?? undefined}
+            createDisabledReason={
+              isRemoteMode()
+                ? 'Create workspaces on the local computer.'
+                : (bootstrapError ?? undefined)
+            }
             onCreateClick={triggerAddDialog}
             onDeleteWorkspace={deleteWorkspace}
             onSelectWorkspace={selectWorkspace}
@@ -224,10 +241,11 @@ export const AppInner = () => {
           />
         }
       >
-        {runtimeOffline ? (
-          <RuntimeOfflinePage onTryDemo={enableDemo} />
+        {bootstrapFailed ? (
+          <RuntimeOfflinePage onTryDemo={enableDemo} sessionRequired={sessionRequired} />
         ) : (
           <AppWorkspaceContent
+            onOpenSkills={() => setSkillsOpen(true)}
             activeId={activeId}
             activeWorkspace={eff.effectiveActiveWorkspace}
             bootstrapError={bootstrapError}
@@ -264,7 +282,7 @@ export const AppInner = () => {
           onSelectWorkspace={selectWorkspace}
           addDialogTrigger={addDialogTrigger}
           droppedWorkspaceProbe={droppedWorkspaceProbe}
-          wizardOpen={wizardOpen}
+          wizardOpen={wizardOpen && !isRemoteMode()}
           onAddWorkspace={triggerAddDialog}
           onCloseTaskGraph={() => setTaskGraphOpen(false)}
           onCloseKnowledge={() => setKnowledgeTab(null)}

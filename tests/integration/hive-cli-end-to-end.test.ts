@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -6,14 +7,32 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
+import { requestUiBootstrap } from '../../scripts/ui-launcher.mjs'
 import { runHiveCommand } from '../../src/cli/hive.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import {
+  authorizeSyntheticAgent,
+  createAuthorizedTestRuntimeStore as createRuntimeStore,
+} from '../helpers/authorized-runtime.js'
 import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
+const childProcesses: Array<{ child: ChildProcess; closed: Promise<number | null> }> = []
 
-afterEach(() => {
+const trackChild = (child: ChildProcess) => {
+  const closed = new Promise<number | null>((resolve, reject) => {
+    child.once('error', reject)
+    child.once('close', (code) => resolve(code))
+  })
+  childProcesses.push({ child, closed })
+  return closed
+}
+
+afterEach(async () => {
+  for (const { child, closed } of childProcesses.splice(0)) {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    await closed
+  }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true })
   }
@@ -56,18 +75,17 @@ describe('hive cli end to end', () => {
       ['--import', 'tsx', modulePath, '--port', String(address.port)],
       {
         env: { ...process.env, HIVE_DATA_DIR: dataDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       }
     )
+    const closed = trackChild(processHandle)
     let stderr = ''
-    processHandle.stderr.on('data', (chunk) => {
+    processHandle.stderr?.on('data', (chunk) => {
       stderr += chunk.toString()
     })
 
     try {
-      const exitCode = await new Promise<number | null>((resolve) => {
-        processHandle.once('exit', (code) => resolve(code))
-      })
+      const exitCode = await closed
 
       expect(exitCode).toBe(1)
       expect(stderr).toContain(
@@ -198,6 +216,7 @@ describe('hive cli end to end', () => {
         }
       )
       expect(configResponse.status).toBe(204)
+      await authorizeSyntheticAgent(hive.store, workspace.id, orchestratorId)
 
       const teamResponse = await fetch(`${baseUrl}/api/ui/workspaces/${workspace.id}/team`, {
         headers: { cookie: uiCookie },
@@ -267,10 +286,11 @@ describe('hive cli end to end', () => {
     const modulePath = fileURLToPath(new URL('../../src/cli/hive.ts', import.meta.url))
     const processHandle = spawn(process.execPath, ['--import', 'tsx', modulePath, '--port', '0'], {
       env: { ...childEnv, HOME: homeDir, USERPROFILE: homeDir },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
+    const closed = trackChild(processHandle)
     let stdout = ''
-    processHandle.stdout.on('data', (chunk) => {
+    processHandle.stdout?.on('data', (chunk) => {
       stdout += chunk.toString()
     })
 
@@ -281,7 +301,14 @@ describe('hive cli end to end', () => {
       const match = stdout.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)
       expect(match?.[1]).toBeTruthy()
       const baseUrl = `http://127.0.0.1:${Number(match?.[1])}`
-      const uiCookie = await getUiCookie(baseUrl)
+      const sessionResponse = await fetch(`${baseUrl}/api/ui/session`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bootstrap_token: await requestUiBootstrap(processHandle) }),
+      })
+      expect(sessionResponse.status).toBe(200)
+      const uiCookie = sessionResponse.headers.get('set-cookie')?.split(';')[0]
+      if (!uiCookie) throw new Error('Trusted launcher did not produce a UI session')
 
       const templatesResponse = await fetch(`${baseUrl}/api/settings/role-templates`, {
         headers: { cookie: uiCookie },
@@ -333,7 +360,7 @@ describe('hive cli end to end', () => {
       })
     } finally {
       processHandle.kill('SIGTERM')
-      await new Promise<void>((resolve) => processHandle.once('exit', () => resolve()))
+      await closed
     }
   })
 })

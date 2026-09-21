@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { HttpError } from './http-errors.js'
+import { recheckRemoteAction } from './remote-action-context.js'
 
 export type GitHubRequest = (
   cwd: string,
@@ -10,6 +11,7 @@ export type GitHubRequest = (
 /** Credentials remain in the user's GitHub CLI; Hive never reads or stores a token. */
 export const requestGitHub: GitHubRequest = (cwd, endpoint, options = {}) =>
   new Promise((resolve, reject) => {
+    recheckRemoteAction()
     const args = [
       'api',
       '--hostname',

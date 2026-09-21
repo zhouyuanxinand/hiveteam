@@ -39,7 +39,8 @@ export class TerminalStateMirror {
   private readonly parserDisposables: Array<{ dispose: () => void }> = []
   private mouseEncoding: MouseEncoding = 'DEFAULT'
   private operationQueue: Promise<void> = Promise.resolve()
-  private pendingWriteChunks: string[] = []
+  private pendingWriteChunks: string[] | undefined
+  private disposed = false
   private lastPtyLineCache: string | null = null
   private lastPtyLineDirty = true
 
@@ -89,27 +90,39 @@ export class TerminalStateMirror {
   }
 
   dispose() {
+    this.disposed = true
+    this.pendingWriteChunks = undefined
     for (const disposable of this.parserDisposables) disposable.dispose()
     this.parserDisposables.length = 0
     this.terminal.dispose()
   }
 
-  async getSnapshot() {
-    await this.operationQueue
-    return this.serializeAddon.serialize() + mouseEncodingSuffix(this.mouseEncoding)
+  getSnapshot() {
+    this.pendingWriteChunks = undefined
+    // Insert serialization into the queue now. Writes arriving after this call
+    // belong only to the live stream, even while xterm is parsing older output.
+    const snapshot = this.operationQueue.then(
+      () => this.serializeAddon.serialize() + mouseEncodingSuffix(this.mouseEncoding)
+    )
+    this.operationQueue = snapshot.then(() => undefined)
+    return snapshot
   }
 
-  async getScreenText(): Promise<string> {
-    await this.operationQueue
-    const buffer = this.terminal.buffer.active
-    const lines: string[] = []
-    for (let row = buffer.baseY; row < buffer.baseY + this.terminal.rows; row += 1) {
-      const line = buffer.getLine(row)
-      const text = line?.translateToString(true) ?? ''
-      if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text
-      else lines.push(text)
-    }
-    return lines.join('\n')
+  getScreenText(): Promise<string> {
+    this.pendingWriteChunks = undefined
+    const screen = this.operationQueue.then(() => {
+      const buffer = this.terminal.buffer.active
+      const lines: string[] = []
+      for (let row = buffer.baseY; row < buffer.baseY + this.terminal.rows; row += 1) {
+        const line = buffer.getLine(row)
+        const text = line?.translateToString(true) ?? ''
+        if (line?.isWrapped && lines.length > 0) lines[lines.length - 1] += text
+        else lines.push(text)
+      }
+      return lines.join('\n')
+    })
+    this.operationQueue = screen.then(() => undefined)
+    return screen
   }
 
   /**
@@ -139,6 +152,7 @@ export class TerminalStateMirror {
   }
 
   resize(cols: number, rows: number) {
+    this.pendingWriteChunks = undefined
     const normalized = normalizeTerminalSize({ cols, rows })
     this.operationQueue = this.operationQueue
       .catch(() => undefined)
@@ -148,34 +162,33 @@ export class TerminalStateMirror {
   }
 
   /**
-   * Coalesces bursts of PTY chunks into a single xterm write. Heavy output
-   * arrives faster than the headless parser drains it, and queueing one
-   * promise per chunk multiplied GC pressure on every agent run.
+   * Keep queued writes appendable until their parser turn starts. Native PTY
+   * output arrives in separate event-loop turns; batching only within one
+   * microtask still gives every chunk its own xterm write timer and allows
+   * the screen to fall many seconds behind the live terminal. Reads and
+   * resizes seal the batch so later output cannot cross those boundaries.
    */
   write(chunk: string) {
+    if (this.disposed) return
     this.lastPtyLineDirty = true
-    this.pendingWriteChunks.push(chunk)
-    if (this.pendingWriteChunks.length > 1) return
+    if (this.pendingWriteChunks) {
+      this.pendingWriteChunks.push(chunk)
+      return
+    }
+    const chunks = [chunk]
+    this.pendingWriteChunks = chunks
     this.operationQueue = this.operationQueue
-      .catch(() => undefined)
-      .then(() => this.flushPendingWrites())
-  }
-
-  private flushPendingWrites(): Promise<void> {
-    const chunks = this.pendingWriteChunks
-    if (chunks.length === 0) return Promise.resolve()
-    this.pendingWriteChunks = []
-    // Array#join returns the single element itself for one-entry arrays.
-    const data = chunks.join('')
-    return new Promise<void>((resolve) => {
-      this.terminal.write(data, () => resolve())
-    }).then(() => {
-      // The buffer just advanced past anything lastPtyLine may have cached
-      // while this batch was still queued.
-      this.lastPtyLineDirty = true
-      // Chunks that arrived while xterm parsed this batch are written before
-      // the operation queue settles, preserving snapshot ordering.
-      return this.pendingWriteChunks.length > 0 ? this.flushPendingWrites() : undefined
-    })
+      .then(() => {
+        if (this.pendingWriteChunks === chunks) this.pendingWriteChunks = undefined
+        if (this.disposed) return
+        const data = chunks.join('')
+        chunks.length = 0
+        return new Promise<void>((resolve) => this.terminal.write(data, () => resolve()))
+      })
+      .then(() => {
+        // The buffer just advanced past anything lastPtyLine may have cached
+        // while this batch was still queued.
+        this.lastPtyLineDirty = true
+      })
   }
 }

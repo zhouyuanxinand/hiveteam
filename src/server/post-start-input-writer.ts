@@ -1,4 +1,7 @@
 import type { AgentManager } from './agent-manager.js'
+import { submitCodexPrompt } from './codex-prompt-submission.js'
+import { checkPendingRemoteInput } from './remote-action-context.js'
+import { RemotePermissionError } from './remote-permission-store.js'
 import { normalizeExecutableToken } from './startup-command-parser.js'
 
 const INTERACTIVE_COMMANDS = new Set(['claude', 'codex', 'gemini', 'opencode'])
@@ -76,17 +79,24 @@ const handleCodexBootstrapPrompt = (
   runId: string,
   command: string,
   output: string,
-  state: CodexBootstrapState
+  state: CodexBootstrapState,
+  source: 'history' | 'screen' = 'history'
 ) => {
   if (getCommandName(command) !== 'codex') return false
 
-  if (state.waitingForOutput) {
+  if (source === 'history' && state.waitingForOutput) {
     if (state.outputBaseline !== null && output.length <= state.outputBaseline) return true
     state.waitingForOutput = false
   }
 
   const normalizedOutput = output.replace(ANSI_CONTROL_SEQUENCE, '')
-  if (!state.directoryTrustHandled && hasCodexDirectoryTrustPrompt(normalizedOutput)) {
+  if (
+    (!state.directoryTrustHandled || source === 'screen') &&
+    hasCodexDirectoryTrustPrompt(normalizedOutput)
+  ) {
+    // A live frame can still show the menu after its Enter was queued. Wait
+    // for it to disappear without confirming it twice.
+    if (state.directoryTrustHandled) return true
     state.directoryTrustHandled = true
     state.outputBaseline = output.length
     state.promptReadySince = null
@@ -96,7 +106,11 @@ const handleCodexBootstrapPrompt = (
     return true
   }
 
-  if (!state.hooksPromptHandled && hasCodexHooksReviewPrompt(normalizedOutput)) {
+  if (
+    (!state.hooksPromptHandled || source === 'screen') &&
+    hasCodexHooksReviewPrompt(normalizedOutput)
+  ) {
+    if (state.hooksPromptHandled) return true
     state.hooksPromptHandled = true
     state.outputBaseline = output.length
     state.promptReadySince = null
@@ -107,7 +121,14 @@ const handleCodexBootstrapPrompt = (
     return true
   }
 
-  return false
+  // A native frame may arrive in several chunks. Recognizing the title of
+  // these known bootstrap menus is enough to wait, but not to confirm them
+  // before the complete choices/footer above are visible.
+  return (
+    source === 'screen' &&
+    (normalizedOutput.includes('Do you trust the contents of this directory?') ||
+      normalizedOutput.includes('Hooks need review'))
+  )
 }
 
 const isCodexPromptStillSettling = (
@@ -254,6 +275,13 @@ const submitPastedInteractiveInput = (
   }
 
   const trySubmit = () => {
+    try {
+      checkPendingRemoteInput(runId, 1)
+    } catch (error) {
+      if (!(error instanceof RemotePermissionError))
+        console.error('[hive] pending terminal input validation failed', error)
+      return
+    }
     if (!waitForPasteAck) {
       submit()
       return
@@ -331,6 +359,12 @@ const submitPastedInteractiveInputAwaitable = (
     }
 
     const trySubmit = () => {
+      try {
+        checkPendingRemoteInput(runId, 1)
+      } catch (error) {
+        reject(error)
+        return
+      }
       if (!waitForPasteAck) {
         submit()
         return
@@ -390,6 +424,12 @@ export const createAwaitablePostStartInputWriter = (
     codexBootstrapStates.set(runId, codexBootstrapState)
     return new Promise<void>((resolve, reject) => {
       const tryWrite = () => {
+        try {
+          checkPendingRemoteInput(runId, Buffer.byteLength(text))
+        } catch (error) {
+          reject(error)
+          return
+        }
         let output: string | null
         try {
           const run = agentManager.getRun(runId)
@@ -430,6 +470,19 @@ export const createAwaitablePostStartInputWriter = (
           return
         }
         if (promptReady) {
+          if (getCommandName(command) === 'codex') {
+            submitCodexPrompt(agentManager, runId, text, (screen) =>
+              handleCodexBootstrapPrompt(
+                agentManager,
+                runId,
+                command,
+                screen,
+                codexBootstrapState,
+                'screen'
+              )
+            ).then(resolve, reject)
+            return
+          }
           const baselineLength = output.length
           const input = usesBracketedPaste(command) ? toBracketedPasteSubmission(text) : text
           try {
@@ -477,6 +530,14 @@ export const createPostStartInputWriter = (
     codexBootstrapStates.set(runId, codexBootstrapState)
     let isInitialAttempt = true
     const tryWrite = () => {
+      try {
+        checkPendingRemoteInput(runId, Buffer.byteLength(text))
+      } catch (error) {
+        if (isInitialAttempt) throw error
+        if (!(error instanceof RemotePermissionError))
+          console.error('[hive] pending terminal input validation failed', error)
+        return
+      }
       let output: string | null
       try {
         const run = agentManager.getRun(runId)
@@ -508,6 +569,21 @@ export const createPostStartInputWriter = (
         return
       }
       if (promptReady) {
+        if (getCommandName(command) === 'codex') {
+          void submitCodexPrompt(agentManager, runId, text, (screen) =>
+            handleCodexBootstrapPrompt(
+              agentManager,
+              runId,
+              command,
+              screen,
+              codexBootstrapState,
+              'screen'
+            )
+          ).catch((error: unknown) => {
+            console.error('[hive] Codex automatic input stopped', { runId, error })
+          })
+          return
+        }
         const baselineLength = output.length
         const input = usesBracketedPaste(command) ? toBracketedPasteSubmission(text) : text
         try {

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
+import { requestUiBootstrap } from '../../scripts/ui-launcher.mjs'
 import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
 
 const tempDirs: string[] = []
@@ -51,22 +52,26 @@ describeUnixOnly('hive runtime SIGTERM shutdown', () => {
         'tsx/esm',
         '--input-type=module',
         '-e',
-        "import { runHiveCommand } from './src/cli/hive.ts'; await runHiveCommand(['--port','40128']);",
+        "import { runHiveCommand } from './src/cli/hive.ts'; import { installUiLauncher } from './src/cli/ui-launcher.ts'; const runtime = await runHiveCommand(['--port','40128']); installUiLauncher(runtime.store, runtime.port);",
       ],
       {
         cwd: process.cwd(),
         env: { ...process.env, HIVE_DATA_DIR: join(root, 'data') },
-        stdio: 'ignore',
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       }
     )
 
     const baseUrl = 'http://127.0.0.1:40128'
     await waitFor(async () => {
-      const response = await fetch(`${baseUrl}/api/ui/session`)
+      const response = await fetch(`${baseUrl}/api/version`)
       expect(response.status).toBe(200)
     })
 
-    const cookieResponse = await fetch(`${baseUrl}/api/ui/session`)
+    const cookieResponse = await fetch(`${baseUrl}/api/ui/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bootstrap_token: await requestUiBootstrap(child) }),
+    })
     const cookie = cookieResponse.headers.get('set-cookie')
     if (!cookie) {
       throw new Error('Expected UI session cookie')

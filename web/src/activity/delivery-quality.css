@@ -1,0 +1,14 @@
+.delivery-quality { display: grid; gap: 12px; min-width: 0; color: var(--text-primary); font-size: 14px; overflow-wrap: anywhere; margin-block: 16px; }
+.delivery-quality p { color: var(--text-secondary); margin: 0; line-height: 1.6; }
+.delivery-quality-form { display: grid; gap: 10px; padding-block: 16px; }
+.delivery-quality input:not([type=checkbox]), .delivery-quality textarea, .delivery-quality select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; border: 1px solid var(--border); background: var(--bg-1); color: var(--text-primary); border-radius: 6px; padding: 10px; font: inherit; font-size: 16px; }
+.delivery-quality :is(input,textarea,select,button,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.delivery-quality-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.delivery-quality .icon-btn { min-height: 44px; white-space: normal; }
+.delivery-quality-check { display: flex; align-items: start; gap: 10px; line-height: 1.6; }
+.delivery-quality-check input { margin-top: 5px; }
+.delivery-quality dl { display: grid; gap: 6px; margin: 0; }
+.delivery-quality dd { margin: 0 0 12px; overflow-wrap: anywhere; }
+.workflow-attempt-list { padding: 0; margin: 12px 0; list-style: none; }
+.workflow-attempt-list > li { padding-block: 14px; border-top: 1px solid var(--border); }
+@media (max-width: 600px) { .delivery-quality { font-size: 16px; } }

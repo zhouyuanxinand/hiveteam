@@ -251,13 +251,14 @@ const TerminalPtyView = ({
   visible,
   owner,
 }: TerminalPtyViewProps) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const {
     containerRef,
     error,
     focus,
     refresh,
     status,
+    readOnly,
     recovery,
     retrySession,
     connectionStatus,
@@ -321,6 +322,16 @@ const TerminalPtyView = ({
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
+      {readOnly ? (
+        <p
+          role="status"
+          className="shrink-0 border-b border-[var(--border)] px-4 py-2 text-xs text-sec"
+        >
+          {language === 'zh'
+            ? '只读终端。通过顶部访问权限申请临时输入授权。'
+            : 'Read-only terminal. Request temporary input access from the access menu above.'}
+        </p>
+      ) : null}
       {connectionStatus === 'connecting' ? (
         <p role="status" className="shrink-0 px-4 py-2 text-sm text-sec">
           {t('terminal.loadingHistory')}

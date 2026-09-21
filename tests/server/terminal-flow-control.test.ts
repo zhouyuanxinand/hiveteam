@@ -4,11 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import WebSocket, { WebSocketServer } from 'ws'
-
-import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { createTerminalOutputFlow, FLOW_CONTROL } from '../../src/server/terminal-flow-control.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
+import { createBudgetedTestAgentManager as createAgentManager } from '../helpers/budgeted-agent-manager.js'
 import { normalizePtyText } from '../helpers/platform-cli.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

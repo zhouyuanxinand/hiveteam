@@ -9,7 +9,7 @@ import type {
   ReviewDraft,
   ReviewSubmission,
 } from '../../src/shared/workspace-review.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 let server: Awaited<ReturnType<typeof startTestServer>>

@@ -1,14 +1,23 @@
 import type { Database } from 'better-sqlite3'
 
-export type RemoteAuditResult = 'ok' | 'rejected' | 'error'
+export type RemoteAuditResult = 'ok' | 'rejected' | 'error' | 'authorized'
 export type RemoteAuditAction =
   | 'http'
+  | 'http_transport'
+  | 'http_input'
   | 'ws_input'
+  | 'ws_control'
   | 'ws_open'
   | 'session_open'
   | 'session_close'
   | 'revoke'
   | 'reject'
+  | 'access_request'
+  | 'grant_approve'
+  | 'grant_reject'
+  | 'grant_expire'
+  | 'grant_revoke'
+  | 'scope_change'
 
 export interface RemoteAuditEvent {
   deviceId?: string | null
@@ -18,89 +27,109 @@ export interface RemoteAuditEvent {
   result: RemoteAuditResult
   rejectReason?: string | null
   byteCount?: number | null
+  /** Retained for source compatibility; input content is never persisted. */
   preview?: string | null
+  method?: string | null
+  businessAction?: string | null
+  resourceId?: string | null
+  grantId?: string | null
+  decision?: string | null
+  statusCode?: number | null
 }
 
 export interface RemoteAuditRecord {
   id: number
-  deviceId: string | null
+  device_id: string | null
   ts: number
-  workspaceId: string | null
+  workspace_id: string | null
   action: string
   endpoint: string | null
   result: string
-  rejectReason: string | null
-  byteCount: number | null
-  preview: string | null
+  reject_reason: string | null
+  byte_count: number | null
+  preview: null
+  method: string | null
+  business_action: string | null
+  resource_id: string | null
+  grant_id: string | null
+  decision: string | null
+  status_code: number | null
 }
 
-export const AUDIT_PREVIEW_MAX = 120
-
-const normalizePreview = (preview: string | null | undefined) =>
-  preview === null || preview === undefined ? null : preview.slice(0, AUDIT_PREVIEW_MAX)
-
-export const createRemoteAuditStore = (db: Database) => {
-  const pending: Array<{ event: RemoteAuditEvent; ts: number }> = []
-  let drain: Promise<void> | null = null
-  const auditColumns = new Set(
+export const createRemoteAuditStore = (
+  db: Database,
+  onBackgroundFailure: (error: unknown) => void = (error) =>
+    console.error('[hive] remote transport audit failed', error)
+) => {
+  const columns = new Set(
     (db.prepare('PRAGMA table_info(remote_audit)').all() as Array<{ name: string }>).map(
-      (column) => column.name
+      (c) => c.name
     )
   )
-  const deviceColumn = auditColumns.has('device_id')
+  const deviceColumn = columns.has('device_id')
     ? 'device_id'
-    : auditColumns.has('remote_device_id')
+    : columns.has('remote_device_id')
       ? 'remote_device_id'
       : null
-
   if (!deviceColumn) throw new Error('remote_audit table has no device identifier column')
-
-  const insert = db.prepare(
-    `INSERT INTO remote_audit (
-       ${deviceColumn}, ts, workspace_id, action, endpoint, result, reject_reason, byte_count, preview
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-  const select = `SELECT id, ${deviceColumn} AS device_id, ts, workspace_id, action,
-    endpoint, result, reject_reason, byte_count, preview
-    FROM remote_audit`
-
-  const drainPending = async () => {
-    if (drain) return drain
-    drain = Promise.resolve()
-      .then(() => {
-        const batch = pending.splice(0, pending.length)
-        if (batch.length === 0) return
-        const transaction = db.transaction(() => {
-          for (const item of batch) {
-            insert.run(
-              item.event.deviceId ?? null,
-              item.ts,
-              item.event.workspaceId ?? null,
-              item.event.action,
-              item.event.endpoint ?? null,
-              item.event.result,
-              item.event.rejectReason ?? null,
-              item.event.byteCount ?? null,
-              normalizePreview(item.event.preview)
-            )
-          }
-        })
-        transaction()
-      })
-      .finally(() => {
-        drain = null
-      })
-    return drain
+  const extras = ['method', 'business_action', 'resource_id', 'grant_id', 'decision', 'status_code']
+  for (const column of extras) {
+    if (!columns.has(column))
+      throw new Error(`remote_audit requires the current schema; missing ${column}`)
   }
-
+  const extended = extras
+  const names = [
+    deviceColumn,
+    'ts',
+    'workspace_id',
+    'action',
+    'endpoint',
+    'result',
+    'reject_reason',
+    'byte_count',
+    'preview',
+    ...extended,
+  ]
+  const insert = db.prepare(
+    `INSERT INTO remote_audit (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`
+  )
+  const select = `SELECT id, ${deviceColumn} AS device_id, ts, workspace_id, action, endpoint, result, reject_reason, byte_count, NULL AS preview, ${extras.join(', ')} FROM remote_audit`
+  const append = (event: RemoteAuditEvent, ts = Date.now()) => {
+    const fields: Record<string, string | number | null> = {
+      method: event.method ?? null,
+      business_action: event.businessAction ?? null,
+      resource_id: event.resourceId ?? null,
+      grant_id: event.grantId ?? null,
+      decision: event.decision ?? null,
+      status_code: event.statusCode ?? null,
+    }
+    return Number(
+      insert.run(
+        event.deviceId ?? null,
+        ts,
+        event.workspaceId ?? null,
+        event.action,
+        event.endpoint?.split('?')[0] ?? null,
+        event.result,
+        event.rejectReason ?? null,
+        event.byteCount ?? null,
+        null,
+        ...extended.map((column) => fields[column] ?? null)
+      ).lastInsertRowid
+    )
+  }
   return {
+    append,
+    // Transport callbacks have no request error boundary. Their failure handler
+    // disables further remote writes; privileged execution uses append directly.
     enqueue(event: RemoteAuditEvent, ts = Date.now()) {
-      pending.push({ event, ts })
-      void drainPending()
+      try {
+        append(event, ts)
+      } catch (error) {
+        onBackgroundFailure(error)
+      }
     },
-    async flush() {
-      while (pending.length > 0 || drain) await drainPending()
-    },
+    async flush() {},
     list(limit = 100) {
       return db
         .prepare(`${select} ORDER BY id DESC LIMIT ?`)

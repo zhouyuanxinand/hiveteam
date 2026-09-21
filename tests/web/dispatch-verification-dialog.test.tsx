@@ -6,6 +6,7 @@ import type { DispatchVerificationView } from '../../src/shared/verification.js'
 import { DispatchVerificationDialog } from '../../web/src/activity/DispatchVerificationDialog.js'
 import * as pullRequestApi from '../../web/src/activity/pull-request-api.js'
 import * as api from '../../web/src/activity/verification-api.js'
+import * as profileApi from '../../web/src/activity/verification-profile-api.js'
 import type { DispatchSummary } from '../../web/src/api.js'
 import { I18nProvider } from '../../web/src/i18n.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
@@ -57,7 +58,10 @@ const initialView = (): DispatchVerificationView => ({
     },
   ],
 })
-beforeEach(() => window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en'))
+beforeEach(() => {
+  window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'en')
+  vi.spyOn(profileApi, 'verificationProfiles').mockResolvedValue([])
+})
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()

@@ -1,11 +1,12 @@
 import { AlertTriangle, RefreshCw, Save } from 'lucide-react'
-import type { FormEvent } from 'react'
+import { type FormEvent, useState } from 'react'
 
 import { useI18n } from '../i18n.js'
 
 type TaskGraphRawEditorProps = {
   content: string
   hasConflict: boolean
+  remoteContent?: string | null | undefined
   onContentChange: (value: string) => void
   onKeepLocal: () => void
   onReload: () => void
@@ -21,15 +22,20 @@ type TaskGraphRawEditorProps = {
 export const TaskGraphRawEditor = ({
   content,
   hasConflict,
+  remoteContent,
   onContentChange,
   onKeepLocal,
   onReload,
   onSave,
 }: TaskGraphRawEditorProps) => {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
+  const [saveError, setSaveError] = useState<string | null>(null)
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    void onSave()
+    setSaveError(null)
+    void onSave().catch((error: unknown) =>
+      setSaveError(error instanceof Error ? error.message : String(error))
+    )
   }
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col gap-3">
@@ -50,13 +56,21 @@ export const TaskGraphRawEditor = ({
       </label>
       {hasConflict ? (
         <div
-          className="flex items-start gap-2 rounded border p-3 text-xs"
+          className="flex flex-wrap items-start gap-2 rounded border p-3 text-xs"
           style={{ borderColor: 'var(--status-orange)', color: 'var(--status-orange)' }}
         >
           <AlertTriangle className="mt-0.5 shrink-0" size={16} />
           <div className="min-w-0 flex-1">
             <p className="font-medium">{t('tasks.raw.conflictTitle')}</p>
             <p className="mt-1 text-ter">{t('tasks.raw.conflictDescription')}</p>
+            {remoteContent !== undefined && remoteContent !== null ? (
+              <details>
+                <summary>
+                  {language === 'zh' ? '查看磁盘上的当前内容' : 'Compare the current file'}
+                </summary>
+                <pre className="whitespace-pre-wrap break-words">{remoteContent}</pre>
+              </details>
+            ) : null}
           </div>
           <div className="flex shrink-0 gap-2">
             <button type="button" onClick={onReload} className="icon-btn">
@@ -69,8 +83,13 @@ export const TaskGraphRawEditor = ({
           </div>
         </div>
       ) : null}
+      {saveError ? (
+        <p role="alert" className="dispatch-report-error">
+          {saveError}
+        </p>
+      ) : null}
       <div className="flex justify-end border-t pt-3" style={{ borderColor: 'var(--border)' }}>
-        <button type="submit" className="icon-btn icon-btn--primary">
+        <button type="submit" disabled={hasConflict} className="icon-btn icon-btn--primary">
           <Save size={14} />
           {t('tasks.raw.save')}
         </button>

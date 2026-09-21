@@ -21,6 +21,11 @@ export interface WorkerInput {
 }
 
 export interface WorkspaceStore {
+  addWorkers: (
+    workspaceId: string,
+    inputs: WorkerInput[],
+    persist?: (workers: AgentSummary[]) => void
+  ) => AgentSummary[]
   addWorker: (workspaceId: string, input: WorkerInput) => AgentSummary
   createWorkspace: (path: string, name: string, language?: WorkspaceLanguage) => WorkspaceSummary
   deleteWorkspace: (workspaceId: string) => void
@@ -41,6 +46,7 @@ export interface WorkspaceStore {
   markAgentManuallyStopped: (workspaceId: string, agentId: string) => void
   isAgentManuallyStopped: (workspaceId: string, agentId: string) => boolean
   markTaskDispatched: (workspaceId: string, workerId: string) => void
+  markTaskSubmitted: (workspaceId: string, workerId: string) => void
   markTaskCancelled: (workspaceId: string, workerId: string) => void
   markTaskReported: (workspaceId: string, workerId: string) => void
 }

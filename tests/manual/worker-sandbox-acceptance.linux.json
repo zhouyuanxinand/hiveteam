@@ -1,0 +1,42 @@
+{
+  "cli_version": "codex-cli 0.155.1",
+  "platform": "linux",
+  "recorded_at": "2026-09-19T14:25:17.934Z",
+  "fixture_path": "/var/tmp/hive-execution-acceptance-9EBmsb",
+  "scope": "Real native sandbox commands; does not certify model tools, authentication, or resume.",
+  "results": [
+    {
+      "role": "coder",
+      "observed": {
+        "source_read": "allowed",
+        "source_write": "allowed",
+        "scratch_write": "allowed",
+        "outside_read": "ENOENT",
+        "outside_write": "ENOENT",
+        "credential_read": "ENOENT",
+        "symlink_read": "ENOENT",
+        "symlink_write": "ENOENT",
+        "direct_tcp": "EPERM",
+        "mailbox_report": true
+      },
+      "stderr": ""
+    },
+    {
+      "role": "reviewer",
+      "observed": {
+        "source_read": "allowed",
+        "source_write": "EROFS",
+        "scratch_write": "allowed",
+        "outside_read": "ENOENT",
+        "outside_write": "ENOENT",
+        "credential_read": "ENOENT",
+        "symlink_read": "ENOENT",
+        "symlink_write": "ENOENT",
+        "direct_tcp": "EPERM",
+        "mailbox_report": true
+      },
+      "stderr": ""
+    }
+  ],
+  "passed": true
+}

@@ -2,7 +2,7 @@ import '../helpers/mock-node-pty.ts'
 
 import { describe, expect, test } from 'vitest'
 
-import { createAgentRuntime } from '../../src/server/agent-runtime.js'
+import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
 import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {

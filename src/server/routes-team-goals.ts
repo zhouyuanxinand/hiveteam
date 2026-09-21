@@ -35,6 +35,7 @@ export const teamGoalRoutes: RouteDefinition[] = [
       throw new BadRequestError('Invalid status; expected progress, done, blocked, or failed')
     }
     const agent = authenticateCliAgent({
+      request,
       fromAgentId,
       getAgent: store.getAgent,
       token: typeof body.token === 'string' ? body.token : undefined,

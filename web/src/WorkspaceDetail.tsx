@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
 import { WorkspaceDeliveryPanel } from './activity/WorkspaceDeliveryPanel.js'
+import type { OrchestratorStartFailure } from './agent-start-error.js'
 import {
   getWorkspaceRecoverySettings,
   isWorkspaceShellRun,
@@ -29,6 +30,7 @@ import type { WorkerActions } from './worker/useWorkerActions.js'
 import { useWorkerComposer } from './worker/useWorkerComposer.js'
 import { WelcomePane } from './worker/WelcomePane.js'
 import { WorkersPane } from './worker/WorkersPane.js'
+import { WorkspaceOnboardingPanel } from './workspace/WorkspaceOnboardingPanel.js'
 
 let addWorkerDialogModulePromise: Promise<typeof import('./worker/AddWorkerDialog.js')> | null =
   null
@@ -49,6 +51,7 @@ const WorkspacePlanPanel = lazy(() =>
 )
 
 type WorkspaceDetailProps = {
+  onOpenSkills?: (() => void) | undefined
   onCreateWorker: WorkerActions['createWorker']
   onDeleteWorker: (workerId: string) => Promise<void>
   onDeleteWorkspace: (workspace: WorkspaceSummary) => Promise<void>
@@ -61,7 +64,7 @@ type WorkspaceDetailProps = {
   onWorkersChanged?: ((workspaceId: string, workers: TeamListItem[]) => void) | undefined
   onTryDemo?: () => void
   welcomeDisabledReason?: string | undefined
-  orchestratorAutostartError: string | null
+  orchestratorAutostartError: OrchestratorStartFailure | null
   orchestratorAutostartRunId: string | null
   terminalRuns: TerminalRunSummary[]
   workers: TeamListItem[]
@@ -69,6 +72,7 @@ type WorkspaceDetailProps = {
 }
 
 export const WorkspaceDetail = ({
+  onOpenSkills,
   onCreateWorker,
   onDeleteWorker,
   onDeleteWorkspace,
@@ -89,7 +93,7 @@ export const WorkspaceDetail = ({
 }: WorkspaceDetailProps) => {
   const [planWorkspaceId, setPlanWorkspaceId] = useState<string | null>(null)
   const plansOpen = planWorkspaceId === workspace?.id
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [activeWorkerId, setActiveWorkerId] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [deleteWorkerError, setDeleteWorkerError] = useState<string | null>(null)
@@ -335,12 +339,46 @@ export const WorkspaceDetail = ({
           />
         </Suspense>
       ) : null}
-      <WorkspaceDeliveryPanel key={workspace.id} workspaceId={workspace.id} workers={workers} />
+      <nav
+        className="workspace-section-links"
+        aria-label={language === 'zh' ? '工作区区域' : 'Workspace sections'}
+      >
+        {(['terminal', 'members', 'delivery'] as const).map((section) => (
+          <button
+            key={section}
+            type="button"
+            onClick={() => {
+              const element = document.getElementById(`${section}-${workspace.id}`)
+              element?.scrollIntoView({ block: 'nearest' })
+              element?.focus()
+            }}
+          >
+            {language === 'zh'
+              ? { terminal: '终端', members: '成员', delivery: '交付' }[section]
+              : { terminal: 'Terminal', members: 'Members', delivery: 'Delivery' }[section]}
+          </button>
+        ))}
+      </nav>
+      <div id={`delivery-${workspace.id}`} tabIndex={-1} className="workspace-delivery-region">
+        <WorkspaceDeliveryPanel key={workspace.id} workspaceId={workspace.id} workers={workers} />
+      </div>
+      <WorkspaceOnboardingPanel
+        key={`onboarding-${workspace.id}`}
+        workspaceId={workspace.id}
+        onOpenSkills={onOpenSkills}
+        onFirstTask={() => {
+          const pane = document.getElementById(`terminal-${workspace.id}`)
+          pane?.scrollIntoView({ block: 'nearest' })
+          pane?.focus()
+        }}
+      />
       <div ref={split.containerRef} className="workspace-pane-split relative flex min-h-0 flex-1">
         <div
           className="orchestrator-pane-shell flex min-w-[480px] shrink-0 flex-col"
           style={{ width: orchWidth }}
           data-testid="orchestrator-pane-shell"
+          id={`terminal-${workspace.id}`}
+          tabIndex={-1}
         >
           <div className="min-h-0 flex-1">
             <OrchestratorPane
@@ -380,7 +418,11 @@ export const WorkspaceDetail = ({
           onPointerDown={split.beginDrag}
           onKeyDown={split.onKeyDown}
         />
-        <div className="workers-pane-shell relative flex min-w-0 flex-1 flex-col">
+        <div
+          id={`members-${workspace.id}`}
+          tabIndex={-1}
+          className="workers-pane-shell relative flex min-w-0 flex-1 flex-col"
+        >
           <WorkersPane
             autoResumeBusy={autoResumeBusy}
             autoResumeOnRestart={autoResumeOnRestart}

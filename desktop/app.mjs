@@ -8,6 +8,8 @@ import { promisify } from 'node:util'
 
 import { BrowserWindow, ipcMain, session } from 'electron'
 
+import { createUiLaunchUrl } from '../scripts/ui-launcher.mjs'
+
 import { createDesktopServiceEnvironment } from './service-environment.mjs'
 
 const PROBE_DROPPED_FOLDER_CHANNEL = 'hive-desktop:probe-dropped-folder'
@@ -155,7 +157,7 @@ const spawnNode = (nodeExecutable, args, environment, label, readyText) => {
   const child = spawn(nodeExecutable, args, {
     cwd: projectRoot,
     env: environment,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   })
   pipeChildOutput(child, label)
@@ -254,6 +256,7 @@ const launchLocalServices = async ({ dataDir, randomPorts = false } = {}) => {
   return {
     appOrigin,
     bridgeToken,
+    createLaunchUrl: () => createUiLaunchUrl(runtimeProcess.child, appOrigin),
     onUnexpectedExit: (handler) => {
       unexpectedExitHandler = handler
       if (unexpectedExit) queueMicrotask(() => handler(unexpectedExit))
@@ -333,6 +336,7 @@ export const launchHiveWebHost = async ({ dataDir, randomPorts = false } = {}) =
 
   return {
     appOrigin: services.appOrigin,
+    createLaunchUrl: services.createLaunchUrl,
     runtimeOrigin: services.runtimeOrigin,
     onUnexpectedExit: services.onUnexpectedExit,
     close: async () => {
@@ -359,7 +363,7 @@ export const launchHiveDesktop = async ({ dataDir, randomPorts = false, show = t
       })
     })
     installDesktopBridge({ ...services, window })
-    await window.loadURL(`${services.appOrigin}/`)
+    await window.loadURL(await services.createLaunchUrl())
   } catch (error) {
     ipcMain.removeHandler(PROBE_DROPPED_FOLDER_CHANNEL)
     if (window && !window.isDestroyed()) window.destroy()
@@ -372,6 +376,7 @@ export const launchHiveDesktop = async ({ dataDir, randomPorts = false, show = t
     appOrigin: services.appOrigin,
     runtimeOrigin: services.runtimeOrigin,
     window,
+    createLaunchUrl: services.createLaunchUrl,
     close: async () => {
       if (closed) return
       closed = true

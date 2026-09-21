@@ -82,7 +82,7 @@ describe('workspace notifications', () => {
     expect(screen.queryByTestId('toast')).toBeNull()
   })
 
-  test('notifies when a working member reports back to idle', () => {
+  test('a pending-count decrease does not claim a report was received', () => {
     const view = renderNotifications([member({ status: 'working', pendingTaskCount: 1 })])
 
     view.rerender(
@@ -98,6 +98,7 @@ describe('workspace notifications', () => {
       </ToastProvider>
     )
 
-    expect(screen.getByTestId('toast')).toHaveTextContent('ember-check-23 reported')
+    expect(screen.getByTestId('toast')).toHaveTextContent('ember-check-23: pending tasks updated')
+    expect(screen.getByTestId('toast')).not.toHaveTextContent('reported')
   })
 })

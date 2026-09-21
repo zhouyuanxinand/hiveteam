@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers = new Set<Awaited<ReturnType<typeof startTestServer>>>()

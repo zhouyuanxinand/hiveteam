@@ -44,6 +44,55 @@ const failResponse = () => Promise.resolve({ ok: false } as Response)
 const rejectingFetch = () => Promise.reject(new Error('connection refused'))
 
 describe('RuntimeOfflinePage', () => {
+  test.each([
+    'poll',
+    'retry',
+  ])('a pending session %s cannot reload after leaving the recovery page', async (source) => {
+    vi.useFakeTimers()
+    let completeProbe!: (response: Response) => void
+    const response = new Promise<Response>((resolve) => {
+      completeProbe = resolve
+    })
+    stubFetch(() => response)
+    const { unmount } = render(<RuntimeOfflinePage sessionRequired />)
+    await act(async () => {
+      if (source === 'poll') await vi.advanceTimersByTimeAsync(3000)
+      else fireEvent.click(screen.getByTestId('runtime-offline-retry'))
+    })
+    unmount()
+    await act(async () => {
+      completeProbe(new Response('{}'))
+      await response
+    })
+    expect(reloadSpy).not.toHaveBeenCalled()
+  })
+
+  test('session recovery polls authorization and reloads only after the launcher restores it', async () => {
+    vi.useFakeTimers()
+    let authenticated = false
+    const requestedUrls: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      requestedUrls.push(String(input))
+      expect(init?.method ?? 'GET').toBe('GET')
+      return new Response('{}', { status: authenticated ? 200 : 403 })
+    })
+    render(<RuntimeOfflinePage sessionRequired />)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000)
+    })
+    expect(requestedUrls).toEqual(['/api/ui/session', '/api/ui/session'])
+    expect(reloadSpy).not.toHaveBeenCalled()
+    expect(screen.getByTestId('ui-session-required-page')).toHaveTextContent('launcher')
+
+    authenticated = true
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
+    expect(requestedUrls).toEqual(['/api/ui/session', '/api/ui/session', '/api/ui/session'])
+    expect(reloadSpy).toHaveBeenCalledTimes(1)
+  })
+
   test('renders the offline title, body, retry button, and auto-reconnect hint', () => {
     stubFetch(failResponse)
     render(<RuntimeOfflinePage />)

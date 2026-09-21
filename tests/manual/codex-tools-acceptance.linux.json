@@ -1,0 +1,170 @@
+{
+  "recorded_at": "2026-09-19T15:20:53.715403+00:00",
+  "cli_version": "codex-cli 0.155.1",
+  "binary_sha256": "0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761",
+  "platform": "linux",
+  "fixture_path": "/var/tmp/hive-codex-tools-fd1lvsgt",
+  "profile_source": "src/server/codex-execution-profile.ts",
+  "profile_sha256": "0d564378d96c19ee6bda1d6dcd5c408c4874d0b169ea59be87e598147ae06ee7",
+  "git_view_source": "src/server/execution-git-view.ts",
+  "git_view_sha256": "9ae6983bd5cc6f9165cb96a69e405489386f770f6c51482d0e9d50306c406c7f",
+  "scope": "Actual CLI Responses tool execution and native session resume; synthetic loopback provider only.",
+  "checkout_kind": "linked_git_worktree",
+  "fixture_overrides": ["synthetic model/provider/env_key", "request compression disabled"],
+  "team_transport": "Real dist/bin/team -> production createTeamMailboxBroker -> synthetic HTTP endpoint validating bound host token/agent/workspace. SQLite semantics are covered separately by runtime integration tests.",
+  "runs": [
+    {
+      "role": "coder",
+      "resumed": false,
+      "exit_code": 0,
+      "thread_id": "01a0ba41-9088-73a0-b38c-b5e768c02c9d",
+      "observed": {
+        "source_read": "allowed",
+        "source_write": "allowed",
+        "scratch_write": "allowed",
+        "outside_read": "ENOENT",
+        "outside_write": "ENOENT",
+        "credential_read": "EACCES",
+        "credential_write": "EACCES",
+        "project_secret_read": "EACCES",
+        "symlink_read": "ENOENT",
+        "symlink_write": "ENOENT",
+        "mailbox_response_write": "EROFS",
+        "private_parent_environment_visible": false,
+        "model_key_visible": false,
+        "supervisor_environment_visible": false,
+        "parent_proc_secret_visible": false,
+        "parent_proc_read": "ENOENT",
+        "hive_workspace": "synthetic-workspace",
+        "team_token_is_unprivileged": true,
+        "team_report": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "team_status": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "git_log": {
+          "exit_code": 0,
+          "stdout": "97cbcc0 Synthetic initial commit",
+          "stderr": ""
+        },
+        "git_diff": {
+          "exit_code": 0,
+          "stdout": "diff --git a/source.txt b/source.txt\nindex d816c58..fd68fa6 100644\n--- a/source.txt\n+++ b/source.txt\n@@ -1 +1 @@\n-synthetic source\n+synthetic source changed",
+          "stderr": ""
+        },
+        "direct_tcp": "EPERM",
+        "mailbox_ack": true
+      },
+      "team_http_requests": [
+        {
+          "route": "/api/team/report",
+          "result": "synthetic coder report",
+          "agent": "synthetic-agent",
+          "workspace": "synthetic-workspace",
+          "host_token_verified": true
+        },
+        {
+          "route": "/api/team/status",
+          "result": "synthetic coder status",
+          "agent": "synthetic-agent",
+          "workspace": "synthetic-workspace",
+          "host_token_verified": true
+        }
+      ],
+      "advertised_tools": ["apply_patch", "exec_command", "request_user_input", "write_stdin"],
+      "direct_apply_patch": {
+        "source": "allowed",
+        "scratch": "allowed",
+        "outside": "denied",
+        "cli_home": "denied"
+      },
+      "model_auth_received_but_tool_environment_hidden": true,
+      "untrusted_project_config_ignored": true
+    },
+    {
+      "role": "reviewer",
+      "resumed": true,
+      "exit_code": 0,
+      "thread_id": "01a0ba41-9088-73a0-b38c-b5e768c02c9d",
+      "observed": {
+        "source_read": "allowed",
+        "source_write": "EROFS",
+        "scratch_write": "allowed",
+        "outside_read": "ENOENT",
+        "outside_write": "ENOENT",
+        "credential_read": "EACCES",
+        "credential_write": "EACCES",
+        "project_secret_read": "EACCES",
+        "symlink_read": "ENOENT",
+        "symlink_write": "ENOENT",
+        "mailbox_response_write": "EROFS",
+        "private_parent_environment_visible": false,
+        "model_key_visible": false,
+        "supervisor_environment_visible": false,
+        "parent_proc_secret_visible": false,
+        "parent_proc_read": "ENOENT",
+        "hive_workspace": "synthetic-workspace",
+        "team_token_is_unprivileged": true,
+        "team_report": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "team_status": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "git_log": {
+          "exit_code": 0,
+          "stdout": "97cbcc0 Synthetic initial commit",
+          "stderr": ""
+        },
+        "git_diff": {
+          "exit_code": 0,
+          "stdout": "diff --git a/source.txt b/source.txt\nindex d816c58..fd68fa6 100644\n--- a/source.txt\n+++ b/source.txt\n@@ -1 +1 @@\n-synthetic source\n+synthetic source changed",
+          "stderr": ""
+        },
+        "direct_tcp": "EPERM",
+        "mailbox_ack": true
+      },
+      "team_http_requests": [
+        {
+          "route": "/api/team/report",
+          "result": "synthetic reviewer report",
+          "agent": "synthetic-agent",
+          "workspace": "synthetic-workspace",
+          "host_token_verified": true
+        },
+        {
+          "route": "/api/team/status",
+          "result": "synthetic reviewer status",
+          "agent": "synthetic-agent",
+          "workspace": "synthetic-workspace",
+          "host_token_verified": true
+        }
+      ],
+      "advertised_tools": ["apply_patch", "exec_command", "request_user_input", "write_stdin"],
+      "direct_apply_patch": {
+        "source": "denied",
+        "scratch": "allowed",
+        "outside": "denied",
+        "cli_home": "denied"
+      },
+      "model_auth_received_but_tool_environment_hidden": true,
+      "untrusted_project_config_ignored": true
+    }
+  ],
+  "passed": true,
+  "machine_preflight": {
+    "passed": true,
+    "role": "reviewer",
+    "entry_point": "verifyCodexSandbox",
+    "recorded_at": "2026-09-19T15:26:36.130610+00:00"
+  }
+}

@@ -1,5 +1,6 @@
 import { isClarificationSkill } from '../shared/clarification.js'
 import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
+import type { DispatchProgress, DispatchTimeouts } from '../shared/message-delivery.js'
 import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
@@ -7,7 +8,11 @@ import type { DispatchRecord } from './dispatch-ledger-store.js'
 import type { DispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import { BadRequestError, ConflictError, HttpError, PtyInactiveError } from './http-errors.js'
 import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
+import { isInteractiveAgentCommand } from './post-start-input-writer.js'
+import { RemotePermissionError } from './remote-permission-store.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
+import { ResourceLimitError } from './resource-budget-store.js'
+import type { ResourceStartQueue } from './resource-start-queue.js'
 import {
   createFeedbackMessage,
   createReportMessage,
@@ -15,9 +20,14 @@ import {
   createStatusMessage,
   createUserInputMessage,
 } from './runtime-message-builders.js'
+import type { TeamDeliveryRuntime } from './team-delivery-runtime.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
 export interface TeamOperationsInput {
+  delivery: TeamDeliveryRuntime
+  resourceQueue?: ResourceStartQueue
+  captureDispatchAuthorization?: (dispatchId: string) => void
+  withDispatchAuthorization?: <T>(dispatchId: string, action: () => T) => T
   assertWorkspaceWritable?: (workspaceId: string) => void
   agentRuntime: AgentRuntime
   /**
@@ -44,6 +54,7 @@ export interface TeamOperationsInput {
   findOpenDispatchById: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   /** Required for the review-feedback path; optional for lightweight callers. */
   getDispatchById?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  isWorkflowDispatch?: (dispatchId: string) => boolean
   getDispatchActivation: DispatchSkillActivationStore['get']
   clarificationForWorker: DispatchSkillActivationStore['clarificationForWorker']
   listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
@@ -62,6 +73,7 @@ export interface TeamOperationsInput {
     workspaceId: string
   }) => DispatchRecord | undefined
   markDispatchSubmitted: (dispatchId: string) => void
+  onDispatchSubmitted?: (dispatch: DispatchRecord) => void
   /** Optional for lightweight callers that do not persist delivery failures. */
   markDispatchDeliveryFailed?: (dispatchId: string, error: string) => void
   reportOutbox?: ReportOutboxStore
@@ -79,6 +91,9 @@ export interface TeamOperationsInput {
 }
 
 export interface DispatchTaskInput {
+  /** Internal transaction hook: attach durable workflow ownership before any delivery. */
+  onCreated?: (dispatch: DispatchRecord) => void
+  timeouts?: DispatchTimeouts
   fromAgentId?: string
   hivePort?: string
   skillName?: string
@@ -94,6 +109,8 @@ export interface ReportTaskInput {
 }
 
 export interface StatusTaskInput {
+  dispatchId?: string
+  progressState?: DispatchProgress | 'accepted' | 'cancelled'
   artifacts?: string[]
   requireActiveRun?: boolean
   text?: string
@@ -105,6 +122,8 @@ export interface CancelTaskInput {
 }
 
 export interface ReportTaskResult {
+  duplicate?: boolean
+  lateReportId?: string
   deliveryState?: ReportDeliveryState
   dispatch: DispatchRecord | null
   forwardError: string | null
@@ -117,6 +136,9 @@ const reportForwardErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
 
 export const createTeamOperations = ({
+  delivery,
+  resourceQueue,
+  captureDispatchAuthorization,
   assertWorkspaceWritable,
   agentRuntime,
   captureBaseHeadSha,
@@ -127,13 +149,13 @@ export const createTeamOperations = ({
   findOpenDispatch,
   findOpenDispatchById,
   getDispatchById,
+  isWorkflowDispatch,
   getDispatchActivation,
   clarificationForWorker,
   listOpenWorkspaceDispatches = () => [],
   insertMessage,
   markDispatchCancelled,
   markDispatchReportedByWorker,
-  markDispatchSubmitted,
   markDispatchDeliveryFailed,
   reportOutbox,
   resolveDispatchActivation,
@@ -143,10 +165,13 @@ export const createTeamOperations = ({
   workspaceStore,
 }: TeamOperationsInput) => {
   const runMutation = runDataMutation ?? ((mutation: () => void) => mutation())
-  const drainingReportOutboxIds = new Set<number>()
   const pendingDispatches = new Set<Promise<DispatchRecord>>()
-  const pendingReportDeliveries = new Set<Promise<void>>()
+  const deliveringDispatches = new Map<string, Promise<void>>()
   let closing = false
+  let startWorker = (workspaceId: string, workerId: string, hivePort: string) =>
+    agentRuntime.startAgent(workspaceStore.getWorkspaceSnapshot(workspaceId).summary, workerId, {
+      hivePort,
+    })
 
   const trackDispatch = (pending: Promise<DispatchRecord>) => {
     pendingDispatches.add(pending)
@@ -157,100 +182,15 @@ export const createTeamOperations = ({
     return pending
   }
 
-  const trackReportDelivery = (pending: Promise<void>) => {
-    pendingReportDeliveries.add(pending)
-    void pending.then(
-      () => pendingReportDeliveries.delete(pending),
-      () => pendingReportDeliveries.delete(pending)
-    )
-    return pending
-  }
-
   const close = async () => {
     closing = true
-    while (pendingDispatches.size > 0 || pendingReportDeliveries.size > 0) {
-      await Promise.allSettled([...pendingDispatches, ...pendingReportDeliveries])
+    await delivery.close()
+    while (pendingDispatches.size > 0 || deliveringDispatches.size > 0) {
+      await Promise.allSettled([...pendingDispatches, ...deliveringDispatches.values()])
     }
   }
 
-  /**
-   * Leave entries pending until delivery is acknowledged. Codex requires a
-   * tagged native user-message receipt, not just a successful PTY write.
-   * A stopped Orchestrator is normal here: its next `team
-   * list` call will retry the same durable entry.
-   *
-   * Failed entries retry with exponential backoff so a persistently
-   * undeliverable report (e.g. an Orchestrator TUI that keeps rejecting
-   * pastes) does not get retried on every drain trigger. The first retry
-   * stays immediate so a transient paste race recovers at the next drain
-   * event; backoff applies from the second failure on. Entries never
-   * expire — backoff spaces retries out, it does not give up.
-   */
-  const reportDeliveryBackoffMs = (attemptCount: number) =>
-    attemptCount <= 1 ? 0 : Math.min(30_000 * 2 ** (attemptCount - 1), 30 * 60_000)
-
-  const drainReportOutbox = (
-    workspaceId: string,
-    targetAgentId = `${workspaceId}:orchestrator`
-  ) => {
-    // Runtime shutdown must not start a fresh write after it has begun waiting
-    // for already-started deliveries. Existing deliveries stay tracked below
-    // and finish before RuntimeStore closes SQLite.
-    if (closing) return { attempted: 0, firstSyncError: null }
-    if (!reportOutbox || !agentRuntime.getActiveRunByAgentId(workspaceId, targetAgentId)) {
-      return { attempted: 0, firstSyncError: null }
-    }
-
-    const now = Date.now()
-    let attempted = 0
-    let firstSyncError: string | null = null
-    // A terminal has one composer. Later reports must not merge with a paste
-    // whose receipt is still pending, even when multiple workers finish at once.
-    for (const entry of reportOutbox.listPending(workspaceId, targetAgentId).slice(0, 1)) {
-      if (drainingReportOutboxIds.has(entry.id)) continue
-      if (
-        entry.lastDeliveryAttemptAt !== null &&
-        now - entry.lastDeliveryAttemptAt < reportDeliveryBackoffMs(entry.deliveryAttemptCount)
-      ) {
-        continue
-      }
-      drainingReportOutboxIds.add(entry.id)
-      attempted += 1
-      try {
-        let delivered = false
-        reportOutbox.markDeliveryAttempt(entry.id)
-        const delivery = agentRuntime
-          .deliverSystemMessageToAgent(workspaceId, targetAgentId, entry.payload, {
-            requireActiveRun: true,
-            receipt: {
-              id: entry.receiptId,
-              checkpoint: entry.checkpoint,
-              save: (checkpoint) =>
-                reportOutbox.saveCheckpoint(entry.id, entry.receiptId, checkpoint),
-            },
-          })
-          .then(() => {
-            reportOutbox.markDelivered(entry.id)
-            delivered = true
-          })
-          .catch((error: unknown) => {
-            reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
-            console.error('[hive] swallowed:teamReport.outboxDrain', error)
-          })
-          .finally(() => {
-            drainingReportOutboxIds.delete(entry.id)
-            if (delivered) drainReportOutbox(workspaceId, targetAgentId)
-          })
-        void trackReportDelivery(delivery)
-      } catch (error) {
-        reportOutbox.markDeliveryFailed(entry.id, reportForwardErrorMessage(error))
-        drainingReportOutboxIds.delete(entry.id)
-        firstSyncError ??= reportForwardErrorMessage(error)
-        console.error('[hive] swallowed:teamReport.outboxDrain', error)
-      }
-    }
-    return { attempted, firstSyncError }
-  }
+  const drainReportOutbox = delivery.drainReports
 
   const ensureWorkerRun = async (workspaceId: string, workerId: string, hivePort: string) => {
     if (agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) {
@@ -271,11 +211,7 @@ export const createTeamOperations = ({
 
     workspaceStore.markAgentStarted(workspaceId, workerId)
     try {
-      const run = await agentRuntime.startAgent(
-        workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
-        workerId,
-        { hivePort }
-      )
+      const run = await startWorker(workspaceId, workerId, hivePort)
       if (run.status === 'error') {
         workspaceStore.markAgentStopped(workspaceId, workerId)
         throw new ConflictError(`${config.command} failed to start`)
@@ -283,11 +219,34 @@ export const createTeamOperations = ({
       return true
     } catch (error) {
       workspaceStore.markAgentStopped(workspaceId, workerId)
+      if (error instanceof ResourceLimitError && resourceQueue) {
+        resourceQueue.enqueue({
+          workspaceId,
+          agentId: workerId,
+          executionKey: `agent:${workerId}`,
+          kind: 'worker',
+          source: 'dispatch',
+          payload: {},
+          reason: error.reason,
+        })
+        return false
+      }
       throw error
     }
   }
 
-  const replayQueuedDispatches = (workspaceId: string, workerId: string) => {
+  const deliverDispatch = (dispatch: DispatchRecord) => {
+    const existing = deliveringDispatches.get(dispatch.id)
+    if (existing) return existing
+    const pending = delivery
+      .deliver(dispatch.id)
+      .then(() => undefined)
+      .finally(() => deliveringDispatches.delete(dispatch.id))
+    deliveringDispatches.set(dispatch.id, pending)
+    return pending
+  }
+
+  const replayQueuedDispatches = async (workspaceId: string, workerId: string) => {
     // Runtime shutdown may race the post-start microtask that normally replays
     // queued work. Do not touch the stores after the shutdown boundary.
     if (closing) return 0
@@ -295,8 +254,6 @@ export const createTeamOperations = ({
     if (workspaceStore.isAgentManuallyStopped?.(workspaceId, workerId)) return 0
     if (!agentRuntime.getActiveRunByAgentId(workspaceId, workerId)) return 0
 
-    const worker = workspaceStore.getWorker(workspaceId, workerId)
-    const language = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
     let replayed = 0
     for (const dispatch of listOpenWorkspaceDispatches(workspaceId)) {
       if (
@@ -307,20 +264,7 @@ export const createTeamOperations = ({
       }
 
       try {
-        const sender = dispatch.fromAgentId
-          ? workspaceStore.getAgent(workspaceId, dispatch.fromAgentId)
-          : null
-        agentRuntime.writeSendPrompt(
-          workspaceId,
-          workerId,
-          dispatch.id,
-          sender?.name ?? 'Hive',
-          worker.description,
-          dispatch.text,
-          language,
-          getDispatchActivation(dispatch.id) ?? undefined
-        )
-        markDispatchSubmitted(dispatch.id)
+        await deliverDispatch(dispatch)
         replayed += 1
       } catch (error) {
         markDispatchDeliveryFailed?.(dispatch.id, reportForwardErrorMessage(error))
@@ -330,6 +274,7 @@ export const createTeamOperations = ({
           workerId,
           workspaceId,
         })
+        if (error instanceof RemotePermissionError) continue
         break
       }
     }
@@ -373,6 +318,7 @@ export const createTeamOperations = ({
         toAgentId: workerId,
         workspaceId,
       }
+      if (input.onCreated && baseHeadCapture) dispatchInput.baseHeadSha = await baseHeadCapture
       if (input.fromAgentId) dispatchInput.fromAgentId = input.fromAgentId
       let createdDispatch: DispatchRecord | undefined
       runMutation(() => {
@@ -389,39 +335,48 @@ export const createTeamOperations = ({
             )
         }
         const candidate = createDispatch(dispatchInput)
+        input.onCreated?.(candidate)
+        captureDispatchAuthorization?.(candidate.id)
+        if (input.timeouts)
+          delivery.health.configure(
+            workspaceId,
+            input.timeouts,
+            input.fromAgentId ?? 'local_user',
+            candidate.id
+          )
         if (skillActivation) createDispatchActivation(candidate.id, skillActivation)
         createdDispatch = candidate
       })
       if (!createdDispatch) throw new Error('Dispatch persistence failed')
       dispatch = createdDispatch
+      if (!input.fromAgentId) workspaceStore.markTaskDispatched(workspaceId, workerId)
 
       if (input.fromAgentId) {
-        const sender = workspaceStore.getAgent(workspaceId, input.fromAgentId)
+        workspaceStore.getAgent(workspaceId, input.fromAgentId)
         const workerStarted = await ensureWorkerRun(workspaceId, workerId, input.hivePort ?? '')
-        const worker = workspaceStore.getWorker(workspaceId, workerId)
-        const language = workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh'
+        workspaceStore.getWorker(workspaceId, workerId)
+        if (findOpenDispatch(workspaceId, workerId, dispatch.id))
+          workspaceStore.markTaskDispatched(workspaceId, workerId)
         if (workerStarted) {
           // A start-triggered replay can run in the microtask immediately after
           // ensureWorkerRun resolves. If it already accepted this dispatch,
           // don't inject the same task a second time.
           const replayedDispatch = findOpenDispatch(workspaceId, workerId, dispatch.id)
           if (replayedDispatch?.status !== 'submitted') {
-            markDispatchSubmitted(dispatch.id)
-            agentRuntime.writeSendPrompt(
-              workspaceId,
-              workerId,
-              dispatch.id,
-              sender.name,
-              worker.description,
-              text,
-              language,
-              skillActivation
-            )
+            const delivering = dispatch
+            const delivery = deliverDispatch(delivering)
+            const config = agentRuntime.peekAgentLaunchConfig(workspaceId, workerId)
+            if (!isInteractiveAgentCommand(config?.interactiveCommand ?? config?.command ?? ''))
+              await delivery
+            else
+              void delivery.catch((error: unknown) => {
+                if (findOpenDispatch(workspaceId, workerId, delivering.id))
+                  markDispatchDeliveryFailed?.(delivering.id, reportForwardErrorMessage(error))
+              })
           }
         }
       }
 
-      workspaceStore.markTaskDispatched(workspaceId, workerId)
       if (baseHeadCapture) {
         // The baseline is enrichment on top of an already-committed dispatch.
         // A store closing mid-capture must not surface as a delivery failure.
@@ -473,6 +428,9 @@ export const createTeamOperations = ({
   }
 
   return {
+    setAgentStarter(start: typeof startWorker) {
+      startWorker = start
+    },
     close,
     cancelTask(workspaceId: string, dispatchId: string, input: CancelTaskInput) {
       workspaceStore.getAgent(workspaceId, input.fromAgentId)
@@ -480,25 +438,23 @@ export const createTeamOperations = ({
       if (!openDispatch) {
         throw new ConflictError(`No open dispatch: ${dispatchId}`)
       }
-      const dispatch = markDispatchCancelled({
-        dispatchId,
-        reason: input.reason,
-        workspaceId,
+      let dispatch: DispatchRecord | undefined
+      runMutation(() => {
+        dispatch = markDispatchCancelled({ dispatchId, reason: input.reason, workspaceId })
+        if (dispatch)
+          delivery.prepareCancellation(workspaceId, dispatch.id, dispatch.toAgentId, input.reason)
       })
       if (!dispatch) {
         throw new ConflictError(`No open dispatch: ${dispatchId}`)
       }
       workspaceStore.markTaskCancelled(workspaceId, dispatch.toAgentId)
-      let forwardError: string | null = null
-      let forwarded = false
-      try {
-        agentRuntime.writeCancelPrompt(workspaceId, dispatch.toAgentId, dispatch.id, input.reason)
-        forwarded = true
-      } catch (error) {
-        forwardError = reportForwardErrorMessage(error)
-        console.error('[hive] swallowed:teamCancel.forward', error)
+      if (!findOpenDispatch(workspaceId, dispatch.toAgentId)) {
+        for (const entry of resourceQueue?.list(workspaceId) ?? [])
+          if (entry.agent_id === dispatch.toAgentId && entry.source === 'dispatch')
+            resourceQueue?.cancel(entry.id, { pauseAgent: false })
       }
-      return { dispatch, forwardError, forwarded }
+      delivery.interrupt(dispatch.id)
+      return { dispatch, forwardError: null, forwarded: false }
     },
     dispatchTask,
     drainReportOutbox,
@@ -578,6 +534,31 @@ export const createTeamOperations = ({
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
       const isolated = !!clarificationForWorker(workspaceId, workerId)
+      if (input.progressState) {
+        if (!input.dispatchId)
+          throw new BadRequestError('dispatch_id is required for structured progress')
+        const current = getDispatchById?.(workspaceId, input.dispatchId)
+        if (!current || current.toAgentId !== workerId)
+          throw new HttpError(404, 'Dispatch not found for this worker')
+        if (input.progressState === 'cancelled') {
+          delivery.health.confirmCancellation(
+            workspaceId,
+            current.id,
+            workerId,
+            'worker_ack',
+            workerId
+          )
+          for (const entry of delivery.records.list(workspaceId, workerId)) {
+            if (entry.dispatch_id === current.id && entry.kind === 'cancel')
+              delivery.records.confirm(entry.id, 'worker_ack')
+          }
+        } else if (input.progressState === 'accepted') {
+          if (current.status === 'cancelled' || current.status === 'reported')
+            throw new ConflictError('Dispatch is closed')
+          delivery.acknowledge(workspaceId, current.id, workerId)
+        } else delivery.health.progress(workspaceId, current.id, workerId, input.progressState)
+        delivery.wake()
+      }
       const messageHandle = insertMessage({
         ...createStatusMessage(workspaceId, workerId, text, artifacts),
         ...(isolated ? { toAgentId: workerId } : {}),
@@ -587,6 +568,14 @@ export const createTeamOperations = ({
         let forwarded = false
         if (input.requireActiveRun === true && !isolated) {
           try {
+            if (
+              delivery.records
+                .list(workspaceId, `${workspaceId}:orchestrator`)
+                .some((entry) => entry.state !== 'confirmed' && entry.state !== 'resolved')
+            )
+              throw new ConflictError(
+                'Status recorded. Finish the pending delivery or review the Orchestrator composer before further automatic input.'
+              )
             agentRuntime.writeStatusPrompt(workspaceId, worker.name, workerId, text, artifacts, {
               requireActiveRun: input.requireActiveRun,
             })
@@ -611,7 +600,36 @@ export const createTeamOperations = ({
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
       const openDispatch = findOpenDispatch(workspaceId, workerId, input.dispatchId)
+      if (!input.dispatchId && openDispatch && isWorkflowDispatch?.(openDispatch.id))
+        throw new BadRequestError(
+          'dispatch_id is required for a workflow attempt. Use the id supplied with the current task.'
+        )
       if (!openDispatch && input.dispatchId) {
+        const existing = getDispatchById?.(workspaceId, input.dispatchId)
+        if (existing?.status === 'cancelled' && existing.toAgentId === workerId) {
+          const lateReportId = delivery.health.lateReport(workspaceId, existing.id, workerId, {
+            text,
+            artifacts,
+            outcome: input.outcome ?? null,
+          })
+          return { dispatch: null, forwarded: false, forwardError: null, lateReportId }
+        }
+        if (
+          existing?.status === 'reported' &&
+          existing.toAgentId === workerId &&
+          existing.reportText === text &&
+          JSON.stringify(existing.artifacts) === JSON.stringify(artifacts) &&
+          existing.reportOutcome === (input.outcome ?? null)
+        ) {
+          delivery.wake()
+          return {
+            duplicate: true,
+            dispatch: existing,
+            forwarded: false,
+            forwardError: null,
+            deliveryState: 'queued' as const,
+          }
+        }
         throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
       }
       if (!openDispatch) {
@@ -664,6 +682,8 @@ export const createTeamOperations = ({
             throw new ConflictError(`No open dispatch for worker: ${worker.name}`)
           }
           dispatch = nextDispatch
+          delivery.records.confirm(nextDispatch.id, 'worker_ack')
+          delivery.health.complete(nextDispatch.id)
         })
       } catch (error) {
         if (!runDataMutation) {
@@ -681,6 +701,8 @@ export const createTeamOperations = ({
 
       if (!dispatch) throw new Error('Report dispatch was not committed')
 
+      delivery.interrupt(dispatch.id)
+      delivery.wake()
       workspaceStore.markTaskReported(workspaceId, workerId)
       let deliveryState: ReportDeliveryState | undefined
       let forwardError: string | null = null

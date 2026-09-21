@@ -11,6 +11,7 @@ import type { TasksFileService } from './tasks-file.js'
 import type { VersionService } from './version-service.js'
 
 export interface SendTaskBody {
+  timeouts?: unknown
   hive_port?: string
   project_id: string
   skill_name?: string
@@ -37,6 +38,7 @@ export interface ReadSkillBody {
 }
 
 export interface ReportTaskBody {
+  progress_state?: unknown
   outcome?: unknown
   dispatch_id?: string
   project_id: string
@@ -56,6 +58,7 @@ export interface CancelTaskBody {
 }
 
 export interface CreateWorkspaceBody {
+  initialization_mode?: 'basic' | 'packs'
   /** Prompt/protocol language for this workspace. Defaults to Chinese. */
   language?: WorkspaceLanguage
   path: string

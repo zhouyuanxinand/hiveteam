@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -136,6 +136,7 @@ describe('tasks watcher websocket', () => {
       expect(JSON.parse(message)).toEqual({
         type: 'tasks-snapshot',
         content: '- [ ] initial\n',
+        version: expect.stringMatching(/^sha256:/u),
       })
       socket.close()
     } finally {

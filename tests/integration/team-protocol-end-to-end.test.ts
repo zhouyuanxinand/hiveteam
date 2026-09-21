@@ -4,9 +4,10 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { runHiveCommand } from '../../src/cli/hive.js'
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { runAuthorizedTestHiveCommand as runHiveCommand } from '../helpers/authorized-hive.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { normalizePtyText } from '../helpers/platform-cli.js'
+import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
 
@@ -71,11 +72,7 @@ describe('team protocol end to end', () => {
 
     try {
       const baseUrl = `http://127.0.0.1:${hive.port}`
-      const sessionResponse = await fetch(`${baseUrl}/api/ui/session`)
-      const cookie = sessionResponse.headers.get('set-cookie')
-      if (!cookie) {
-        throw new Error('Expected UI session cookie')
-      }
+      const cookie = await getUiCookie(baseUrl)
       const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
@@ -342,7 +339,18 @@ describe('team protocol end to end', () => {
           artifacts: ['src/auth.ts'],
         }),
       })
-      expect(cancelledReportResponse.status).toBe(409)
+      expect(cancelledReportResponse.status).toBe(202)
+      expect(await cancelledReportResponse.json()).toMatchObject({
+        dispatch_id: null,
+        late_report_id: expect.any(String),
+      })
+      expect(hive.store.getDispatch(workspace.id, sendBody.dispatch_id)).toMatchObject({
+        status: 'cancelled',
+        reportText: '方向变更，登录接口任务取消',
+      })
+      expect(hive.store.dispatchDelivery.health.events(sendBody.dispatch_id)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ event: 'late_report' })])
+      )
 
       await waitFor(async () => {
         const teamResponse = await fetch(`${baseUrl}/api/ui/workspaces/${workspace.id}/team`, {
@@ -364,6 +372,7 @@ describe('team protocol end to end', () => {
         )
       })
 
+      await hive.close()
       const runtimeStore = createRuntimeStore({ dataDir })
       const persistedDispatches = runtimeStore.listDispatches(workspace.id)
       expect(persistedDispatches).toEqual([

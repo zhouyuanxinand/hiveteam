@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-
 import type { TeamListItem, WorkerRole } from '../../../src/shared/types.js'
+import { useRunStopConfirmation } from '../activity/useRunStopConfirmation.js'
 import {
   createWorker,
   deleteWorker,
@@ -42,6 +42,7 @@ export interface CreateWorkerActionInput {
 }
 
 export interface WorkerActions {
+  stopConfirmation?: React.ReactNode
   createWorker: (input: CreateWorkerActionInput) => Promise<{
     error: string | null
     runId: string | null
@@ -58,6 +59,7 @@ export const useWorkerActions = ({
   onWorkerRunStopped,
   setWorkersByWorkspaceId,
 }: UseWorkerActionsInput): WorkerActions => {
+  const { confirmStop, stopConfirmation } = useRunStopConfirmation()
   const createWorkerAction = useCallback<WorkerActions['createWorker']>(
     async ({
       avatar,
@@ -151,6 +153,7 @@ export const useWorkerActions = ({
     async (runId) => {
       const workspaceId = activeWorkspaceId
       try {
+        if (!(await confirmStop(runId))) return { error: null }
         await stopAgentRun(runId)
         if (workspaceId) onWorkerRunStopped?.({ runId, workspaceId })
         return { error: null }
@@ -158,10 +161,11 @@ export const useWorkerActions = ({
         return { error: error instanceof Error ? error.message : String(error) }
       }
     },
-    [activeWorkspaceId, onWorkerRunStopped]
+    [activeWorkspaceId, onWorkerRunStopped, confirmStop]
   )
 
   return {
+    stopConfirmation,
     createWorker: createWorkerAction,
     deleteWorker: deleteWorkerAction,
     startWorker: startWorkerAction,

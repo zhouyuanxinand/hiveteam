@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceDeliveryPanel } from '../../web/src/activity/WorkspaceDeliveryPanel.js'
+import * as deliveryApi from '../../web/src/activity/workspace-delivery-api.js'
 import * as api from '../../web/src/api.js'
 import { I18nProvider } from '../../web/src/i18n.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
@@ -35,6 +36,26 @@ const workers = [
     pendingTaskCount: 0,
   },
 ]
+const mockPage = (get: () => api.DispatchSummary) =>
+  vi.spyOn(deliveryApi, 'getWorkspaceDelivery').mockImplementation(async () => {
+    const item = get()
+    const active = item.state === 'submitted' || item.state === 'queued'
+    const attention = item.reportOutcome === 'blocked'
+    const waiting = item.state === 'reported' && !item.acceptedAt && !attention
+    return {
+      items: [{ ...item, delivery_flags: { active, attention, waiting } }],
+      summary: {
+        total: 1,
+        active: Number(active),
+        waiting: Number(waiting),
+        attention: Number(attention),
+      },
+      filtered_total: 1,
+      snapshot_sequence: 1,
+      generated_at: 1,
+      next_cursor: null,
+    }
+  })
 const panel = (workspaceId = 'ws-1') => (
   <I18nProvider>
     <WorkspaceDeliveryPanel workspaceId={workspaceId} workers={workers} />
@@ -50,7 +71,7 @@ afterEach(() => {
 describe('workspace delivery', () => {
   test('shows the report and updates acceptance only after the server accepts it', async () => {
     let dispatch = result()
-    vi.spyOn(api, 'listWorkspaceDispatches').mockImplementation(async () => [dispatch])
+    mockPage(() => dispatch)
     vi.spyOn(api, 'acceptDispatchReport').mockImplementation(
       async (_workspaceId, _dispatchId, revision) => {
         expect(revision).toBe(1)
@@ -73,7 +94,7 @@ describe('workspace delivery', () => {
 
   test('blocked reports offer feedback and return to in-progress after successful delivery', async () => {
     let dispatch = result({ reportOutcome: 'blocked', reportText: 'Need the API contract.' })
-    vi.spyOn(api, 'listWorkspaceDispatches').mockImplementation(async () => [dispatch])
+    mockPage(() => dispatch)
     vi.spyOn(api, 'sendDispatchFeedback').mockImplementation(
       async (_workspaceId, _dispatchId, text) => {
         expect(text).toBe('Use the documented response shape.')
@@ -98,7 +119,7 @@ describe('workspace delivery', () => {
   })
 
   test('a rejected acceptance stays unaccepted and exposes the error', async () => {
-    vi.spyOn(api, 'listWorkspaceDispatches').mockResolvedValue([result()])
+    mockPage(result)
     vi.spyOn(api, 'acceptDispatchReport').mockRejectedValue(
       new Error('The report changed. Refresh and review it again.')
     )

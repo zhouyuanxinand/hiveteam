@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { runHiveCommand } from '../../src/cli/hive.js'
+import { installSyntheticAgentAuthorization } from '../helpers/authorized-runtime.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
@@ -42,6 +43,7 @@ const setupHive = async (): Promise<HiveContext> => {
 
   process.env.HIVE_DATA_DIR = dataDir
   const hive = await runHiveCommand(['--port', '0'])
+  installSyntheticAgentAuthorization(hive.store)
   try {
     const baseUrl = `http://127.0.0.1:${hive.port}`
     const uiCookie = await getUiCookie(baseUrl)
@@ -70,11 +72,15 @@ const setupHive = async (): Promise<HiveContext> => {
           args: [passiveScript],
         }),
       })
-      await fetch(`${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/start`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', cookie: uiCookie },
-        body: JSON.stringify({ hive_port: String(hive.port) }),
-      })
+      const start = await fetch(
+        `${baseUrl}/api/workspaces/${workspace.id}/agents/${agentId}/start`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', cookie: uiCookie },
+          body: JSON.stringify({ hive_port: String(hive.port) }),
+        }
+      )
+      expect(start.status).toBe(201)
     }
 
     return {

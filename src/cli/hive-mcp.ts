@@ -119,27 +119,16 @@ const fetchLocalRuntime = async (
   }
 }
 
-const getSupervisorToken = async (baseUrl: string) => {
-  const response = await fetchLocalRuntime(`${baseUrl}/api/external-goals/session`)
-  if (!response.ok) throw new Error(await readHttpErrorDetail(response))
-  const body = (await response.json()) as { token?: unknown }
-  if (typeof body.token !== 'string' || !body.token) {
-    throw new Error('HiveTeam runtime did not issue a Supervisor token')
-  }
-  return body.token
-}
-
 const requestJson = async (
-  baseUrl: string,
+  connection: { baseUrl: string; supervisorToken: string },
   path: string,
   init: { body?: string; headers?: Record<string, string>; method?: string } = {}
 ) => {
-  const supervisorToken = await getSupervisorToken(baseUrl)
-  const response = await fetchLocalRuntime(`${baseUrl}${path}`, {
+  const response = await fetchLocalRuntime(`${connection.baseUrl}${path}`, {
     ...init,
     headers: {
       ...(init.headers ?? {}),
-      [HIVE_SUPERVISOR_TOKEN_HEADER]: supervisorToken,
+      [HIVE_SUPERVISOR_TOKEN_HEADER]: connection.supervisorToken,
       ...(init.body ? { 'content-type': 'application/json' } : {}),
     },
   })
@@ -147,8 +136,11 @@ const requestJson = async (
   return response.json() as Promise<unknown>
 }
 
-const postJson = (baseUrl: string, path: string, body: JsonRecord) =>
-  requestJson(baseUrl, path, { body: JSON.stringify(body), method: 'POST' })
+const postJson = (
+  connection: { baseUrl: string; supervisorToken: string },
+  path: string,
+  body: JsonRecord
+) => requestJson(connection, path, { body: JSON.stringify(body), method: 'POST' })
 
 const requireStringArg = (args: JsonRecord, key: string) => {
   const value = args[key]
@@ -162,15 +154,25 @@ export const callHiveMcpTool = async (
   input: { baseUrl?: string; env?: NodeJS.ProcessEnv } = {}
 ) => {
   const baseUrl = input.baseUrl ?? parseHiveMcpBaseUrl([], input.env ?? process.env)
+  const supervisorToken = (input.env ?? process.env).HIVE_SUPERVISOR_TOKEN
+  if (!supervisorToken) {
+    throw new Error(
+      'Set HIVE_SUPERVISOR_TOKEN using a capability issued by the authenticated desktop session. Anonymous Supervisor access is disabled.'
+    )
+  }
+  const connection = { baseUrl, supervisorToken }
   if (toolName === 'hive.list_workspaces') {
-    return requestJson(baseUrl, '/api/external-goals/workspaces')
+    return requestJson(connection, '/api/external-goals/workspaces')
   }
   if (toolName === 'hive.inspect_workspace') {
     const workspaceId = requireStringArg(args, 'workspace_id')
-    return requestJson(baseUrl, `/api/external-goals/workspaces/${encodeURIComponent(workspaceId)}`)
+    return requestJson(
+      connection,
+      `/api/external-goals/workspaces/${encodeURIComponent(workspaceId)}`
+    )
   }
   if (toolName === 'hive.start_goal') {
-    return postJson(baseUrl, '/api/external-goals/start', {
+    return postJson(connection, '/api/external-goals/start', {
       ...(args.context !== undefined ? { context: args.context } : {}),
       goal: requireStringArg(args, 'goal'),
       source: 'hiveteam-mcp',
@@ -179,21 +181,21 @@ export const callHiveMcpTool = async (
     })
   }
   if (toolName === 'hive.wait_goal') {
-    return postJson(baseUrl, '/api/external-goals/wait', {
+    return postJson(connection, '/api/external-goals/wait', {
       ...(args.cursor !== undefined ? { cursor: args.cursor } : {}),
       goal_id: requireStringArg(args, 'goal_id'),
       ...(args.timeout_ms !== undefined ? { timeout_ms: args.timeout_ms } : {}),
     })
   }
   if (toolName === 'hive.continue_goal') {
-    return postJson(baseUrl, '/api/external-goals/continue', {
+    return postJson(connection, '/api/external-goals/continue', {
       ...(args.context !== undefined ? { context: args.context } : {}),
       goal_id: requireStringArg(args, 'goal_id'),
       message: requireStringArg(args, 'message'),
     })
   }
   if (toolName === 'hive.cancel_goal') {
-    return postJson(baseUrl, '/api/external-goals/cancel', {
+    return postJson(connection, '/api/external-goals/cancel', {
       goal_id: requireStringArg(args, 'goal_id'),
       reason: requireStringArg(args, 'reason'),
     })
@@ -227,7 +229,7 @@ const toolResult = (result: unknown) => ({
   structuredContent: result,
 })
 
-const handleRequest = async (request: JsonRpcRequest, baseUrl: string) => {
+const handleRequest = async (request: JsonRpcRequest, baseUrl: string, env: NodeJS.ProcessEnv) => {
   if (typeof request.method !== 'string') {
     return errorResponse(request.id, -32600, 'Invalid JSON-RPC request')
   }
@@ -255,7 +257,7 @@ const handleRequest = async (request: JsonRpcRequest, baseUrl: string) => {
       {
         ...(isRecord(params.arguments) ? params.arguments : {}),
       },
-      { baseUrl }
+      { baseUrl, env }
     )
     return resultResponse(request.id, toolResult(result))
   }
@@ -283,7 +285,7 @@ export const runHiveMcpCommand = async (
       const parsed = JSON.parse(trimmed) as unknown
       const request = isRecord(parsed) ? (parsed as JsonRpcRequest) : {}
       id = request.id
-      const response = await handleRequest(request, baseUrl)
+      const response = await handleRequest(request, baseUrl, env)
       if (response) writeJsonRpc(response)
     } catch (error) {
       writeJsonRpc(

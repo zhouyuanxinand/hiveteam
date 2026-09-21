@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { createAgentManager } from '../../src/server/agent-manager.js'
+import { createBudgetedTestAgentManager as createAgentManager } from '../helpers/budgeted-agent-manager.js'
 
 const tempDirs: string[] = []
 

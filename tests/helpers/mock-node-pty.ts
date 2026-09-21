@@ -78,7 +78,7 @@ vi.mock('node-pty', () => ({
     const scriptPath = args[0] ?? ''
     const pid = 4242
     let dataHandler: ((chunk: string) => void) | undefined
-    let exitHandler: ((event: { exitCode: number }) => void) | undefined
+    const exitHandlers: Array<(event: { exitCode: number }) => void> = []
     let stopped = false
 
     const emitExit = (exitCode: number) => {
@@ -86,7 +86,7 @@ vi.mock('node-pty', () => ({
         return
       }
       stopped = true
-      exitHandler?.({ exitCode })
+      for (const handler of exitHandlers) handler({ exitCode })
     }
 
     const emitData = (chunk: string) => {
@@ -109,7 +109,7 @@ vi.mock('node-pty', () => ({
         dataHandler = handler
       },
       onExit(handler: (event: { exitCode: number }) => void) {
-        exitHandler = handler
+        exitHandlers.push(handler)
       },
       write(text: string) {
         emitScriptWrite(scriptPath, text, emitData, emitExit)

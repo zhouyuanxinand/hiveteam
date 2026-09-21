@@ -1,7 +1,19 @@
+import type { IncomingMessage } from 'node:http'
 import type { AgentSummary } from '../shared/types.js'
 import { ForbiddenError, UnauthorizedError } from './http-errors.js'
+import { setRequestPrincipal } from './request-principal.js'
 
-export type TeamCommand = 'send' | 'list' | 'report' | 'status' | 'cancel' | 'goal_report' | 'help'
+export type TeamCommand =
+  | 'send'
+  | 'list'
+  | 'report'
+  | 'status'
+  | 'cancel'
+  | 'goal_report'
+  | 'help'
+  | 'git_commit'
+  | 'review'
+  | 'tasks_write'
 
 const ORCHESTRATOR_COMMANDS = new Set<TeamCommand>([
   'send',
@@ -9,17 +21,21 @@ const ORCHESTRATOR_COMMANDS = new Set<TeamCommand>([
   'cancel',
   'goal_report',
   'help',
+  'tasks_write',
 ])
 const WORKER_COMMANDS = new Set<TeamCommand>(['report', 'status', 'help'])
 const WORKER_ROLES = new Set<AgentSummary['role']>(['coder', 'reviewer', 'tester', 'custom'])
 
 export const commandAllowedForRole = (role: AgentSummary['role'], command: TeamCommand) => {
+  if (command === 'review') return role === 'reviewer'
+  if (command === 'git_commit') return role === 'coder'
   if (role === 'orchestrator') return ORCHESTRATOR_COMMANDS.has(command)
   if (WORKER_ROLES.has(role)) return WORKER_COMMANDS.has(command)
   return false
 }
 
 interface AuthenticateInput {
+  request?: IncomingMessage
   fromAgentId: string | undefined
   getAgent: (workspaceId: string, agentId: string) => AgentSummary
   token: string | undefined
@@ -28,6 +44,7 @@ interface AuthenticateInput {
 }
 
 export const authenticateCliAgent = ({
+  request,
   fromAgentId,
   getAgent,
   token,
@@ -46,6 +63,7 @@ export const authenticateCliAgent = ({
   } catch {
     throw new UnauthorizedError('Agent not found in workspace')
   }
+  if (request) setRequestPrincipal(request, { kind: 'agent', agentId: agent.id, workspaceId })
   return agent
 }
 

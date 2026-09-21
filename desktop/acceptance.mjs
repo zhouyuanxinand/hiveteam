@@ -75,6 +75,16 @@ const runAcceptance = async () => {
     }
     const webResponse = await fetch(webHost.appOrigin)
     if (!webResponse.ok) throw new Error(`Web mode returned HTTP ${webResponse.status}`)
+    const launchUrl = new URL(await webHost.createLaunchUrl())
+    const bootstrapToken = new URLSearchParams(launchUrl.hash.slice(1)).get('hive_bootstrap')
+    const bootstrapResponse = await fetch(`${webHost.appOrigin}/api/ui/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bootstrap_token: bootstrapToken }),
+    })
+    if (!bootstrapResponse.ok || !bootstrapResponse.headers.get('set-cookie')) {
+      throw new Error('Web mode failed its trusted launcher handshake')
+    }
     console.log('[desktop acceptance] Web mode ready without an Electron window')
     await webHost.close()
     webHost = null

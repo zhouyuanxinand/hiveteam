@@ -1,0 +1,20 @@
+import type { DispatchVerification } from '../shared/verification.js'
+export const serializeVerification = (run: DispatchVerification) => ({
+  id: run.id,
+  workspace_id: run.workspaceId,
+  dispatch_id: run.dispatchId,
+  report_revision: run.reportRevision,
+  head_sha: run.headSha,
+  command: run.command,
+  state: run.state,
+  output: run.output,
+  output_truncated: run.outputTruncated,
+  exit_code: run.exitCode,
+  error: run.error,
+  started_at: run.startedAt,
+  ended_at: run.endedAt,
+  accepted_at: run.acceptedAt,
+  profile: run.profile ?? null,
+  log_bytes: run.logBytes ?? 0,
+  subject: run.subject ?? null,
+})

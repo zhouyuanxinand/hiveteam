@@ -5,9 +5,12 @@ import { join } from 'node:path'
 import type { Database as SqliteDatabase } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
-import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
+import {
+  CURRENT_SCHEMA_VERSION,
+  initializeRuntimeDatabase,
+} from '../../src/server/sqlite-schema.js'
+import { applySchemaVersion7 } from '../../src/server/sqlite-schema-v7.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
@@ -312,7 +315,7 @@ describe('schema version', () => {
       .prepare('SELECT key, value FROM app_state WHERE key = ?')
       .get('active_workspace_id') as { key: string; value: string | null } | undefined
 
-    expect(presetCount.count).toBe(8)
+    expect(presetCount.count).toBe(10)
     const newPresetIds = db
       .prepare('SELECT id FROM command_presets WHERE id IN (?, ?, ?, ?) ORDER BY id')
       .all('kimi', 'pi', 'qwen', 'zcode') as Array<{ id: string }>
@@ -341,7 +344,7 @@ describe('schema version', () => {
       ).toEqual({ version })
     }
     expect(db.prepare('SELECT MAX(version) AS version FROM schema_version').get()).toEqual({
-      version: 47,
+      version: CURRENT_SCHEMA_VERSION,
     })
     expect(roleTemplateCount.count).toBe(4)
     expect(appState).toEqual({ key: 'active_workspace_id', value: null })
@@ -436,7 +439,7 @@ describe('schema version', () => {
 
     expect(
       db.prepare("SELECT command, yolo_args_template FROM command_presets WHERE id = 'pi'").get()
-    ).toEqual({ command: 'pi', yolo_args_template: '["--approve"]' })
+    ).toEqual({ command: 'pi', yolo_args_template: '[]' })
     expect(db.prepare("SELECT is_builtin FROM command_presets WHERE id = 'custom'").get()).toEqual({
       is_builtin: 0,
     })
@@ -511,11 +514,7 @@ describe('schema version', () => {
       | { version: number }
       | undefined
 
-    expect(JSON.parse(preset?.yolo_args_template ?? '[]')).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-    ])
+    expect(JSON.parse(preset?.yolo_args_template ?? '[]')).toEqual([])
     expect(version).toEqual({ version: 9 })
 
     db.close()
@@ -608,14 +607,12 @@ describe('schema version', () => {
     expect(JSON.parse(codex.session_id_capture ?? '{}')).toMatchObject({
       source: 'codex_session_jsonl_dir',
     })
-    expect(JSON.parse(codex.yolo_args_template ?? '[]')).toEqual([
-      '--dangerously-bypass-approvals-and-sandbox',
-    ])
+    expect(JSON.parse(codex.yolo_args_template ?? '[]')).toEqual([])
     expect(gemini.resume_args_template).toBe('--resume {session_id}')
     expect(JSON.parse(gemini.session_id_capture ?? '{}')).toMatchObject({
       source: 'gemini_session_json_dir',
     })
-    expect(JSON.parse(gemini.yolo_args_template ?? '[]')).toEqual(['--yolo'])
+    expect(JSON.parse(gemini.yolo_args_template ?? '[]')).toEqual([])
     expect(opencode.resume_args_template).toBe('--session {session_id}')
     expect(JSON.parse(opencode.session_id_capture ?? '{}')).toMatchObject({
       source: 'opencode_session_db',
@@ -692,13 +689,9 @@ describe('schema version', () => {
       rows.map((row) => [row.id, JSON.parse(row.yolo_args_template ?? '[]') as string[]])
     )
 
-    expect(byId.claude).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-    ])
-    expect(byId.codex).toEqual(['--dangerously-bypass-approvals-and-sandbox'])
-    expect(byId.gemini).toEqual(['--yolo'])
+    expect(byId.claude).toEqual([])
+    expect(byId.codex).toEqual([])
+    expect(byId.gemini).toEqual([])
     expect(byId.opencode).toEqual([])
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(11)).toEqual({
       version: 11,
@@ -802,13 +795,9 @@ describe('schema version', () => {
       rows.map((row) => [row.id, JSON.parse(row.yolo_args_template ?? '[]') as string[]])
     )
 
-    expect(byId.claude).toEqual([
-      '--dangerously-skip-permissions',
-      '--permission-mode=bypassPermissions',
-      '--disallowedTools=Task',
-    ])
-    expect(byId.codex).toEqual(['--dangerously-bypass-approvals-and-sandbox'])
-    expect(byId.gemini).toEqual(['--yolo'])
+    expect(byId.claude).toEqual([])
+    expect(byId.codex).toEqual([])
+    expect(byId.gemini).toEqual([])
     expect(byId.opencode).toEqual([])
     expect(byId['custom-opencode']).toEqual(['--dangerously-skip-permissions'])
     expect(db.prepare('SELECT version FROM schema_version WHERE version = ?').get(18)).toEqual({
@@ -868,6 +857,7 @@ describe('schema version', () => {
       insert.run(id, name, roleType, description, 'claude', '[]', '{}', 1, 1, 1)
     }
 
+    applySchemaVersion7(db)
     initializeRuntimeDatabase(db)
 
     const rows = db
@@ -949,6 +939,7 @@ describe('schema version', () => {
       );
     `)
 
+    applySchemaVersion7(db)
     initializeRuntimeDatabase(db)
 
     const row = db
@@ -1021,6 +1012,7 @@ describe('schema version', () => {
       300
     )
 
+    applySchemaVersion7(db)
     initializeRuntimeDatabase(db)
 
     const dispatches = db
@@ -1159,6 +1151,7 @@ describe('schema version', () => {
       '["a.md"]'
     )
 
+    applySchemaVersion7(db)
     initializeRuntimeDatabase(db)
 
     const dispatchColumns = new Set(

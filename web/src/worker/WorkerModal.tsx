@@ -5,9 +5,11 @@ import type { TeamListItem } from '../../../src/shared/types.js'
 import { useI18n } from '../i18n.js'
 import { useReviewCopy } from '../review/review-copy.js'
 import { WorkspaceComposer } from '../review/WorkspaceComposer.js'
+import { ExecutionPolicyButton } from '../security/ExecutionPolicyButton.js'
 import { AgentTerminalSurface } from '../terminal/AgentTerminalSurface.js'
 import { Tooltip } from '../ui/Tooltip.js'
 import { CliAgentAvatar } from './CliAgentAvatar.js'
+import { NativeSessionButton } from './NativeSessionButton.js'
 import { getRolePresentation } from './role-presentation.js'
 import { useWorkerModalResize, WORKER_MODAL_MIN } from './useWorkerModalResize.js'
 import { presentWorkerRuntimeStatus } from './worker-status.js'
@@ -106,6 +108,19 @@ export const WorkerModal = ({
                 {copy.interview} · {worker.name}
               </p>
             ) : null}
+
+            <div className="shrink-0 px-3 pt-2">
+              <ExecutionPolicyButton
+                workspaceId={workspaceId}
+                agentId={worker.id}
+                running={ptyRunning}
+              />
+              <NativeSessionButton
+                workspaceId={workspaceId}
+                agentId={worker.id}
+                running={ptyRunning}
+              />
+            </div>
 
             {startError ? (
               <div

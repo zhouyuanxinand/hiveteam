@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import type { Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -9,8 +10,10 @@ import type { PickFolderResponse } from '../../src/server/fs-pick-folder.js'
 import type { GitHubClient } from '../../src/server/github-pull-requests.js'
 import type { OpenWorkspaceService } from '../../src/server/route-types.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { installSyntheticAgentAuthorization } from './authorized-runtime.js'
 
 interface TestServerContext {
+  terminalMetrics: ReturnType<typeof createApp>['terminalMetrics']
   baseUrl: string
   close: () => Promise<void>
   dataDir: string
@@ -29,7 +32,7 @@ const FETCH_BLOCKED_PORTS = new Set([
   6669, 6697, 10080,
 ])
 
-export const listenOnFetchSafePort = async (server: ReturnType<typeof createApp>['server']) => {
+export const listenOnFetchSafePort = async (server: Server) => {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => reject(error)
@@ -56,6 +59,7 @@ export const listenOnFetchSafePort = async (server: ReturnType<typeof createApp>
 
 export const startTestServer = async (
   input: {
+    authorizeTestAgents?: boolean
     dataDir?: string
     github?: GitHubClient
     openWorkspaceService?: OpenWorkspaceService
@@ -70,6 +74,7 @@ export const startTestServer = async (
     dataDir,
     ...(input.github ? { github: input.github } : {}),
   })
+  if (input.authorizeTestAgents) installSyntheticAgentAuthorization(store)
   const pickFolderService =
     input.pickFolderService ??
     (input.pickFolderPath
@@ -98,5 +103,9 @@ export const startTestServer = async (
     },
     dataDir,
     store,
+    terminalMetrics: app.terminalMetrics,
   }
 }
+
+export const startAuthorizedTestServer = (input: Parameters<typeof startTestServer>[0] = {}) =>
+  startTestServer({ ...input, authorizeTestAgents: true })

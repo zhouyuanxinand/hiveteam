@@ -44,7 +44,7 @@ const showError = (message, error) => {
 const openWebInterface = async () => {
   if (!webHost) return
   try {
-    await shell.openExternal(webHost.appOrigin)
+    await shell.openExternal(await webHost.createLaunchUrl())
   } catch (error) {
     showError(getDesktopLaunchCopy(getLocale()).webOpenError, error)
   }
@@ -94,7 +94,7 @@ const startWebMode = async () => {
     void stopAndQuit()
   })
   tray = createWebModeTray()
-  await shell.openExternal(webHost.appOrigin)
+  await shell.openExternal(await webHost.createLaunchUrl())
 }
 
 const focusCurrentInterface = () => {

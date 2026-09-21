@@ -74,7 +74,12 @@ export interface LoopbackTransports {
     handlers: LoopbackHttpHandlers
   ) => LoopbackHttpRequest
   openWs: (
-    args: { port: number; path: string; headers: Record<string, string> },
+    args: {
+      port: number
+      path: string
+      headers: Record<string, string>
+      inputEpoch?: () => string
+    },
     handlers: LoopbackWsHandlers
   ) => LoopbackWsConnection
 }
@@ -85,6 +90,7 @@ export interface FrameBridgeContext {
   deviceSessions: DeviceSessionProvider
   audit: RemoteAuditStore
   daemonId: string
+  inputEpoch: (deviceId: string) => string
   loopbackTransports?: LoopbackTransports
   generateConnSalt?: () => Uint8Array
   onSeal?: (event: { key: Uint8Array; direction: 'd2p' | 'p2d'; headerBytes: Uint8Array }) => void
@@ -119,6 +125,7 @@ type StreamState = {
   outboundQueue: OutboundFrame[]
   outboundDrainActive: boolean
   pendingOutboundBytes: number
+  responseStatus?: number
 }
 
 type OutboundFrame = {
@@ -129,7 +136,6 @@ type OutboundFrame = {
 }
 
 const textEncoder = new TextEncoder()
-const textDecoder = new TextDecoder()
 const TERMINAL_IO_RE = /^\/ws\/terminal\/([^/?]+)\/io$/
 const LOOPBACK_WS_PENDING_BYTES_LIMIT = 256 * 1024
 const LOOPBACK_STREAM_PENDING_BYTES_LIMIT = 4 * 1024 * 1024
@@ -190,13 +196,54 @@ const realLoopbackTransports: LoopbackTransports = {
     })
     let closed = false
     let pendingBytes = 0
-    const pending: Array<{ data: Uint8Array; isText: boolean }> = []
+    const pending: Array<{ data: Uint8Array; isText: boolean; epoch?: string }> = []
+    const isProtocolAck = (data: Uint8Array, isText: boolean) => {
+      if (!isText || !new URL(args.path, 'http://localhost').pathname.endsWith('/control'))
+        return false
+      try {
+        const message = JSON.parse(Buffer.from(data).toString('utf8')) as { type?: unknown }
+        return message.type === 'output_ack' || message.type === 'restore_complete'
+      } catch {
+        return false
+      }
+    }
+    const discardStale = () => {
+      for (let index = pending.length - 1; index >= 0; index -= 1) {
+        const item = pending[index]
+        if (!item || item.epoch === undefined || item.epoch === args.inputEpoch?.()) continue
+        pending.splice(index, 1)
+        pendingBytes -= item.data.byteLength
+        handlers.onMessage(
+          textEncoder.encode(
+            JSON.stringify({
+              type: 'error',
+              message: 'Queued input discarded because remote authorization changed',
+            })
+          ),
+          true
+        )
+      }
+    }
+    const pendingTimer = setInterval(() => {
+      try {
+        discardStale()
+      } catch (error) {
+        pending.length = 0
+        pendingBytes = 0
+        handlers.onError(
+          error instanceof Error ? error : new Error('Unable to validate pending remote input')
+        )
+        socket.terminate()
+      }
+    }, 250)
+    pendingTimer.unref()
     const sendNow = (data: Uint8Array, isText: boolean) => {
       socket.send(Buffer.from(data), { binary: !isText }, (error) => {
         if (error) handlers.onError(error)
       })
     }
     const flushPending = () => {
+      discardStale()
       for (const item of pending.splice(0)) {
         if (closed || socket.readyState !== WebSocketClient.OPEN) break
         sendNow(item.data, item.isText)
@@ -205,8 +252,19 @@ const realLoopbackTransports: LoopbackTransports = {
     }
     socket.binaryType = 'arraybuffer'
     socket.on('open', () => {
-      handlers.onOpen()
-      flushPending()
+      clearInterval(pendingTimer)
+      try {
+        discardStale()
+        handlers.onOpen()
+        flushPending()
+      } catch (error) {
+        pending.length = 0
+        pendingBytes = 0
+        handlers.onError(
+          error instanceof Error ? error : new Error('Unable to validate pending remote input')
+        )
+        socket.terminate()
+      }
     })
     socket.on('message', (data, isBinary) => {
       const buffer = Buffer.isBuffer(data)
@@ -217,6 +275,7 @@ const realLoopbackTransports: LoopbackTransports = {
       handlers.onMessage(new Uint8Array(buffer), !isBinary)
     })
     socket.on('close', () => {
+      clearInterval(pendingTimer)
       closed = true
       pending.length = 0
       pendingBytes = 0
@@ -244,15 +303,22 @@ const realLoopbackTransports: LoopbackTransports = {
           }
           return
         }
-        pending.push({ data: Uint8Array.from(data), isText })
+        const epoch = isProtocolAck(data, isText) ? undefined : args.inputEpoch?.()
+        pending.push({
+          data: Uint8Array.from(data),
+          isText,
+          ...(epoch === undefined ? {} : { epoch }),
+        })
       },
       onClose: () => {
+        clearInterval(pendingTimer)
         closed = true
         pending.length = 0
         pendingBytes = 0
         socket.close()
       },
       abort: () => {
+        clearInterval(pendingTimer)
         closed = true
         pending.length = 0
         pendingBytes = 0
@@ -413,8 +479,14 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
         if (item.closeAfterSend) {
           if (stream.transport === 'http') {
             ctx.audit.enqueue({
-              action: 'http',
-              result: 'ok',
+              action: 'http_transport',
+              result:
+                (stream.responseStatus ?? 500) < 400
+                  ? 'ok'
+                  : stream.responseStatus === 403
+                    ? 'rejected'
+                    : 'error',
+              statusCode: stream.responseStatus ?? null,
               endpoint: stream.path,
               deviceId: state.session.deviceId,
             })
@@ -581,6 +653,7 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
         {
           onHead: (head) => {
             if (stream.closed) return
+            stream.responseStatus = head.status
             enqueueOutbound(state, streamId, key, stream, {
               kind: FrameKind.Data,
               payload: encodeHttpHead({
@@ -625,6 +698,7 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
     }
 
     const wsPath = appendQuery(decision.path, decision.query)
+    const inputEpoch = () => ctx.inputEpoch(state.session.deviceId)
     const controlPath = terminalControlPath(decision.path)
     if (controlPath) {
       stream.ioAckControl = transports.openWs(
@@ -633,7 +707,7 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
       )
     }
     stream.ws = transports.openWs(
-      { port: ctx.loopbackPort, path: wsPath, headers },
+      { port: ctx.loopbackPort, path: wsPath, headers, inputEpoch },
       {
         onOpen: () =>
           ctx.audit.enqueue({
@@ -681,14 +755,6 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
         if (data.kind === 'body') stream.http?.onData(data.data)
       } else {
         const message = decodeWsMessage(plaintext)
-        ctx.audit.enqueue({
-          action: 'ws_input',
-          result: 'ok',
-          endpoint: stream.path,
-          deviceId: state.session.deviceId,
-          byteCount: message.data.length,
-          preview: message.isText ? textDecoder.decode(message.data) : null,
-        })
         stream.ws?.onData(message.data, message.isText)
       }
       const ack = stream.recvFlow.onConsume(plaintext.length)

@@ -75,4 +75,59 @@ describe('TerminalStateMirror', () => {
       mirror.dispose()
     }
   })
+
+  test('keeps up with PTY redraws arriving in separate event-loop turns', async () => {
+    const mirror = new TerminalStateMirror()
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      const readAfterBurst = async () => {
+        for (let index = 0; index < 6000; index += 1) {
+          mirror.write(`\x1b[Hframe-${String(index).padStart(4, '0')}`)
+          await new Promise<void>((resolve) => setImmediate(resolve))
+        }
+        mirror.write('\r\n› [Pasted Content 6000 chars]')
+        return mirror.getScreenText()
+      }
+      const screen = await Promise.race([
+        readAfterBurst(),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('The terminal mirror did not catch up with the PTY redraws')),
+            2000
+          )
+        }),
+      ])
+      expect(screen.trim()).toBe('frame-5999\n› [Pasted Content 6000 chars]')
+    } finally {
+      if (timeout) clearTimeout(timeout)
+      mirror.dispose()
+    }
+  })
+
+  test('seals pending output at screen, snapshot and resize boundaries', async () => {
+    const mirror = new TerminalStateMirror({ cols: 10, rows: 3 })
+    const restored = new TerminalStateMirror({ cols: 10, rows: 3 })
+    try {
+      mirror.write('\x1b[?1049h\x1b[HABCDEFGHIJ')
+      // Let the first native parser write start without waiting for it to
+      // finish, then queue further writes and observation boundaries.
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      mirror.write('\x1b[2;1HBEFORE')
+      const beforeScreen = mirror.getScreenText()
+      const beforeSnapshot = mirror.getSnapshot()
+      mirror.resize(5, 4)
+      mirror.write('\x1b[2J\x1b[H12345X\x1b[2;1HZ')
+      const afterScreen = mirror.getScreenText()
+      mirror.write('\x1b[2J\x1b[HAFTER')
+
+      expect((await beforeScreen).trim()).toBe('ABCDEFGHIJ\nBEFORE')
+      restored.write(await beforeSnapshot)
+      expect((await restored.getScreenText()).trim()).toBe('ABCDEFGHIJ\nBEFORE')
+      expect((await afterScreen).trim()).toBe('12345Z')
+      expect((await mirror.getScreenText()).trim()).toBe('AFTER')
+    } finally {
+      mirror.dispose()
+      restored.dispose()
+    }
+  })
 })

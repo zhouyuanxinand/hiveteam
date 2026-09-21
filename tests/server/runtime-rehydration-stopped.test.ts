@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
 const stores: Array<{ close: () => Promise<void> }> = []
@@ -15,7 +15,7 @@ afterEach(async () => {
 })
 
 describe('runtime rehydration stopped status', () => {
-  test('runtime reload starts workers as stopped regardless of pending count', () => {
+  test('runtime reload starts workers as stopped regardless of pending count', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'hive-rehydrate-stopped-'))
     tempDirs.push(dataDir)
     const firstStore = createRuntimeStore({ dataDir })
@@ -24,6 +24,7 @@ describe('runtime rehydration stopped status', () => {
     const worker = firstStore.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
     firstStore.dispatchTask(workspace.id, worker.id, 'Implement login')
 
+    await firstStore.close()
     const secondStore = createRuntimeStore({ dataDir })
     stores.push(secondStore)
     expect(secondStore.listWorkers(workspace.id)).toContainEqual(

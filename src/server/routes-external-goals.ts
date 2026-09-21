@@ -2,6 +2,7 @@ import { HIVE_SUPERVISOR_TOKEN_HEADER } from './external-goal-auth.js'
 import { ExternalGoalDeliveryError } from './external-goal-bridge.js'
 import { BadRequestError, ForbiddenError } from './http-errors.js'
 import { HIVE_REMOTE_SECRET_HEADER } from './remote-loopback-auth.js'
+import { requireLocalUser } from './request-principal.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 
@@ -136,9 +137,12 @@ export const externalGoalRoutes: RouteDefinition[] = [
     if (isRemoteTunnelRequest(request, store)) {
       throw new ForbiddenError('Supervisor token is not available over the remote tunnel')
     }
+    requireLocalUser(request, store)
+    response.setHeader('cache-control', 'no-store')
     sendJson(response, 200, {
       token: store.getSupervisorToken(),
       token_type: 'hiveteam-supervisor',
+      runtime_base_url: `http://127.0.0.1:${request.socket.localPort}`,
     })
   }),
   route('GET', '/api/external-goals/workspaces', ({ request, response, store }) => {

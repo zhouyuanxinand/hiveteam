@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createServer } from 'vite'
-import { startTestServer } from '../helpers/test-server.js'
+import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 
 const modulePath = process.env.HIVE_PLAYWRIGHT_MODULE
 if (!modulePath) throw new Error('Set HIVE_PLAYWRIGHT_MODULE to playwright/index.mjs')
@@ -68,10 +68,14 @@ try {
         errors.push(message.text().replace(/token=[^&'\s]+/g, 'token=[redacted]'))
     })
     await page.goto(new URL('__terminal_disclosure_qa', origin).href)
-    await page.evaluate(async () => {
-      const session = await fetch('/api/ui/session')
+    await page.evaluate(async (bootstrap: string) => {
+      const session = await fetch('/api/ui/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ bootstrap_token: bootstrap }),
+      })
       if (!session.ok) throw new Error('Could not establish test UI session')
-    })
+    }, server.store.createUiBootstrap())
     const moduleUrl = `/@fs/${resolve('tests/fixtures/terminal-process-preview.tsx').replaceAll('\\', '/')}`
     await page.evaluate(
       async ({

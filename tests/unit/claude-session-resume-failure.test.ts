@@ -4,10 +4,10 @@ import { join } from 'node:path'
 
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { createAgentRuntime } from '../../src/server/agent-runtime.js'
 import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
 import { encodeClaudeProjectPath } from '../../src/server/session-capture-claude.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
+import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
 import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
 const outputBus = {
