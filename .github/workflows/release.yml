@@ -50,8 +50,6 @@ jobs:
           - os: macos-15
             arch: arm64
     runs-on: ${{ matrix.os }}
-    env:
-      HIVE_RELEASE_MANIFEST: ${{ runner.temp }}/hive-release/release-manifest.json
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -71,6 +69,8 @@ jobs:
           path: ${{ runner.temp }}/hive-release/
       - name: Restore the shared build for source integration tests
         shell: bash
+        env:
+          HIVE_RELEASE_MANIFEST: ${{ runner.temp }}/hive-release/release-manifest.json
         run: |
           node --input-type=module <<'NODE'
           import { execFileSync } from 'node:child_process'
@@ -81,6 +81,8 @@ jobs:
           ], { stdio: 'inherit' })
           NODE
       - run: pnpm test
+        env:
+          HIVE_RELEASE_MANIFEST: ${{ runner.temp }}/hive-release/release-manifest.json
       - run: node tests/manual/run-windows-conpty.mjs
         if: runner.os == 'Windows'
       - run: pnpm pack:check
