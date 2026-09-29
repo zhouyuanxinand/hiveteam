@@ -15,8 +15,9 @@ beforeEach(async () => {
   const workspaceResponse = await fetch(`${server.baseUrl}/api/workspaces`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ name: 'Alpha', path: '/tmp/hive-alpha' }),
+    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: server.dataDir }),
   })
+  expect(workspaceResponse.status).toBe(201)
   const workspace = (await workspaceResponse.json()) as { id: string }
 
   process.env = {
@@ -27,11 +28,12 @@ beforeEach(async () => {
     HIVE_PROJECT_ID: workspace.id,
   }
 
-  await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/workers`, {
+  const workerResponse = await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/workers`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: uiCookie },
     body: JSON.stringify({ name: 'Alice', role: 'coder' }),
   })
+  expect(workerResponse.status).toBe(201)
 })
 
 afterEach(async () => {

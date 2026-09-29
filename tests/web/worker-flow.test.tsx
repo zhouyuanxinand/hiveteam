@@ -156,14 +156,16 @@ beforeEach(async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
   }).then((response) => {
+    expect(response.status).toBe(200)
     cookie = response.headers.get('set-cookie') ?? ''
   })
   uiCookie = cookie
   const workspaceResponse = await nativeFetch(`${server.baseUrl}/api/workspaces`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie },
-    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: '/tmp/hive-alpha' }),
+    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: server.dataDir }),
   })
+  expect(workspaceResponse.status).toBe(201)
   workspaceId = ((await workspaceResponse.json()) as { id: string }).id
   const presetResponse = await nativeFetch(`${server.baseUrl}/api/settings/command-presets`, {
     method: 'POST',
@@ -178,6 +180,7 @@ beforeEach(async () => {
       yolo_args_template: null,
     }),
   })
+  expect(presetResponse.status).toBe(201)
   sleeperPresetId = ((await presetResponse.json()) as { id: string }).id
   stubFetch()
 })

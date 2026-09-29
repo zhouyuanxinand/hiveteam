@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { mkdirSync } from 'node:fs'
+import { delimiter, dirname, join } from 'node:path'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -15,6 +17,7 @@ import { AddWorkerDialog } from '../../web/src/worker/AddWorkerDialog.js'
 import { useWorkerActions } from '../../web/src/worker/useWorkerActions.js'
 import { useWorkerComposer } from '../../web/src/worker/useWorkerComposer.js'
 import { fetchWithNodeSignal } from '../helpers/fetch-with-node-signal.js'
+import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -23,6 +26,7 @@ afterEach(async () => {
   cleanup()
   vi.unstubAllGlobals()
   for (const server of servers.splice(0)) await server.close()
+  vi.unstubAllEnvs()
 })
 const Harness = ({ workspaceId, workers }: { workspaceId: string; workers: TeamListItem[] }) => {
   const [open, setOpen] = useState(true)
@@ -73,6 +77,14 @@ const Harness = ({ workspaceId, workers }: { workspaceId: string; workers: TeamL
 const setup = async () => {
   const server = await startAuthorizedTestServer()
   servers.push(server)
+  // Role naming must not depend on installed CLIs or slow mounted PATH entries.
+  // Keep the real availability lookup, using local executable fixtures.
+  const binDir = join(server.dataDir, 'bin')
+  mkdirSync(binDir)
+  for (const preset of server.store.settings.listCommandPresets()) {
+    writeNodeCli(binDir, preset.command, '')
+  }
+  vi.stubEnv('PATH', [binDir, dirname(process.execPath)].join(delimiter))
   const workspace = server.store.createWorkspace(server.dataDir, 'Role naming')
   const preset = server.store.settings.createCommandPreset({
     displayName: 'Fixture Node',

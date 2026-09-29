@@ -315,7 +315,9 @@ describe('version-bound code reviews', { timeout: 60_000 }, () => {
       agentId: reviewer.id,
       token,
       hivePort: new URL(f.server.baseUrl).port,
-      isActive: () => f.server.store.getLiveRun(run.runId).status === 'running',
+      // Production gates the mailbox on credential validity. A silent PTY can
+      // remain starting until its first output without losing its capability.
+      isActive: () => f.server.store.validateAgentToken(reviewer.id, token),
     })
     cleanups.push(broker.close)
     const cli = (args: string[]) =>
@@ -440,6 +442,8 @@ describe('version-bound code reviews', { timeout: 60_000 }, () => {
     expect(publish.status).toBe(403)
     expect((await f.request(`/${record.id}/accept`, { version: context.version })).status).toBe(200)
     f.server.store.stopAgentRun(run.runId)
-    expect((await cli(args)).code).toBe(1)
+    const revoked = await cli(args)
+    expect(revoked.code).toBe(1)
+    expect(revoked.stderr).toContain('This team capability was revoked')
   })
 })

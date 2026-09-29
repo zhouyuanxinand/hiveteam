@@ -345,30 +345,22 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
   test('default Claude orchestrator launch keeps permission bypass disabled', async () => {
     setEnv('HIVE_ORCHESTRATOR_COMMAND', undefined)
     setEnv('HIVE_ORCHESTRATOR_ARGS_JSON', undefined)
-
-    const agentManager = createAgentManager()
-    const startSpy = vi.spyOn(agentManager, 'startAgent').mockImplementation(async (input) => ({
-      agentId: input.agentId,
-      exitCode: null,
-      output: '',
-      pid: 123,
-      runId: 'run-default-claude',
-      status: 'running',
-    }))
-    const dataDir = mkdtempSync(join(tmpdir(), 'hive-default-claude-'))
-    tempDirs.push(dataDir)
-    const store = createRuntimeStore({ agentManager, dataDir })
-    const app = createApp({ store })
-    await listenOnFetchSafePort(app.server)
-    servers.push({
-      async close() {
-        await store.close()
-        await new Promise<void>((resolve) => app.server.close(() => resolve()))
-      },
+    const binDir = makeWorkspacePath('default-claude-bin')
+    const argsFile = join(binDir, 'args.json')
+    writeNodeCli(
+      binDir,
+      'claude',
+      [
+        "import { writeFileSync } from 'node:fs'",
+        `writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)))`,
+        "process.stdout.write('default Claude fixture ready\\n')",
+        'setInterval(() => {}, 60000)',
+      ].join('\n')
+    )
+    setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
+    const { store, baseUrl } = await startServer({
+      dataDir: makeWorkspacePath('default-claude-data'),
     })
-    const address = app.server.address()
-    if (!address || typeof address === 'string') throw new Error('No port')
-    const baseUrl = `http://127.0.0.1:${address.port}`
     const cookie = await getUiCookie(baseUrl)
 
     const response = await fetch(`${baseUrl}/api/workspaces`, {
@@ -383,10 +375,15 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
       orchestrator_start: { ok: boolean; error: string | null; run_id: string | null }
     }
     expect(body.orchestrator_start).toMatchObject({ error: null, ok: true })
-    expect(startSpy).toHaveBeenCalledOnce()
-    const startInput = startSpy.mock.calls[0]?.[0]
-    expect(startInput?.command).toBe('claude')
-    expect(startInput?.args).toEqual([])
+    await waitForNativeFile(argsFile)
+    expect(JSON.parse(readFileSync(argsFile, 'utf8'))).toEqual([])
+    expect(store.listTerminalRuns(body.id)).toEqual([
+      expect.objectContaining({
+        run_id: body.orchestrator_start.run_id,
+        agent_id: `${body.id}:orchestrator`,
+        status: 'running',
+      }),
+    ])
     expect(
       store.peekAgentLaunchConfig(body.id, `${body.id}:orchestrator`)?.commandPresetId
     ).toBeNull()

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
@@ -62,6 +62,17 @@ const team = (command) => JSON.parse(execFileSync(process.execPath, [
 ], {env:toolEnv, encoding:'utf8', windowsHide:true, timeout:20000, stdio:['ignore','pipe','pipe']}))
 const skills = team(['skill', 'list'])
 const main = process.env.HIVE_AGENT_ID.endsWith(':orchestrator')
+const agentFile = join(${JSON.stringify(dataDir)}, process.env.HIVE_AGENT_ID.replaceAll(':','_'))
+const promptIndex = args.indexOf('--')
+const initialPrompt = promptIndex >= 0 ? args[promptIndex + 1] : null
+writeFileSync(agentFile + '.launch.json', JSON.stringify({
+  args, id, resumed, initialPrompt,
+  token_digest: createHash('sha256').update(process.env.HIVE_AGENT_TOKEN).digest('hex')
+}))
+writeFileSync(agentFile + '.txt', '')
+const recordSubmission = (text) => appendFileSync(file,
+  JSON.stringify({type:'event_msg',payload:{type:'user_message',message:text}}) + '\n')
+if (initialPrompt !== null) recordSubmission(initialPrompt)
 if (main) writeFileSync(${JSON.stringify(evidencePath)}, JSON.stringify({
   args, id, resumed,
   restored: resumed && readFileSync(file, 'utf8').includes(id),
@@ -84,7 +95,7 @@ if (process.stdin.isTTY) process.stdin.setRawMode(true)
 process.stdin.setEncoding('utf8')
 let pendingInput = ''
 process.stdin.on('data', data => {
-  appendFileSync(join(${JSON.stringify(dataDir)}, process.env.HIVE_AGENT_ID.replaceAll(':','_') + '.txt'), data)
+  appendFileSync(agentFile + '.txt', data)
   pendingInput += data.toString()
   const pasteStart = pendingInput.indexOf('\u001b[200~')
   const pasteEnd = pendingInput.indexOf('\u001b[201~')
@@ -93,7 +104,7 @@ process.stdin.on('data', data => {
     const submitted = pasteStart >= 0 && pasteEnd > pasteStart
       ? pendingInput.slice(pasteStart + 6, pasteEnd)
       : pendingInput.slice(0, -1)
-    appendFileSync(file, JSON.stringify({type:'event_msg',payload:{type:'user_message',message:submitted}}) + '\n')
+    recordSubmission(submitted)
     pendingInput = ''
     process.stdout.write('\u001b[2J\u001b[H› ')
   }
@@ -125,6 +136,9 @@ process.stdin.resume()
   })
   await first.store.skills.applyPlan(workspace.id, plan.id)
   vi.stubEnv('PATH', dataDir + delimiter + process.env.PATH)
+  // Native Windows startup passes one multiline argv value to the Node entry,
+  // which the fixture's convenience cmd.exe shim cannot safely receive.
+  if (process.platform === 'win32') vi.stubEnv('PATHEXT', `.MJS;${process.env.PATHEXT ?? ''}`)
   first.store.configureAgentLaunch(workspace.id, agentId, {
     command,
     commandPresetId: 'codex',
@@ -178,13 +192,40 @@ process.stdin.resume()
     })
     .toContain('FIXTURE_READY')
   const delivered = () => readFileSync(join(dataDir, `${handoff.worker_id}.txt`), 'utf8')
-  await expect.poll(delivered, { timeout: 15000 }).toContain('PINNED-INTERVIEW-BODY')
-  expect(delivered()).toContain('Clarify the mail plan')
-  await expect.poll(delivered).toContain('\u001b[201~')
-  const pastedBody = delivered().split('\u001b[200~')[1]?.split('\u001b[201~')[0] ?? ''
-  await expect
-    .poll(() => first.store.getActiveRunByAgentId(workspace.id, handoff.worker_id)?.output)
-    .toContain(`[Pasted Content ${Array.from(pastedBody).length} chars]`)
+  const workerLaunch = JSON.parse(
+    readFileSync(join(dataDir, `${handoff.worker_id}.launch.json`), 'utf8')
+  )
+  expect(workerLaunch.args).toContain('--no-daemon')
+  expect(workerLaunch.token_digest).not.toBe(before.token_digest)
+  let submittedBody: string
+  if (process.platform === 'win32') {
+    expect(workerLaunch.initialPrompt).toEqual(expect.any(String))
+    submittedBody = workerLaunch.initialPrompt
+    expect(workerLaunch.args.slice(workerLaunch.args.indexOf('--') + 1)).toEqual([submittedBody])
+    const checkpoint = JSON.parse(
+      first.store.dispatchDelivery.records.get(handoff.dispatch_id)?.checkpoint ?? '{}'
+    )
+    expect(checkpoint).toMatchObject({
+      wireFormat: 'native-initial-v1',
+      wireSha256: createHash('sha256').update(submittedBody).digest('hex'),
+      inputSequence: 0,
+      submitAttempts: 0,
+    })
+  } else {
+    expect(workerLaunch.initialPrompt).toBeNull()
+    await expect.poll(delivered, { timeout: 15000 }).toContain('PINNED-INTERVIEW-BODY')
+    await expect.poll(delivered).toContain('\u001b[201~')
+    submittedBody = delivered().split('\u001b[200~')[1]?.split('\u001b[201~')[0] ?? ''
+    await expect
+      .poll(() => first.store.getActiveRunByAgentId(workspace.id, handoff.worker_id)?.output)
+      .toContain(`[Pasted Content ${Array.from(submittedBody).length} chars]`)
+  }
+  expect(submittedBody).toContain('PINNED-INTERVIEW-BODY')
+  expect(submittedBody).toContain('Clarify the mail plan')
+  expect(submittedBody).toContain(
+    `Hive session binding: workspace_id=${workspace.id}; agent_id=${handoff.worker_id}`
+  )
+  expect(submittedBody).toContain(`[Hive report receipt: ${handoff.dispatch_id}]`)
   await expect
     .poll(
       () => {
@@ -212,7 +253,12 @@ process.stdin.resume()
     .split('\n')
     .map((line) => JSON.parse(line))
     .filter((record) => record.type === 'event_msg' && record.payload.type === 'user_message')
-  expect(receipts.map((record) => record.payload.message)).toEqual([pastedBody])
+  expect(receipts.map((record) => record.payload.message)).toEqual([submittedBody])
+  expect(first.store.dispatchDelivery.records.get(handoff.dispatch_id)).toMatchObject({
+    state: 'confirmed',
+    evidence: 'native_receipt',
+  })
+  if (process.platform === 'win32') expect(delivered()).toBe('')
   await expect
     .poll(
       () =>

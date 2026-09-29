@@ -318,10 +318,20 @@ test.each([
     [first, second].map((member) => expect.objectContaining({ agentId: member.id, ok: true }))
   )
   await Promise.all(resumed.map((result) => expectReady(again, result.runId ?? '')))
-  expect(again.store.getWorker(workspace.id, second.id)).toMatchObject({
-    pendingTaskCount: 1,
-    status: 'working',
-  })
+  // PTY readiness precedes queued-task replay and its persisted retry deadline.
+  // Wait for the original dispatch to reach the worker, not only for READY output.
+  await expect
+    .poll(
+      () => ({
+        worker: again.store.getWorker(workspace.id, second.id),
+        dispatch: again.store.getDispatch(workspace.id, dispatch.id),
+      }),
+      { interval: 25, timeout: 5000 }
+    )
+    .toMatchObject({
+      worker: { pendingTaskCount: 1, status: 'working' },
+      dispatch: { id: dispatch.id, status: 'submitted', reportedAt: null },
+    })
   await closeServer(again)
   const final = await openServer(dataDir)
   expect(final.store.resources.getSnapshot().occupancy.global).toBe(0)

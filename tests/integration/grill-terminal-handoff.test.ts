@@ -36,6 +36,9 @@ await import(${JSON.stringify(new URL('../fixtures/grill-terminal-tui.mjs', impo
 `
   )
   vi.stubEnv('PATH', root + delimiter + process.env.PATH)
+  // New Windows sessions pass their full prompt through native argv. Resolve
+  // the synthetic Node CLI directly instead of its cmd.exe convenience shim.
+  if (process.platform === 'win32') vi.stubEnv('PATHEXT', `.MJS;${process.env.PATHEXT ?? ''}`)
   mkdirSync(join(root, 'workspace'))
   const server = await startAuthorizedTestServer({ dataDir: join(root, 'data') })
   cleanups.push(() => server.close())
@@ -93,6 +96,12 @@ await import(${JSON.stringify(new URL('../fixtures/grill-terminal-tui.mjs', impo
       control.once('error', reject)
     })
     const io = new WebSocket(`${base}/io?clientId=${clientId}`, { headers: { cookie } })
+    io.on('message', (raw) => {
+      if (control.readyState === WebSocket.OPEN)
+        control.send(
+          JSON.stringify({ type: 'output_ack', bytes: Buffer.byteLength(raw.toString()) })
+        )
+    })
     cleanups.push(() => io.terminate())
     await new Promise<void>((resolve, reject) => {
       io.once('open', resolve)

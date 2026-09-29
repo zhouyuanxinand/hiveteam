@@ -17,8 +17,9 @@ beforeEach(async () => {
   const workspaceResponse = await fetch(`${server.baseUrl}/api/workspaces`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ name: 'Alpha', path: '/tmp/hive-alpha' }),
+    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: server.dataDir }),
   })
+  expect(workspaceResponse.status).toBe(201)
   const workspace = (await workspaceResponse.json()) as { id: string }
 
   const orchestratorId = `${workspace.id}:orchestrator`
@@ -30,11 +31,12 @@ beforeEach(async () => {
     HIVE_PROJECT_ID: workspace.id,
   }
 
-  await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/workers`, {
+  const workerResponse = await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/workers`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: uiCookie },
     body: JSON.stringify({ name: 'Alice', role: 'coder' }),
   })
+  expect(workerResponse.status).toBe(201)
 
   const configResponse = await fetch(
     `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${workspace.id}:orchestrator/config`,
@@ -58,6 +60,7 @@ beforeEach(async () => {
       headers: { cookie },
     }
   )
+  expect(workerListResponse.status).toBe(200)
   const workers = (await workerListResponse.json()) as Array<{ id: string; name: string }>
   const alice = workers.find((worker) => worker.name === 'Alice')
   if (!alice) {
@@ -80,7 +83,7 @@ beforeEach(async () => {
     throw new Error(`Failed to configure worker: ${await workerConfigResponse.text()}`)
   }
 
-  await fetch(
+  const orchestratorStartResponse = await fetch(
     `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${workspace.id}:orchestrator/start`,
     {
       method: 'POST',
@@ -88,11 +91,16 @@ beforeEach(async () => {
       body: JSON.stringify({ hive_port: process.env.HIVE_PORT }),
     }
   )
-  await fetch(`${server.baseUrl}/api/workspaces/${workspace.id}/agents/${alice.id}/start`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: uiCookie },
-    body: JSON.stringify({ hive_port: process.env.HIVE_PORT }),
-  })
+  expect(orchestratorStartResponse.status).toBe(201)
+  const workerStartResponse = await fetch(
+    `${server.baseUrl}/api/workspaces/${workspace.id}/agents/${alice.id}/start`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: uiCookie },
+      body: JSON.stringify({ hive_port: process.env.HIVE_PORT }),
+    }
+  )
+  expect(workerStartResponse.status).toBe(201)
 
   const token = server.store.peekAgentToken(orchestratorId)
   if (!token) {

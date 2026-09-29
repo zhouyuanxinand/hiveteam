@@ -18,6 +18,16 @@ const rawFile = join(root, `${agent}.raw`)
 const submissions = join(root, `${agent}.submitted.jsonl`)
 writeFileSync(rawFile, '')
 writeFileSync(submissions, '')
+const recordSubmission = (text) => {
+  appendFileSync(submissions, `${JSON.stringify({ text })}\n`)
+  appendFileSync(
+    history,
+    `${JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: text } })}\n`
+  )
+}
+const promptIndex = process.argv.indexOf('--', 2)
+const initialPrompt = promptIndex >= 0 ? process.argv[promptIndex + 1] : undefined
+if (initialPrompt) recordSubmission(initialPrompt)
 let draft = ''
 let pending = ''
 let pasting = false
@@ -77,13 +87,7 @@ process.stdin.on('data', (chunk) => {
       continue
     }
     if (key === '\r' || key === '\n') {
-      if (draft) {
-        appendFileSync(submissions, `${JSON.stringify({ text: draft })}\n`)
-        appendFileSync(
-          history,
-          `${JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: draft } })}\n`
-        )
-      }
+      if (draft) recordSubmission(draft)
       draft = ''
     } else draft += key
   }
