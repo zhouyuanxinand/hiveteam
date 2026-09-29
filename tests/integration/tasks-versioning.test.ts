@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -123,6 +123,9 @@ test('the real team CLI reads and conditionally writes; worker writes and revoke
   expect(denied.code).toBe(1)
   expect(denied.stderr).toContain('403')
   store.stopAgentRun(reader.runId)
+  await vi.waitFor(() => expect(store.getLiveRun(reader.runId).status).toBe('exited'), {
+    timeout: 8000,
+  })
   const revoked = await cli(reader.env, ['read'])
   expect(revoked.code).toBe(1)
   expect(revoked.stderr).toContain('401')

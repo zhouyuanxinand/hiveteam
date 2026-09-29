@@ -1,12 +1,7 @@
 import type { IncomingMessage } from 'node:http'
 
 import { normalizeWorkerAvatar } from '../shared/worker-avatar.js'
-import {
-  resolveCommandPresetLaunchConfig,
-  resolveStartupCommandLaunchConfig,
-} from './agent-launch-resolver.js'
 import { BadRequestError } from './http-errors.js'
-import { autostartAgent } from './orchestrator-autostart.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import { getRequestPrincipal } from './request-principal.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
@@ -235,58 +230,10 @@ export const workspaceRoutes: RouteDefinition[] = [
       requireUiTokenFromRequest(request, store.validateUiToken)
 
       const body = await readJsonBody<CreateWorkerBody>(request)
-      if (body.isolated !== undefined && typeof body.isolated !== 'boolean')
-        throw new BadRequestError('isolated must be a boolean')
-      const presetId = body.command_preset_id ?? null
-      const startupCommand = typeof body.startup_command === 'string' ? body.startup_command : null
-      const model = typeof body.model === 'string' ? body.model : null
-      const launchConfig = startupCommand?.trim()
-        ? resolveStartupCommandLaunchConfig(store.settings, startupCommand, presetId)
-        : presetId
-          ? resolveCommandPresetLaunchConfig(store.settings, presetId, model)
-          : undefined
-      if (presetId && !startupCommand?.trim() && !launchConfig) {
-        throw new Error(`Command preset not found: ${presetId}`)
-      }
-      if (body.isolated) store.worktrees.assertCanChangeWorkers(workspaceId)
-      const worker = store.addWorker(workspaceId, {
-        ...body,
-        avatar: readWorkerAvatar(body.avatar),
-      })
-      let isolationError: string | null = null
-      if (body.isolated) {
-        try {
-          await store.worktrees.create(store.getWorkspaceSnapshot(workspaceId).summary, worker.id)
-        } catch (error) {
-          if (!store.worktrees.get(workspaceId, worker.id)) {
-            store.deleteWorker(workspaceId, worker.id)
-            throw error
-          }
-          // Keep a failed preparation visible, including its recorded path.
-          // Never start it in the shared directory or remove potential output.
-          isolationError = error instanceof Error ? error.message : String(error)
-        }
-      }
-      if (launchConfig) {
-        try {
-          store.configureAgentLaunch(workspaceId, worker.id, launchConfig)
-        } catch (error) {
-          store.deleteWorker(workspaceId, worker.id)
-          throw error
-        }
-      }
-
-      const agentStart = isolationError
-        ? { ok: false, error: isolationError, run_id: null }
-        : body.autostart === true
-          ? await autostartAgent(store, workspaceId, worker.id, getRuntimePort(request), {
-              missingConfigError: 'No worker launch config available',
-            })
-          : { ok: false, error: null, run_id: null }
-
+      const created = await store.workerLifecycle.create(workspaceId, body, getRuntimePort(request))
       sendJson(response, 201, {
-        ...getSerializedWorker(workspaceId, worker.id, store),
-        agent_start: agentStart,
+        ...created,
+        ...getSerializedWorker(workspaceId, created.id, store),
       })
     }
   ),

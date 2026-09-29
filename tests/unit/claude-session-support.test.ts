@@ -256,6 +256,157 @@ describe('claude session support', () => {
     })
   })
 
+  test.each([
+    ['-c', 'model_reasoning_effort="ultra"'],
+    ['-s', 'workspace-write'],
+  ])('resumes Codex while preserving the %s option', (flag, value) => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-configured-resume'
+    const sessionId = crypto.randomUUID()
+    writeCodexSession(codexHome, cwd, sessionId)
+
+    expect(
+      withPresetResumeArgs(
+        {
+          command: 'codex',
+          args: [flag, value],
+          resumeArgsTemplate: 'resume {session_id}',
+          sessionIdCapture: {
+            source: 'codex_session_jsonl_dir',
+            pattern: '~/.codex/sessions/**/*.jsonl',
+          },
+        },
+        null,
+        sessionId,
+        cwd
+      )
+    ).toMatchObject({
+      args: ['resume', sessionId, flag, value],
+      resumedSessionId: sessionId,
+    })
+  })
+
+  test('retains a validated explicit Codex resume as this run native session', () => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-explicit-resume'
+    const sessionId = crypto.randomUUID()
+    writeCodexSession(codexHome, cwd, sessionId)
+    const args = ['resume', sessionId, '-c', 'model_reasoning_effort="ultra"']
+
+    expect(
+      withPresetResumeArgs(
+        {
+          command: 'codex',
+          args,
+          resumeArgsTemplate: 'resume {session_id}',
+          sessionIdCapture: {
+            source: 'codex_session_jsonl_dir',
+            pattern: '~/.codex/sessions/**/*.jsonl',
+          },
+        },
+        null,
+        sessionId,
+        cwd
+      )
+    ).toMatchObject({ args, resumedSessionId: sessionId })
+  })
+
+  test.each([
+    ['-c', 'model_reasoning_effort="ultra"'],
+    ['-c', 'resume'],
+    ['--config=model_reasoning_effort="ultra"', '--no-alt-screen'],
+    ['--model', 'resume', '--search'],
+  ])('recognizes explicit Codex resume after global options %j', (...options) => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-global-options-resume'
+    const sessionId = crypto.randomUUID()
+    writeCodexSession(codexHome, cwd, sessionId)
+    const args = [...options, 'resume', sessionId]
+    expect(
+      withPresetResumeArgs(
+        {
+          command: 'codex',
+          args,
+          resumeArgsTemplate: 'resume {session_id}',
+          sessionIdCapture: {
+            source: 'codex_session_jsonl_dir',
+            pattern: '~/.codex/sessions/**/*.jsonl',
+          },
+        },
+        null,
+        sessionId,
+        cwd
+      )
+    ).toMatchObject({ args, resumedSessionId: sessionId })
+  })
+
+  test('does not treat a Codex option value named resume as a subcommand', () => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-resume-option-value'
+    const sessionId = crypto.randomUUID()
+    writeCodexSession(codexHome, cwd, sessionId)
+    const args = ['-c', 'resume']
+    expect(
+      withPresetResumeArgs(
+        {
+          command: 'codex',
+          args,
+          resumeArgsTemplate: 'resume {session_id}',
+          sessionIdCapture: {
+            source: 'codex_session_jsonl_dir',
+            pattern: '~/.codex/sessions/**/*.jsonl',
+          },
+        },
+        null,
+        sessionId,
+        cwd
+      )
+    ).toMatchObject({ args: ['resume', sessionId, ...args], resumedSessionId: sessionId })
+  })
+
+  test('does not label an explicit different Codex conversation with the saved ID', () => {
+    const codexHome = createCodexHome()
+    const cwd = '/tmp/codex-explicit-other-resume'
+    const sessionId = crypto.randomUUID()
+    writeCodexSession(codexHome, cwd, sessionId)
+    const args = ['resume', crypto.randomUUID()]
+    const result = withPresetResumeArgs(
+      {
+        command: 'codex',
+        args,
+        resumeArgsTemplate: 'resume {session_id}',
+        sessionIdCapture: {
+          source: 'codex_session_jsonl_dir',
+          pattern: '~/.codex/sessions/**/*.jsonl',
+        },
+      },
+      null,
+      sessionId,
+      cwd
+    )
+    expect(result.args).toEqual(args)
+    expect(result.resumedSessionId).toBeUndefined()
+  })
+
+  test('retains the Claude continue shorthand', () => {
+    const root = createTempRoot()
+    const cwd = '/tmp/claude-continue-shorthand'
+    const sessionId = crypto.randomUUID()
+    writeSession(root, cwd, sessionId)
+    const result = withPresetResumeArgs(
+      {
+        command: 'claude',
+        args: ['-c'],
+        resumeArgsTemplate: '--resume {session_id}',
+        sessionIdCapture: presetCapture,
+      },
+      null,
+      sessionId,
+      cwd
+    )
+    expect(result.args).toEqual(['-c'])
+  })
+
   test('withPresetResumeArgs does not mistake a lock marker for an active Codex writer', () => {
     const codexHome = createCodexHome()
     const cwd = '/tmp/codex-project-with-active-writer'

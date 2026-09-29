@@ -620,6 +620,8 @@ describe('team API authz (R1.4)', () => {
       })
 
       expect(response.status).toBe(202)
+      // The real CLI writes this marker after native terminal startup.
+      await waitFor(() => expect(existsSync(portFile)).toBe(true), 10_000)
       await waitFor(() => {
         expect(existsSync(portFile)).toBe(true)
         expect(readFileSync(portFile, 'utf8')).toBe(String(ctx.hive.port))

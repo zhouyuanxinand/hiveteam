@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
+import { createDispatchLedgerStore } from '../../src/server/dispatch-ledger-store.js'
+import Database from '../../src/server/sqlite.js'
 import { createTeamMemoryDigestProvider } from '../../src/server/team-memory-digest.js'
 import { memoryCorpus } from '../fixtures/memory-corpus.js'
 import { startTestServer } from '../helpers/test-server.js'
@@ -104,14 +105,20 @@ test('HTTP history preserves prepared versions, budget exclusions and source sta
     )
     expect(budgetResponse.status).toBe(200)
     const provider = createTeamMemoryDigestProvider(server.store.memory, server.store.settings)
-    const digest = provider.forDispatch(workspace.id, 'worker', '中文登录', 'dispatch-fixture')
+    const worker = server.store.addWorker(workspace.id, { name: 'History coder', role: 'coder' })
+    const dispatch = createDispatchLedgerStore(db).createDispatch({
+      workspaceId: workspace.id,
+      toAgentId: worker.id,
+      text: '中文登录',
+    })
+    const digest = provider.forDispatch(workspace.id, worker.id, '中文登录', dispatch.id)
     expect(digest.length).toBeLessThanOrEqual(800)
     expect(digest).toContain('hive-untrusted-data')
     expect(digest).toContain(entry.id)
     server.store.memory.update(workspace.id, entry.id, { body: 'new body' })
     server.store.memory.update(workspace.id, source.id, { body: 'source version two' })
     const response = await fetch(
-      `${server.baseUrl}/api/ui/workspaces/${workspace.id}/memory/contexts?dispatch_id=dispatch-fixture`,
+      `${server.baseUrl}/api/ui/workspaces/${workspace.id}/memory/contexts?dispatch_id=${dispatch.id}`,
       { headers: { cookie } }
     )
     expect(response.status).toBe(200)

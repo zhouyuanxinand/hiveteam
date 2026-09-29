@@ -13,7 +13,7 @@
 写代码、做调研、起草文档、做翻译——凡是能拆给一群人协作的脑力活，都可以让一群 Agent 合伙干。
 
 [![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-22.18%2B%20%2822.x%29%20%7C%2024.x-3c873a.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#平台支持)
 
@@ -72,7 +72,7 @@ Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在�
 
 前置条件：
 
-- Node.js 22 或更新版本
+- Node.js 22.x（至少 22.18），或 Node.js 24.x
 - 执行真实任务时，至少一个支持的 Agent CLI 已安装、已登录且在 `PATH` 上可调用；基础工作区可在安装 CLI 前创建
 
 克隆、安装并启动本分支：
@@ -88,13 +88,14 @@ npm start
 地址通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
 习惯 pnpm 的开发流程。
 
-npm 11 的 `npm warn allow-scripts` 只是审查提示；npm 12 则会默认阻止未批准的依赖安装脚本，即使命令最后显示 `added ... packages` 也不代表原生模块可用。本仓库已为源码安装仅批准经过审查的 `node-pty`、`better-sqlite3` 和 `esbuild`。如果是全局安装包，请显式批准同一条已知运行时链路：
+平台启动器会恢复意外退出的服务。**资源 → 平台恢复** 提供 Windows / macOS 的当前用户登录自启动开关，默认关闭；切换只影响下次登录，正常退出不会立即重启。详见[平台恢复与登录自启动](./docs/platform-recovery.md)。
 
-```bash
-npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hiveteam
-```
+SQLite 使用 Node 内置的 `node:sqlite`，PTY 使用精确锁定版本的
+`@lydell/node-pty` 预编译平台二进制。已构建的运行包无需安装脚本或本机 C/C++
+编译工具链。请保留 optional dependencies，包管理器会据此安装对应系统和架构的二进制。
 
-具体规则见 [npm 安装脚本批准文档](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/) 和下方故障排查。
+源码构建仍使用 `esbuild` 构建前端，它是当前唯一批准的依赖安装脚本。
+可选 Electron 桌面入口有独立的安装和验收步骤。
 
 通过安装包运行时，`hive` 会启动生产页面并自动打开已认证的浏览器窗口。如果你想指定端口，可以用 `hive --port 4010`。
 启动器通过有效期 60 秒的一次性链接完成登录，页面登录时会清除地址栏中的引导凭据。
@@ -122,24 +123,30 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 首次使用流程：
 
 1. 选择一个项目目录作为 workspace。
-2. 默认使用可离线完成的基础初始化；Skill Packs 可按需选择。
+2. 默认安装 `matt` 和 `code-janitor`；如需离线创建并跳过默认技能包，可明确选择基础模式。
 3. Hive 创建 `<workspace>/.hive/tasks.md`。挑选并检查 Orchestrator 预设后手动启动，或勾选创建弹窗的启动选项；启动后注入内部 `team` 命令。
 4. 在 Team Members 面板里添加 Worker。
 5. 跟 Orchestrator 说一声让它派活，它会用 `team send <worker-name> "<task>"` 发任务，Worker 完事后用 `team report` 回报。
 
-想让 Orchestrator 自己决定团队规模，可以保留 **自动组队** 开关开启（默认开启）。组队使用 Runtime 的团队管理接口，受成员上限、执行额度与启动权限约束。`team send` 只派单给已有成员；CLI 没有 `team spawn` 命令。
+在 Team Members 面板中管理成员及其 CLI 启动配置。Orchestrator 用 `team list` 查看团队，再用 `team send` 给已有成员派单。可通过 `team guide dispatch` 查看当前派单协议；CLI 不提供 `team spawn` 或 `team dismiss` 命令。
 
-想试更强的自动化，可以在右上角设置里开启实验性的 **Workflow** 开关。开启后，Orchestrator 可以编写并运行多 agent workflow，把一个目标拆成 fan-out / review / test 等阶段；顶部的 **Workflows** 面板会显示运行记录、阶段结果和停止按钮。Workflow 创建的新 agent 默认使用哪种 CLI、允许使用哪些 CLI，也可以在 Workflows 面板里配置。当前不提供定时任务。
+需要多步骤协作时，将 JSON 定义保存到 `.hive/workflows`，再从顶栏的 **Workflows** 面板启动并查看步骤结果。每步指定一个已有 Worker，也可以声明对其他步骤的依赖；面板提供停止和步骤重跑入口。当前只执行 JSON 定义，TypeScript 等其他已收录文件仅展示元数据，不提供定时任务或由 Workflow 创建成员的功能。
+
+重启后，工作流会读取当前步骤尝试已保存的汇报并恢复依赖推进，不为同一次尝试重复派单。成功、人工接受及质量条件仍遵循原有规则。停止时先保存停止请求，再取消未完成步骤；取消失败会保留请求，在恢复时继续处理，并在相关成员启动、重放排队任务之前完成。
+
+接收或取消结果不确定时，运行会显示为 **已中断**：暂停创建后续步骤，现有任务仍可汇报。点击 **查看投递** 核对原始记录，并使用已有的本机处理入口。重新核对回执不会重发；重发必须显式确认。确认已处理会保留原 dispatch 和尝试次数，不代表任务完成或质量条件通过。取消消息的回执不等于执行已停止，重跑仍需等待停止确认。写入前的安全待投递任务继续沿用原重试流程；备份恢复会同时冻结运行中和已中断的工作流。
 
 ## 用 Skill Pack 给团队共享 Skills
 
-新建 Workspace 会在启动 Orchestrator 前自动绑定 `tt-a1i/matt-skills-with-to-goal`
-（Pack 名称 `matt`）和 `zhouyuanxinand/code-janitor`（Pack 名称 `code-janitor`），
-写入角色 Profile、锁文件和 `to-goal` / `to-spec` / `to-tickets` / `code-janitor`
+普通创建和高级目录浏览入口都默认选择 **默认安装 matt + code-janitor**，
+在按需启动 Orchestrator 前绑定 `tt-a1i/matt-skills-with-to-goal`
+（Pack 名称 `matt`）和 `zhouyuanxinand/code-janitor`（Pack 名称 `code-janitor`）。
+如需离线创建且不安装默认 Pack，可明确选择 **基础模式**；两种模式都保留已有 Skills 和文件。
+默认安装会写入角色 Profile、锁文件和 `to-goal` / `to-spec` / `to-tickets` / `code-janitor`
 原生入口。Janitor 默认供 Orchestrator、Coder、Reviewer、Tester 按需使用，绑定不会自动清理代码。
-首次需要 Git 和 GitHub 网络连接；以后优先复用本机同源缓存并校验内容摘要，
-不自动更新已有 Workspace 的版本。手动解析新版本后，新建 Workspace 会使用该缓存版本。
-导入项目时保留已有绑定的别名、版本和角色选择，仅补齐缺少的默认 Pack；不会迁移现有 Workspace。
+首次需要 Git 和 GitHub 网络连接；以后使用 Skill Packs 模式创建时优先复用本机同源缓存并校验内容摘要，
+不自动更新已有 Workspace 的版本。手动解析新版本后，该模式下新建 Workspace 会使用该缓存版本。
+使用该模式导入项目时保留已有绑定的别名、版本和角色选择，仅补齐缺少的默认 Pack；不会迁移现有 Workspace。
 同名 Pack 或原生目录冲突会明确报错，不会覆盖用户文件。后续 Pack 初始化失败会撤销本次已完成的绑定，
 且不会启动 Orchestrator；无法安全撤销时保留工作区和回执供恢复，可以修复原因后重试。
 其他 CLI 继续通过 Hive 的按角色 Skill 目录和 `team skill` 按需读取，绑定不会执行 Pack 脚本。
@@ -153,7 +160,7 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 4. 查看包含精确路径的 Change Plan，再点 **Apply**。在明确 Apply 之前，绑定和锁文件都不会变化。
 5. 在 **成员** 页分别查看通用提示词交付与原生发现状态；在 **变更** 页查看 Receipt，或 Undo 由 Hive 创建且指纹仍匹配的改动。
 
-在 Orchestrator 终端中：
+绑定这些 Pack 后，在 Orchestrator 终端中使用：
 
 ```bash
 team skill list
@@ -225,10 +232,8 @@ Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里�
 - Workspace 侧边栏，方便在多个本机项目之间切换。
 - Orchestrator 和 Worker 终端都是真实 PTY 支撑的。
 - Add Worker 预置 coder / reviewer / tester 等角色模板，也支持完全自定义 prompt 与命令——把任何 CLI agent 编排成你需要的角色。
-- 自动组队（实验性，默认开启）：Orchestrator 可在成员和执行额度内，根据任务创建临时 coder / tester / reviewer。提交报告不会直接释放仍在运行的进程，也不会删除保留的 worktree。
-- Workflows（实验性，默认关闭）：Orchestrator 可以运行多阶段、多 agent 的 workflow，Hive 在 Workflows 面板里展示运行、日志、结果和停止控制。
-- Workflow CLI 策略：为 workflow 创建的 agent 选择默认 CLI，并限制允许使用的 CLI，避免脚本误启未配置的 agent。
-- 团队记忆：把 workspace 约束、长期上下文和团队共识留在 Hive 里，后续派单时更容易把背景带给正确的 agent。
+- Workflows：运行最多 20 步的 JSON 定义，向已有成员派单。步骤支持依赖，以及报告、评审和验证的质量条件；面板展示结果，并提供停止和重跑入口。当前不提供定时任务。
+- 团队记忆：把 workspace 约束、长期上下文和团队共识留在 Hive 里，后续派单时更容易把背景带给正确的 agent。[Dream](./docs/memory-dream.md) 可整理现有记忆，也可由工作区 Orchestrator 从新增协议消息生成候选；核对来源后手动应用，保留变更回执，回滚会检查后续编辑冲突。
 - 派单改动审查：在 Git 工作区里，Hive 会在创建派单时记录 HEAD 提交，活动中心可以查看该派单处理期间产生的工作区 diff（含新增未跟踪文件），不必再盲信成员的口头汇报；审查反馈可以直接发回该成员的终端，派单会重新打开、让成员改完再次汇报。
 - `.hive/tasks.md` 编辑器，带外部文件冲突处理。
 - PTY 后台保留 + 尽力使用各 CLI 原生 session 恢复。
@@ -250,7 +255,15 @@ Hive 的受限执行复用经过验证的 CLI 沙箱能力；它不自研操作�
 
 ## 平台支持
 
-所有平台都需要 Node.js 22+。Hive 依赖 `node-pty` 和 `better-sqlite3` 这类原生包，没有预编译二进制时需要你本机有原生构建工具链。
+所有平台都需要 Node.js 22.x（至少 22.18）或 Node.js 24.x。SQLite 由 Node 提供，
+`@lydell/node-pty@1.2.0-beta.15` 提供 macOS、Linux、Windows 的 x64 和 arm64
+预编译原生二进制；这不是纯 JavaScript PTY。其他系统或架构不会自动回退到源码编译。
+
+Windows 的生产和测试统一使用包内 ConPTY DLL。该上游选项仍标为实验性，因此精确
+锁定 PTY 版本，升级必须通过真实终端与生命周期验收。下文列出了 CI 配置覆盖范围；
+有可下载的平台二进制不代表该平台的所有 Agent CLI 都已经过认证。
+Windows 后台启动可能先经历约三秒的终端能力协商。自动启动使用四秒观察窗口，
+进程退出时提前返回，避免把启动期间失败的 CLI 误报为成功。
 
 ## 安全模型
 
@@ -302,6 +315,17 @@ Hive 不会在两者之间转换路径，也不会自动查找、复制或合并
 重启后的成员恢复、原生会话绑定与恢复失败处理，参见
 [Workspace 与原生会话恢复说明](docs/session-recovery.md)。
 
+新派发可通过 `team send --messages` 启用持久化任务消息，支持提问、回答与进度交流。
+历史分页、报告前显式确认已处理的消息序号及返工规则，参见 [任务对话说明](docs/dispatch-messages.md)。
+
+动态配员默认关闭，可在成员面板授权允许的预设和临时成员数量。`team staffing`、`team spawn`、`team dismiss` 的用法和退役后的历史保留规则见 [动态配员说明](docs/dynamic-staffing.md)。
+
+`team review --dispatch <id> [--cli <preset>] "<审查范围>" 可创建绑定源报告与提交的一次性审查成员。完成后自动退役，审查意见和目录继续保留，详见 [一次性审查说明](docs/one-shot-reviews.md)。
+
+打开 **活动中心 → 待处理**，汇总未答问题、未送达汇报、停止成员的排队任务、待验收报告和远程连接问题，并跳转到原有处理入口。筛选、分页和状态说明见 [待处理事项](docs/activity-attention.md)。
+
+[协作统计](docs/collaboration-statistics.md)：根任务计数、耗时样本覆盖与实际准备的提示词字节。
+
 知识抽屉与 `hive data --help` 提供本机备份、校验、恢复到新目录和可撤销归档。备份不包含认证凭据及工作区源码；恢复后成员保持停止，原数据目录保留。迁移步骤与范围见 [本地备份与恢复说明](docs/local-data-recovery.md)。
 
 ## 故障排查
@@ -331,21 +355,16 @@ node dist/src/cli/hive.js --port 4010
 
 如果命令仍然启动全局安装的旧版本，检查 `which hive` / `where hive`，开发时可以直接使用上面的 `node dist/src/cli/hive.js`。
 
-**原生包构建失败**
+**缺少 PTY 平台包**
 
-Hive 依赖 `node-pty` 和 `better-sqlite3`，它们用原生二进制。确认 Node.js 22+，清干净 package manager 缓存，并准备好你平台的构建工具（macOS Xcode CLI、Linux build-essential + python3、Windows VS Build Tools）。
+检查 `node --version`、`node -p "process.platform + '/' + process.arch"`，
+以及安装时是否保留了 optional dependencies。移除 `--omit=optional` 或包管理器中
+对应的禁用选项，在运行 Hive 的机器上重新安装；不要跨系统或架构复制 `node_modules`。
 
-安装时如果看到 `prebuild-install@7.1.3` 的 deprecated warning，可以忽略。它来自 `better-sqlite3` 的原生二进制下载链路，只是上游安装器维护状态提示，不代表 Hive 安装失败，也不会影响运行。
-
-判断时要看 warning 文本，不能只看 npm 的退出码：
-
-| warning | 来源 | 处理 |
-| --- | --- | --- |
-| `allow-scripts ... not yet covered` | npm 11 安装脚本审查 | 未启用 strict 模式时只是提示；可用 `npm install-scripts ls` 检查。 |
-| `install-scripts ... blocked` | npm 12 默认拒绝策略 | 不能忽略。只在消费者项目的 `allowScripts` 中批准列出的包，或使用上面的全局安装命令。 |
-| `prebuild-install@7.1.3 deprecated` | `better-sqlite3` 安装链 | 上游维护提示；原生模块构建成功时可以忽略。 |
-
-安装包运行需要 `hiveteam`、`better-sqlite3` 和 `node-pty` 的安装脚本；源码安装还会批准 `esbuild`。不要为此使用 `--dangerously-allow-all-scripts`。
+已构建的安装包支持 `npm install --ignore-scripts <archive.tgz>`，无需原生模块重编译。
+源码构建仍需要前端工具；如果它的安装被阻止，在源码项目中审查并批准 `esbuild`。
+Electron 通过 `pnpm desktop:install` 单独安装。在源码目录运行 `pnpm release:compat`
+可检查运行时模块与 CLI 是否可用。
 
 **Linux 上目录选择器不弹**
 
@@ -365,6 +384,12 @@ node dist/src/cli/hive.js --port 4010
 ```
 
 使用 `where hive` 找出 PATH 中可能排在本仓库之前的旧全局 shim。
+
+**Codex 提示模型元数据缺失**
+
+`gpt-6-sol` 在 Codex 0.155.1 的冷缓存环境下可能触发 fallback metadata。
+请升级实际启动的 CLI，保留模型配置，并在任务结束后重启成员。
+版本核对与执行权限说明见 [Codex 模型元数据排障](docs/codex-model-metadata.md)。
 
 **Codex 终端在 Windows 上无法滚动**
 
@@ -406,13 +431,63 @@ pnpm desktop:dev
 pnpm desktop:acceptance -- "D:\桌面\AI test"
 ```
 
-常用命令：
+提交非简单改动前，依次运行：
 
 ```bash
 pnpm check
+pnpm typecheck
 pnpm build
 pnpm test
 ```
+
+`pnpm check` 运行 Biome；`pnpm typecheck` 检查 runtime、Web UI、测试和 gateway 的
+TypeScript 类型，不生成构建产物；`pnpm build` 检查生产构建。`pnpm test` 通过统一
+runner 运行完整测试，并使用隔离的临时 Hive 数据目录；macOS、Linux 和 Windows CI
+也使用这个入口。`pnpm test:windows` 是同一套完整测试的别名。
+
+如需在相同隔离环境中只运行一个测试文件：
+
+```bash
+pnpm test tests/unit/task-markdown.test.ts
+```
+
+### 发布产物验收
+
+在本机构建一个安装包，并验收同一份归档：
+
+```bash
+pnpm build
+node scripts/create-release-artifact.mjs --output ../hiveteam-release
+node scripts/pack-smoke.mjs --artifact ../hiveteam-release/release-manifest.json --report ../hiveteam-release/smoke-report.json
+```
+
+manifest 记录源码 commit、工作树是否有未提交变更、锁文件哈希、打包环境和归档
+SHA-256。smoke 命令先校验归档，再将其安装到临时目录，验收安装后 runtime 的
+HTTP、WebSocket、原生 PTY、团队交付、停止和重启流程。JSON 报告记录实际环境和
+结果；未通过 `HIVE_PLAYWRIGHT_MODULE` 提供 Playwright 模块时，浏览器检查会标为未运行。
+
+创建归档只打包已有构建，不会再次构建；安装验收仍启用安装生命周期脚本。
+
+未提供 `--artifact` 或 `HIVE_RELEASE_MANIFEST` 时，`pnpm pack:smoke` 仍会打包当前构建。将 `HIVE_RELEASE_MANIFEST`
+设为 manifest 的绝对路径，可以复用已有归档，包集成测试也会沿用它。显式
+`--artifact` 参数优先。`--expected-platform`、`--expected-arch` 和
+`--expected-node` 可用于校验指定的运行环境。
+
+发布工作流配置为在 Ubuntu 24.04 / Node 24.14.0 上构建一次，以下六组安装包验收
+共享同一份归档，每个组合都执行默认安装与禁用安装脚本两种模式，共 12 项：
+
+| Runner | 平台 / 架构 | 固定 Node 版本 |
+| --- | --- | --- |
+| `ubuntu-24.04` | `linux` / `x64` | `22.18.0`、`24.14.0` |
+| `windows-2022` | `win32` / `x64` | `22.18.0`、`24.14.0` |
+| `macos-15` | `darwin` / `arm64` | `22.18.0`、`24.14.0` |
+
+两种安装模式执行相同的 HTTP、SQLite 重启、`team`、Unicode 终端、resize 和进程清理验收。
+本地可在 `pnpm pack:smoke` 后添加 `--ignore-scripts` 运行第二种模式。
+
+源码检查在相同的三个 runner 上使用 Node 24.14.0，先校验归档，再从中恢复
+`dist/` 和 `web/dist/` 供集成测试使用。每个安装包验收 job 即使失败也会上传报告。
+上表描述 CI 的配置覆盖范围，是否通过以工作流运行结果和报告为准。此工作流不会发布包。
 
 预演 production 构建：
 
@@ -429,7 +504,7 @@ Production 模式下 runtime 直接服务构建好的 web UI，不需要单独�
 
 ## 状态
 
-Hive 目前处于 alpha 阶段，核心流程已可用。本仓库包含多 CLI agent 预设、自动组队、Workflows、团队记忆、PWA 安装和可选 Remote access；当前检出的提交就是运行构建的唯一依据。
+Hive 目前处于 alpha 阶段，核心流程已可用。本仓库包含多 CLI agent 预设、成员管理、JSON Workflows、团队记忆、PWA 安装和可选 Remote access；当前检出的提交就是运行构建的唯一依据。
 
 ## 另一种形态：squad
 

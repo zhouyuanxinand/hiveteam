@@ -51,6 +51,7 @@ describe('user input stdin injection', () => {
         "process.stdin.on('data', (chunk) => {",
         "  process.stdout.write('ORCH:' + chunk)",
         '})',
+        "process.stdout.write('ORCH_READY\\n')",
       ].join('\n')
     )
 
@@ -95,6 +96,15 @@ describe('user input stdin injection', () => {
 
       expect(inputResponse.status).toBe(202)
 
+      // Submit immediately as before, but allow native ConPTY startup to finish
+      // before measuring the original stdin echo deadline.
+      await waitFor(async () => {
+        const runResponse = await fetch(`${baseUrl}/api/runtime/runs/${startPayload.run_id}`, {
+          headers: { cookie: uiCookie },
+        })
+        const run = (await runResponse.json()) as { output: string }
+        expect(run.output).toContain('ORCH_READY')
+      }, 10_000)
       await waitFor(async () => {
         const runResponse = await fetch(`${baseUrl}/api/runtime/runs/${startPayload.run_id}`, {
           headers: { cookie: uiCookie },

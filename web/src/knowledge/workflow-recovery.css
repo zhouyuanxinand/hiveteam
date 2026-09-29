@@ -1,0 +1,52 @@
+.workflow-run-summary {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workflow-run-summary__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.workflow-recovery {
+  margin-block: 14px;
+  color: var(--text-primary);
+}
+.workspace-workflow-card .workflow-run-summary p {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.workspace-workflow-card .workflow-recovery strong {
+  display: inline;
+  font-size: inherit;
+}
+.workflow-recovery__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.workflow-recovery__issues {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.workflow-recovery__detail {
+  overflow-wrap: anywhere;
+}
+.workflow-recovery__delivery {
+  min-width: 0;
+  padding-block: 12px;
+  border-block: 1px solid var(--border);
+}
+.workflow-recovery__delivery section {
+  padding-inline: 0;
+}
+@media (max-width: 760px) {
+  .workspace-workflow-card .workflow-recovery__delivery textarea {
+    font-size: 16px;
+  }
+}

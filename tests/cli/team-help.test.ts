@@ -28,7 +28,10 @@ describe('team cli help', () => {
     const output = logSpy.mock.calls.map((call) => call.join(' ')).join('\n')
     expect(output).toContain('Usage:')
     expect(output).toContain('team list')
-    expect(output).toContain('team guide <core|dispatch|tasks|memory|workflow|member>')
+    expect(output).toContain('team guide <core|dispatch|messages|tasks|memory|workflow|member>')
+    expect(output).toContain('team message --dispatch <id> --kind note|question|answer|progress')
+    expect(output).toContain('team messages --dispatch <id>')
+    expect(output).toContain('--seen-seq <sequence>')
     expect(output).toContain('team send "<worker-name>" "<task>"')
     expect(output).toContain('team cancel --dispatch <dispatch-id> "<reason>"')
     expect(output).toContain(
@@ -54,7 +57,7 @@ describe('team cli help', () => {
 
   test('rejects an unknown guide topic with the guide usage', async () => {
     await expect(runTeamCommand(['guide', 'unknown'])).rejects.toThrow(
-      'Usage: team guide <core|dispatch|tasks|memory|workflow|member>'
+      'Usage: team guide <core|dispatch|messages|tasks|memory|workflow|member>'
     )
   })
 

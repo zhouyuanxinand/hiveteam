@@ -10,6 +10,7 @@ import {
   type TeamMemoryScope,
 } from '../shared/team-memory.js'
 import { BadRequestError } from './http-errors.js'
+import { parseMemorySourceReference } from './memory-source-input.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import {
@@ -68,6 +69,7 @@ const parseQueryOptions = (requestUrl: string | undefined) => {
 }
 
 type CreateMemoryBody = {
+  source_ref?: unknown
   body?: unknown
   kind?: unknown
   procedure_ref?: unknown
@@ -104,8 +106,10 @@ const readCreateBody = async (request: Parameters<RouteDefinition['handler']>[0]
   if (body.kind === 'procedure_ref' && !procedureRef) {
     throw new BadRequestError('procedure_ref is required when kind is procedure_ref')
   }
+  const sourceRef = parseMemorySourceReference(body.source_ref)
   const tags = (body.tags ?? []).filter((tag): tag is string => typeof tag === 'string')
   return {
+    ...(sourceRef ? { sourceRef } : {}),
     body: body.body,
     kind: body.kind,
     procedureRef,

@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
+import { codexMessageHash, encodeCodexMessage } from '../../src/server/codex-message-wire.js'
 import {
   assertReportSession,
   createReportJournalReader,
@@ -11,6 +11,7 @@ import {
   reportJournalOffset,
 } from '../../src/server/codex-report-journal.js'
 import { reportReceiptMarker } from '../../src/server/report-delivery-receipt.js'
+import Database from '../../src/server/sqlite.js'
 import { applySchemaVersion47 } from '../../src/server/sqlite-schema-v47.js'
 
 const dirs: string[] = []
@@ -33,6 +34,43 @@ const setup = () => {
     pattern: `${sessions}/**/*.jsonl`,
   }
 }
+
+test.each([
+  'response_item',
+  'event_msg',
+])('requires the whole encoded user message, not a surviving marker (%s)', (type) => {
+  const { file, marker } = setup()
+  const wire = encodeCodexMessage(`完整中文正文\n  第二行保留空格 🐝\n${marker}\n`)
+  const scan = createReportJournalReader(
+    file,
+    reportJournalOffset(file),
+    marker,
+    codexMessageHash(wire)
+  )
+  const append = (text: string) =>
+    appendFileSync(
+      file,
+      `${JSON.stringify({
+        type,
+        payload:
+          type === 'response_item'
+            ? { role: 'user', content: [{ type: 'input_text', text }] }
+            : { type: 'user_message', message: text },
+      })}\n`
+    )
+  for (const changed of [
+    marker,
+    wire.replace('完整', ''),
+    wire.replace('  第二行', ' 第二行'),
+    `${wire}\n`,
+    `prefix ${wire}`,
+  ]) {
+    append(changed)
+    expect(scan()).toEqual({ found: false, caughtUp: true })
+  }
+  append(wire)
+  expect(scan()).toEqual({ found: true, caughtUp: true })
+})
 
 test.each([
   'response_item',

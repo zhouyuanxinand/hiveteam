@@ -1,12 +1,13 @@
-import type { Database } from 'better-sqlite3'
-
 import type { SessionIdCaptureConfig } from './session-capture.js'
+import type { Database } from './sqlite.js'
 
 export interface AgentSessionContext {
   capture: SessionIdCaptureConfig
   cwd: string
   knownSessionIds: string[]
   platform: NodeJS.Platform
+  /** Explicit offline recovery of an old session that never received its Hive marker. */
+  recoveredSessionId?: string
 }
 
 export const createAgentSessionContextStore = (db: Database) => {

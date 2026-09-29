@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
-import type { Database } from 'better-sqlite3'
 import {
   EXECUTION_POLICY_REVISION,
   type ExecutionPermissions,
@@ -15,16 +14,23 @@ import type { AgentLaunchConfigInput } from './agent-run-store.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
 import { CodeReviewError } from './code-review-error.js'
 import { buildCodexExecutionProfile } from './codex-execution-profile.js'
+import { withCodexProcessIsolation } from './codex-process-isolation.js'
 import { verifyCodexSandbox } from './codex-sandbox-probe.js'
 import { readExecutionCliIdentity } from './execution-cli-identity.js'
 import { readExecutionFilesystem } from './execution-filesystem.js'
 import { createExecutionGitView } from './execution-git-view.js'
+import {
+  automaticTrustFingerprint,
+  createAutomaticWorkerTrustStore,
+} from './execution-policy-automatic-trust.js'
 import { ExecutionPolicyError } from './execution-policy-error.js'
 import { commitRestrictedWorkerChanges } from './execution-policy-git.js'
 import { createExecutionPolicyStore } from './execution-policy-store.js'
 import { createTesterCheckout } from './execution-tester-checkout.js'
 import { BadRequestError, ConflictError, ForbiddenError } from './http-errors.js'
 import type { ManagedExecution } from './managed-execution.js'
+import type { SettingsStore } from './settings-store.js'
+import type { Database } from './sqlite.js'
 import { createTeamMailboxBroker } from './team-mailbox-broker.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 
@@ -51,6 +57,7 @@ interface ExecutionPolicyRuntimeInput {
   getWorkspacePaths: () => string[]
   getAgent: (workspaceId: string, agentId: string) => AgentSummary
   getConfig: (workspaceId: string, agentId: string) => AgentLaunchConfigInput | undefined
+  getCommandPreset: SettingsStore['getCommandPreset']
   getActiveRun: (workspaceId: string, agentId: string) => { runId: string } | undefined | null
   sessionStore: AgentSessionStorePort
   worktrees: WorkerWorktreeRuntime
@@ -71,6 +78,7 @@ export const permittedCodexArgs = (args: string[]) => {
 
 export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput) => {
   const store = createExecutionPolicyStore(input.db)
+  const automaticTrust = createAutomaticWorkerTrustStore(input.db)
   const brokers = new Map<string, { close: () => Promise<void>; deniedPaths: string[] }>()
   const configFor = (workspaceId: string, agentId: string) => {
     const config = input.getConfig(workspaceId, agentId)
@@ -87,6 +95,11 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
     const agent = input.getAgent(workspaceId, agentId)
     const cwd = await realpath(input.worktrees.path(workspace, agentId))
     const identity = await readExecutionCliIdentity(config, cwd)
+    const preferenceFingerprint = automaticTrustFingerprint(
+      config,
+      identity,
+      config.commandPresetId ? input.getCommandPreset(config.commandPresetId) : undefined
+    )
     const privateHome = input.dataDir
       ? resolve(input.dataDir, 'execution-policies', agentId.replaceAll(':', '_'), 'codex-home')
       : null
@@ -205,6 +218,12 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
           : []),
       ],
       unsafe_grant: grant,
+      automatic_worker: agent.role !== 'orchestrator' && Boolean(agent.spawnedByAgentId),
+      automatic_worker_trust_configured: automaticTrust.configured(config.commandPresetId),
+      trust_automatic_workers: automaticTrust.matches(
+        config.commandPresetId,
+        preferenceFingerprint
+      ),
       active_policy: active
         ? {
             policy_id: active.policy_id,
@@ -219,7 +238,7 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
         : null,
       active_run_unverified: Boolean(activeRun && !active),
     }
-    return { view, identity, workspace, cwd, agent, tree }
+    return { view, identity, workspace, cwd, agent, tree, config, preferenceFingerprint }
   }
   const preview = async (workspaceId: string, agentId: string) =>
     (await inspect(workspaceId, agentId)).view
@@ -263,7 +282,12 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
     async update(workspaceId: string, agentId: string, value: ExecutionPolicyUpdate) {
       if (!value || (value.profile !== 'restricted' && value.profile !== 'trusted_unsafe'))
         throw new BadRequestError('Unknown execution profile')
-      const current = await preview(workspaceId, agentId)
+      if (
+        value.trust_automatic_workers !== undefined &&
+        typeof value.trust_automatic_workers !== 'boolean'
+      )
+        throw new BadRequestError('trust_automatic_workers must be a boolean')
+      const { view: current, config, preferenceFingerprint } = await inspect(workspaceId, agentId)
       if (
         value.expected_cli_fingerprint !== current.cli_fingerprint ||
         value.expected_cli_version !== current.cli_version ||
@@ -272,19 +296,87 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
         throw new ConflictError(
           'CLI or policy changed. Refresh the execution policy and review it again.'
         )
-      if (value.profile === 'trusted_unsafe') {
+      if (value.profile === 'trusted_unsafe' || value.trust_automatic_workers === true) {
         if (value.acknowledge_unsafe !== true)
           throw new BadRequestError(
             'Explicit acknowledgement is required for unrestricted execution.'
           )
-        store.grant(workspaceId, agentId, {
-          cli_fingerprint: current.cli_fingerprint,
-          cli_version: current.cli_version,
-          policy_revision: EXECUTION_POLICY_REVISION,
-          granted_at: Date.now(),
-        })
-      } else store.revoke(workspaceId, agentId)
+      }
+      if (value.trust_automatic_workers === true && !config.commandPresetId)
+        throw new BadRequestError('Choose a command preset before setting automatic member trust.')
+      if (value.trust_automatic_workers === true && !preferenceFingerprint)
+        throw new BadRequestError(
+          'The CLI installation cannot be verified for automatic member trust.'
+        )
+      input.db.transaction(() => {
+        if (value.profile === 'trusted_unsafe')
+          store.grant(workspaceId, agentId, {
+            cli_fingerprint: current.cli_fingerprint,
+            cli_version: current.cli_version,
+            policy_revision: EXECUTION_POLICY_REVISION,
+            granted_at: Date.now(),
+          })
+        else store.revoke(workspaceId, agentId)
+        if (value.trust_automatic_workers !== undefined && config.commandPresetId)
+          automaticTrust.set(
+            workspaceId,
+            agentId,
+            config.commandPresetId,
+            value.trust_automatic_workers ? preferenceFingerprint : null
+          )
+      })()
       return preview(workspaceId, agentId)
+    },
+    async authorizeAutomaticWorker(workspaceId: string, agentId: string, actorId: string) {
+      const child = await inspect(workspaceId, agentId)
+      if (
+        !child.view.automatic_worker ||
+        child.agent.spawnedByAgentId !== actorId ||
+        child.agent.retiredAt !== undefined ||
+        !child.config.commandPresetId
+      )
+        return
+      const actor = await inspect(workspaceId, actorId)
+      if (
+        actor.agent.role !== 'orchestrator' ||
+        actor.config.commandPresetId !== child.config.commandPresetId ||
+        actor.preferenceFingerprint !== child.preferenceFingerprint ||
+        !child.preferenceFingerprint ||
+        !automaticTrust.matches(child.config.commandPresetId, child.preferenceFingerprint)
+      )
+        return
+      // This is called once during admission, never by start/retry. A revoked
+      // member therefore cannot recover its grant through an automatic restart.
+      if (
+        JSON.stringify(configFor(workspaceId, agentId)) !== JSON.stringify(child.config) ||
+        JSON.stringify(configFor(workspaceId, actorId)) !== JSON.stringify(actor.config) ||
+        automaticTrustFingerprint(
+          child.config,
+          child.identity,
+          input.getCommandPreset(child.config.commandPresetId)
+        ) !== child.preferenceFingerprint
+      )
+        throw new ConflictError('CLI configuration changed during automatic member admission.')
+      const presetId = child.config.commandPresetId
+      const fingerprint = child.preferenceFingerprint
+      input.db.transaction(() => {
+        if (store.hasDecision(workspaceId, agentId)) return
+        store.grant(
+          workspaceId,
+          agentId,
+          {
+            cli_fingerprint: child.identity.fingerprint,
+            cli_version: child.identity.version,
+            policy_revision: EXECUTION_POLICY_REVISION,
+            granted_at: Date.now(),
+          },
+          {
+            preset_id: presetId,
+            preference_fingerprint: fingerprint,
+            spawned_by_agent_id: actorId,
+          }
+        )
+      })()
     },
     async revoke(workspaceId: string, agentId: string) {
       input.getAgent(workspaceId, agentId)
@@ -503,6 +595,12 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
             write_roots: [...view.requested.write_roots, scratch, join(broker.path, 'requests')],
           }
         }
+        bootstrap.startConfig = await withCodexProcessIsolation(bootstrap.startConfig, identity, {
+          cwd,
+          env: bootstrap.startEnv,
+          execution: launch.execution,
+          assertPolicy: assertCurrentPolicy,
+        })
         const snapshot: ExecutionPolicySnapshot = {
           ...view,
           active_policy: null,

@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import headlessTerminalModule from '@xterm/headless'
 import { afterEach, expect, test } from 'vitest'
 import WebSocket from 'ws'
 import { buildAgentStartupInstructions } from '../../src/server/agent-startup-instructions.js'
+import { writeCodexCli } from '../helpers/codex-cli.js'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -22,13 +24,16 @@ const setup = async (mode: string) => {
   const server = await startAuthorizedTestServer()
   cleanups.push(server.close)
   const cookie = await getUiCookie(server.baseUrl)
-  const workspace = server.store.createWorkspace(server.dataDir, 'Startup regression')
+  const workspace = server.store.createWorkspace(server.dataDir, 'Startup regression 🐝')
   const agent = server.store.getWorkspaceSnapshot(workspace.id).agents[0]
   if (!agent) throw new Error('Expected Orchestrator')
   const journal = join(server.dataDir, 'accepted-input.json')
   server.store.configureAgentLaunch(workspace.id, agent.id, {
-    command: process.execPath,
-    args: [resolve('tests/fixtures/codex-startup-tui.mjs'), journal, mode],
+    command: writeCodexCli(
+      server.dataDir,
+      `await import(${JSON.stringify(pathToFileURL(resolve('tests/fixtures/codex-startup-tui.mjs')).href)})`
+    ),
+    args: [journal, mode],
     interactiveCommand: 'codex',
     presetAugmentationDisabled: true,
   })
@@ -42,6 +47,7 @@ const setup = async (mode: string) => {
   )
   expect(response.status).toBe(201)
   const run = (await response.json()) as { run_id: string }
+  if (mode === 'expanded') server.store.resizeAgentRun(run.run_id, 200, 120)
   await waitFor(() => server.store.getLiveRun(run.run_id).output.includes('›'))
   const state = () =>
     JSON.parse(readFileSync(journal, 'utf8')) as {
@@ -108,6 +114,7 @@ test('a terminal reply mixed with a user draft still stops automatic startup sub
 
 test.each([
   'collapsed',
+  'cursor-addressed',
   'expanded',
   'trust',
   'delayed-composer',
@@ -136,6 +143,16 @@ test('a user edit after the startup paste cancels automatic submission', async (
   expect(state()).toMatchObject({ accepted: [], pastes: 1, enters: 0, draft: 'USER_DRAFT' })
 }, 15_000)
 
+test.each([
+  'partial-expanded',
+  'partial-count',
+])('Codex waits for the complete %s paste before submitting startup instructions', async (mode) => {
+  const { state, workspace, agent } = await setup(mode)
+  await waitFor(() => state().accepted.length === 1)
+  expect(state().accepted).toEqual([buildAgentStartupInstructions({ agent, workspace })])
+  expect(state().pastes).toBe(1)
+}, 20_000)
+
 test('a confirmation over a startup paste never receives automatic Enter', async () => {
   const { state } = await setup('blocked')
   await waitFor(() => state().pastes === 1)
@@ -143,8 +160,11 @@ test('a confirmation over a startup paste never receives automatic Enter', async
   expect(state()).toMatchObject({ accepted: [], pastes: 1, enters: 0 })
 }, 15_000)
 
-test('startup instructions never overwrite an existing user draft', async () => {
-  const { state } = await setup('existing-draft')
+test.each([
+  'existing-draft',
+  'cursor-addressed-draft',
+])('startup instructions never overwrite an existing %s', async (mode) => {
+  const { state } = await setup(mode)
   await new Promise((resolve) => setTimeout(resolve, 2500))
   expect(state()).toMatchObject({ accepted: [], pastes: 0, enters: 0 })
 }, 15_000)
@@ -163,6 +183,13 @@ test.skipIf(process.platform !== 'win32')(
   },
   15_000
 )
+
+test('a near-complete paste missing trailing characters is not mistaken for omitted newlines', async () => {
+  const { state, workspace, agent } = await setup('near-complete')
+  await waitFor(() => state().accepted.length === 1)
+  expect(state().accepted).toEqual([buildAgentStartupInstructions({ agent, workspace })])
+  expect(state().pastes).toBe(1)
+}, 20_000)
 
 test('a browser resize during startup preserves the current composer and submits it once', async () => {
   const { server, runId, state, workspace, agent } = await setup('resized')

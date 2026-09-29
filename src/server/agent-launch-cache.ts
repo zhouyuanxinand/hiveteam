@@ -1,4 +1,5 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
+import { parseSessionIdCapture } from './session-capture.js'
 
 export interface AgentLaunchConfigRow {
   agentId: string
@@ -64,7 +65,7 @@ export const createAgentLaunchCache = (store: AgentLaunchCacheStore) => {
         interactiveCommand: input.interactiveCommand ?? null,
         presetAugmentationDisabled: input.presetAugmentationDisabled ?? false,
         resumeArgsTemplate: input.resumeArgsTemplate ?? null,
-        sessionIdCapture: input.sessionIdCapture ?? null,
+        sessionIdCapture: parseSessionIdCapture(input.sessionIdCapture),
       }
       store.saveLaunchConfig(workspaceId, agentId, normalized)
       const key = cacheKey(workspaceId, agentId)

@@ -1,6 +1,13 @@
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 
 export const serializeDispatchRecord = (record: DispatchRecord) => ({
+  ...(record.parentDispatchId
+    ? {
+        parent_dispatch_id: record.parentDispatchId,
+        root_dispatch_id: record.rootDispatchId ?? record.id,
+      }
+    : {}),
+  ...(record.messageProtocolVersion === 1 ? { message_protocol_version: 1 } : {}),
   report_outcome: record.reportOutcome,
   report_revision: record.reportRevision,
   accepted_at: record.acceptedAt,

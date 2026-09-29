@@ -6,11 +6,9 @@ import type {
   GitSnapshotResult,
   WorkspaceGitStatus,
 } from '../../src/shared/git.js'
+import type { MemorySourceReference } from '../../src/shared/memory-provenance.js'
 import type { OpenTargetId, OpenWorkspaceErrorCode } from '../../src/shared/open-targets.js'
 import type {
-  TeamMemoryDreamReview,
-  TeamMemoryDreamRun,
-  TeamMemoryDreamSuggestion,
   TeamMemoryEntry,
   TeamMemoryKind,
   TeamMemoryProcedureRef,
@@ -47,9 +45,6 @@ export type {
   GitSnapshotResult,
   OpenTargetId,
   OpenWorkspaceErrorCode,
-  TeamMemoryDreamReview,
-  TeamMemoryDreamRun,
-  TeamMemoryDreamSuggestion,
   TeamMemoryEntry,
   TeamMemoryKind,
   TeamMemoryProcedureRef,
@@ -59,6 +54,11 @@ export type {
 }
 
 const fromPayload = (payload: TeamListItemPayload): TeamListItem => ({
+  ...(payload.lifecycle_kind ? { lifecycleKind: payload.lifecycle_kind } : {}),
+  ...(payload.spawned_by_agent_id ? { spawnedByAgentId: payload.spawned_by_agent_id } : {}),
+  ...(payload.retired_at === undefined ? {} : { retiredAt: payload.retired_at }),
+  ...(payload.preparation_state ? { preparationState: payload.preparation_state } : {}),
+  ...(payload.preparation_error ? { preparationError: payload.preparation_error } : {}),
   ...(payload.clarification
     ? {
         clarification: {
@@ -1317,6 +1317,7 @@ export const listTeamMemory = async (
 export const createTeamMemory = async (
   workspaceId: string,
   input: {
+    sourceRef?: MemorySourceReference
     body: string
     kind: TeamMemoryKind
     procedureRef?: TeamMemoryProcedureRef | null
@@ -1324,11 +1325,12 @@ export const createTeamMemory = async (
     tags: string[]
   }
 ): Promise<TeamMemoryEntry> => {
-  const { procedureRef, ...body } = input
+  const { procedureRef, sourceRef, ...body } = input
   const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory`, {
     body: JSON.stringify({
       ...body,
       ...(procedureRef !== undefined ? { procedure_ref: procedureRef } : {}),
+      ...(sourceRef ? { source_ref: sourceRef } : {}),
     }),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
@@ -1411,189 +1413,6 @@ export const setTeamMemoryDreamEnabled = async (
   }
 }
 
-interface TeamMemoryDreamSuggestionPayload {
-  body: string
-  kind: TeamMemoryKind
-  procedure_ref?: TeamMemoryProcedureRef | null
-  scope: TeamMemoryScope
-  source_memory_ids: string[]
-  tags: string[]
-}
-
-interface TeamMemoryDreamPayload {
-  created_at: number
-  created_memory_ids: string[]
-  execution_error?: string | null
-  execution_status?: TeamMemoryDreamRun['executionStatus']
-  id: string
-  orchestrator_run_id?: string | null
-  rolled_back_at: number | null
-  reviews?: TeamMemoryDreamReviewPayload[]
-  status: TeamMemoryDreamRun['status']
-  submitted_at: number | null
-  suggestions: TeamMemoryDreamSuggestionPayload[]
-  workspace_id: string
-}
-
-interface TeamMemoryDreamReviewPayload {
-  artifacts: string[]
-  created_at: number
-  dispatch_id: string
-  dream_id: string
-  id: string
-  review_text: string | null
-  status: TeamMemoryDreamReview['status']
-  suggestions: TeamMemoryDreamSuggestionPayload[]
-  updated_at: number
-  worker_id: string
-  workspace_id: string
-}
-
-const fromDreamReviewPayload = (payload: TeamMemoryDreamReviewPayload): TeamMemoryDreamReview => ({
-  artifacts: payload.artifacts,
-  createdAt: payload.created_at,
-  dispatchId: payload.dispatch_id,
-  dreamId: payload.dream_id,
-  id: payload.id,
-  reviewText: payload.review_text,
-  status: payload.status,
-  suggestions: payload.suggestions.map((suggestion) => ({
-    body: suggestion.body,
-    kind: suggestion.kind,
-    procedureRef: suggestion.procedure_ref ?? null,
-    scope: suggestion.scope,
-    sourceMemoryIds: suggestion.source_memory_ids,
-    tags: suggestion.tags,
-  })),
-  updatedAt: payload.updated_at,
-  workerId: payload.worker_id,
-  workspaceId: payload.workspace_id,
-})
-
-const fromDreamPayload = (payload: TeamMemoryDreamPayload): TeamMemoryDreamRun => ({
-  createdAt: payload.created_at,
-  createdMemoryIds: payload.created_memory_ids,
-  executionError: payload.execution_error ?? null,
-  executionStatus: payload.execution_status ?? 'queued',
-  id: payload.id,
-  orchestratorRunId: payload.orchestrator_run_id ?? null,
-  rolledBackAt: payload.rolled_back_at,
-  reviews: (payload.reviews ?? []).map(fromDreamReviewPayload),
-  status: payload.status,
-  submittedAt: payload.submitted_at,
-  suggestions: payload.suggestions.map(
-    (suggestion): TeamMemoryDreamSuggestion => ({
-      body: suggestion.body,
-      kind: suggestion.kind,
-      procedureRef: suggestion.procedure_ref ?? null,
-      scope: suggestion.scope,
-      sourceMemoryIds: suggestion.source_memory_ids,
-      tags: suggestion.tags,
-    })
-  ),
-  workspaceId: payload.workspace_id,
-})
-
-export const listTeamMemoryDreams = async (workspaceId: string): Promise<TeamMemoryDreamRun[]> => {
-  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/dream`)
-  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to load Dream runs'))
-  return ((await response.json()) as TeamMemoryDreamPayload[]).map(fromDreamPayload)
-}
-
-export const createTeamMemoryDream = async (workspaceId: string): Promise<TeamMemoryDreamRun> => {
-  const response = await apiFetch(`/api/ui/workspaces/${workspaceId}/memory/dream`, {
-    method: 'POST',
-  })
-  if (!response.ok)
-    throw new Error(await readErrorMessage(response, 'Failed to prepare Dream review'))
-  return fromDreamPayload((await response.json()) as TeamMemoryDreamPayload)
-}
-
-export const updateTeamMemoryDream = async (
-  workspaceId: string,
-  dreamId: string,
-  suggestions: TeamMemoryDreamSuggestion[]
-): Promise<TeamMemoryDreamRun> => {
-  const response = await apiFetch(
-    `/api/ui/workspaces/${workspaceId}/memory/dream/${encodeURIComponent(dreamId)}`,
-    {
-      body: JSON.stringify({
-        suggestions: suggestions.map((suggestion) => ({
-          body: suggestion.body,
-          kind: suggestion.kind,
-          procedure_ref: suggestion.procedureRef,
-          scope: suggestion.scope,
-          source_memory_ids: suggestion.sourceMemoryIds,
-          tags: suggestion.tags,
-        })),
-      }),
-      headers: { 'content-type': 'application/json' },
-      method: 'PATCH',
-    }
-  )
-  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to save Dream review'))
-  return fromDreamPayload((await response.json()) as TeamMemoryDreamPayload)
-}
-
-export const submitTeamMemoryDream = async (
-  workspaceId: string,
-  dreamId: string
-): Promise<TeamMemoryDreamRun> => {
-  const response = await apiFetch(
-    `/api/ui/workspaces/${workspaceId}/memory/dream/${encodeURIComponent(dreamId)}/submit`,
-    {
-      body: JSON.stringify({ orchestrator_id: `${workspaceId}:orchestrator` }),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    }
-  )
-  if (!response.ok)
-    throw new Error(await readErrorMessage(response, 'Only the Orchestrator can submit Dream'))
-  return fromDreamPayload((await response.json()) as TeamMemoryDreamPayload)
-}
-
-export const rollbackTeamMemoryDream = async (
-  workspaceId: string,
-  dreamId: string
-): Promise<TeamMemoryDreamRun> => {
-  const response = await apiFetch(
-    `/api/ui/workspaces/${workspaceId}/memory/dream/${encodeURIComponent(dreamId)}/rollback`,
-    { method: 'POST' }
-  )
-  if (!response.ok) throw new Error(await readErrorMessage(response, 'Failed to roll back Dream'))
-  return fromDreamPayload((await response.json()) as TeamMemoryDreamPayload)
-}
-
-export const listTeamMemoryDreamReviews = async (
-  workspaceId: string,
-  dreamId: string
-): Promise<TeamMemoryDreamReview[]> => {
-  const response = await apiFetch(
-    `/api/ui/workspaces/${workspaceId}/memory/dream/${encodeURIComponent(dreamId)}/reviews`
-  )
-  if (!response.ok)
-    throw new Error(await readErrorMessage(response, 'Failed to load Dream reviews'))
-  return ((await response.json()) as TeamMemoryDreamReviewPayload[]).map(fromDreamReviewPayload)
-}
-
-export const requestTeamMemoryDreamReview = async (
-  workspaceId: string,
-  dreamId: string,
-  workerId: string
-): Promise<TeamMemoryDreamReview> => {
-  const response = await apiFetch(
-    `/api/ui/workspaces/${workspaceId}/memory/dream/${encodeURIComponent(dreamId)}/reviews`,
-    {
-      body: JSON.stringify({ worker_id: workerId }),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    }
-  )
-  if (!response.ok)
-    throw new Error(await readErrorMessage(response, 'Failed to request Dream review'))
-  return fromDreamReviewPayload((await response.json()) as TeamMemoryDreamReviewPayload)
-}
-
 export interface WorkflowDefinition {
   description: string
   id: string
@@ -1638,7 +1457,9 @@ export interface WorkflowRun {
   id: string
   name: string
   startedAt: number | null
-  status: 'completed' | 'failed' | 'running' | 'stopped'
+  status: import('../../src/shared/workflows.js').WorkflowRunStatus
+  needsAttention: boolean
+  recoveryIssues: import('../../src/shared/workflows.js').WorkflowRecoveryIssue[]
   steps: WorkflowRunStep[]
   updatedAt: number
   workflowId: string
@@ -1653,6 +1474,8 @@ interface WorkflowRunPayload {
   name: string
   started_at: number | null
   status: WorkflowRun['status']
+  needs_attention?: boolean
+  recovery_issues?: import('../../src/shared/workflows.js').WorkflowRecoveryIssue[]
   steps: Array<{
     quality?: import('../../src/shared/workflows.js').WorkflowQuality | null
     waiting_for?: import('../../src/shared/workflows.js').WorkflowCondition[]
@@ -1706,6 +1529,8 @@ export const fromWorkflowRunPayload = (run: WorkflowRunPayload): WorkflowRun => 
   name: run.name,
   startedAt: run.started_at,
   status: run.status,
+  needsAttention: run.needs_attention ?? run.status === 'interrupted',
+  recoveryIssues: run.recovery_issues ?? [],
   steps: run.steps.map((step) => ({
     quality: step.quality ?? null,
     waitingFor: step.waiting_for ?? [],

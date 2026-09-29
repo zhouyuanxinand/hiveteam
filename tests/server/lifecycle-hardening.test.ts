@@ -1,13 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-
 import { type AgentManager, createAgentManager } from '../../src/server/agent-manager.js'
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
 import { createApp } from '../../src/server/app.js'
+import Database from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { createWorkspaceStore } from '../../src/server/workspace-store.js'
 import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
@@ -513,9 +511,12 @@ describe('lifecycle hardening (R2.1 / R2.2 / R2.3) — real PTY', () => {
     })
 
     const run = await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    // Begin the shutdown deadline only after the native fixture has installed
+    // its signal handlers; ConPTY negotiation happens before this output.
     await waitFor(() => {
       expect(store.getLiveRun(run.runId).status).toBe('running')
-    })
+      expect(store.getLiveRun(run.runId).output).toContain('stubborn-started')
+    }, 10_000)
     const pid = store.getLiveRun(run.runId).pid
     if (pid === null) throw new Error('Expected PTY pid')
 

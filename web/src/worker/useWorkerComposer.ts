@@ -11,7 +11,7 @@ import {
 } from '../api.js'
 import { useI18n } from '../i18n.js'
 import type { UiLanguage } from '../uiLanguage.js'
-import { generateWorkerName } from './randomWorkerName.js'
+import { generateRoleWorkerName } from './randomWorkerName.js'
 import type { WorkerActions } from './useWorkerActions.js'
 
 interface UseWorkerComposerInput {
@@ -156,7 +156,9 @@ export const useWorkerComposer = ({
   const [startupCommand, setStartupCommand] = useState('')
   const [createWorkerError, setCreateWorkerError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const workerNameGeneratedRef = useRef(false)
+  const workerNameGeneratedRef = useRef(true)
+  const generatedNameSourceRef = useRef<string | null>(null)
+  const [importedNameBase, setImportedNameBase] = useState<string | null>(null)
   const roleDescriptionEditedRef = useRef(false)
   const roleDescriptionDefault = getDefaultDescription(workerRole, roleTemplates, language)
   const customTemplates = useMemo(
@@ -228,18 +230,27 @@ export const useWorkerComposer = ({
 
   const usedNames = useMemo(() => new Set(workers.map((w) => w.name)), [workers])
 
+  const nameBase =
+    roleTemplates.find((template) => template.id === selectedTemplateId)?.name ??
+    importedNameBase ??
+    undefined
+  const nameSource = `${workerRole}:${nameBase ?? ''}`
   const randomizeWorkerName = () => {
     workerNameGeneratedRef.current = true
-    setWorkerName(generateWorkerName({ usedNames }))
+    generatedNameSourceRef.current = nameSource
+    setWorkerName(generateRoleWorkerName({ role: workerRole, baseName: nameBase, usedNames }))
   }
 
   useEffect(() => {
-    if (workerNameGeneratedRef.current) {
-      setWorkerName(generateWorkerName({ usedNames }))
+    if (!open || !workerNameGeneratedRef.current) return
+    if (generatedNameSourceRef.current !== nameSource || !workerName || usedNames.has(workerName)) {
+      generatedNameSourceRef.current = nameSource
+      setWorkerName(generateRoleWorkerName({ role: workerRole, baseName: nameBase, usedNames }))
     }
-  }, [usedNames])
+  }, [open, workerName, workerRole, nameBase, nameSource, usedNames])
 
   const selectWorkerRole = (value: WorkerRole) => {
+    setImportedNameBase(null)
     setWorkerRole(value)
     setSelectedTemplateId(null)
     roleDescriptionEditedRef.current = false
@@ -247,6 +258,7 @@ export const useWorkerComposer = ({
   }
 
   const selectTemplate = (templateId: string | null) => {
+    setImportedNameBase(null)
     if (templateId === null) {
       // Clear selection but stay on the Custom role with the blank default.
       setWorkerRole('custom')
@@ -276,6 +288,7 @@ export const useWorkerComposer = ({
         description: trimmedDescription,
       })
       setRoleTemplates((current) => [...current, created])
+      setImportedNameBase(null)
       setSelectedTemplateId(created.id)
       setWorkerRole('custom')
       roleDescriptionEditedRef.current = false
@@ -320,8 +333,7 @@ export const useWorkerComposer = ({
   // We sequence the raw setters and then forcibly mark the description as
   // user-edited so neither overwrites the imported value.
   const applyMarketplaceImport = ({ name, description }: { name: string; description: string }) => {
-    workerNameGeneratedRef.current = false
-    setWorkerName(name)
+    setImportedNameBase(name)
     setSelectedTemplateId(null)
     setWorkerRole('custom')
     roleDescriptionEditedRef.current = true
@@ -349,7 +361,7 @@ export const useWorkerComposer = ({
       .then(({ error }) => {
         setWorkerName('')
         setAvatar(null)
-        workerNameGeneratedRef.current = false
+        workerNameGeneratedRef.current = true
         selectWorkerRole('coder')
         setSelectedTemplateId(null)
         setCommandPresetId('claude')

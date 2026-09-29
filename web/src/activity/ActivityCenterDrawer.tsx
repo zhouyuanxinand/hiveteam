@@ -15,6 +15,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { type DispatchSummary, getWorkspaceActivity, type WorkspaceActivityBundle } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { AttentionPanel } from './AttentionPanel.js'
+import { CollaborationStatsPanel } from './CollaborationStatsPanel.js'
 import { DeliveryQueuePanel } from './DeliveryQueuePanel.js'
 import { DispatchDiffDialog } from './DispatchDiffDialog.js'
 import { DispatchReport } from './DispatchReport.js'
@@ -26,6 +28,7 @@ interface ActivityCenterDrawerProps {
   open: boolean
   workspaceId: string
   onSelectWorkspace?: (id: string) => void
+  onInspectAgent?: ((workspaceId: string, agentId: string) => void) | undefined
 }
 
 const isOpenDispatch = (dispatch: DispatchSummary) =>
@@ -89,6 +92,7 @@ export const ActivityCenterDrawer = ({
   open,
   workspaceId,
   onSelectWorkspace,
+  onInspectAgent,
 }: ActivityCenterDrawerProps) => {
   const { language, t } = useI18n()
   const [bundle, setBundle] = useState<WorkspaceActivityBundle | null>(null)
@@ -96,9 +100,11 @@ export const ActivityCenterDrawer = ({
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<'report' | 'diagnostics' | null>(null)
   const [reviewDispatchId, setReviewDispatchId] = useState<string | null>(null)
-  const [surface, setSurface] = useState<'workspace' | 'queue' | 'resources' | 'messages'>(
-    workspaceId ? 'workspace' : 'queue'
-  )
+  const [surface, setSurface] = useState<
+    'workspace' | 'queue' | 'resources' | 'messages' | 'attention' | 'statistics'
+  >(workspaceId ? 'workspace' : 'queue')
+
+  const [deliveryId, setDeliveryId] = useState<string | undefined>()
 
   const dateFormatter = useMemo(
     () =>
@@ -222,8 +228,20 @@ export const ActivityCenterDrawer = ({
                 type="button"
                 className="icon-btn"
                 disabled={!workspaceId}
+                aria-pressed={surface === 'attention'}
+                onClick={() => setSurface('attention')}
+              >
+                {language === 'zh' ? '待处理' : 'Needs attention'}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!workspaceId}
                 aria-pressed={surface === 'messages'}
-                onClick={() => setSurface('messages')}
+                onClick={() => {
+                  setDeliveryId(undefined)
+                  setSurface('messages')
+                }}
               >
                 {language === 'zh' ? '任务状态' : 'Task status'}
               </button>
@@ -251,6 +269,15 @@ export const ActivityCenterDrawer = ({
                 onClick={() => setSurface('resources')}
               >
                 {t('resources.title')}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={!workspaceId}
+                aria-pressed={surface === 'statistics'}
+                onClick={() => setSurface('statistics')}
+              >
+                {language === 'zh' ? '协作统计' : 'Statistics'}
               </button>
             </nav>
             {surface === 'workspace' ? (
@@ -285,8 +312,24 @@ export const ActivityCenterDrawer = ({
             ) : null}
 
             <div className="activity-center-body scroll-y">
-              {surface === 'messages' ? (
-                <MessageDeliveryPanel key={workspaceId} workspaceId={workspaceId} />
+              {surface === 'statistics' ? (
+                <CollaborationStatsPanel key={workspaceId} workspaceId={workspaceId} />
+              ) : surface === 'attention' ? (
+                <AttentionPanel
+                  key={workspaceId}
+                  workspaceId={workspaceId}
+                  onInspectAgent={onInspectAgent}
+                  onInspectDelivery={(id) => {
+                    setDeliveryId(id)
+                    setSurface('messages')
+                  }}
+                />
+              ) : surface === 'messages' ? (
+                <MessageDeliveryPanel
+                  key={`${workspaceId}:${deliveryId ?? ''}`}
+                  workspaceId={workspaceId}
+                  initialDeliveryId={deliveryId}
+                />
               ) : surface === 'resources' ? (
                 <WorktreeResourcesPanel />
               ) : surface === 'queue' ? (

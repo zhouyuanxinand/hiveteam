@@ -1,5 +1,6 @@
 const { spawn } = require('node:child_process')
 const { dirname } = require('node:path')
+const { WriteStream } = require('node:tty')
 const { pathToFileURL } = require('node:url')
 const [team] = process.argv.slice(2)
 const loader = team.endsWith('.ts')
@@ -22,11 +23,22 @@ const grandchild = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], {
 process.stdout.write(`CHILD_PID:${grandchild.pid}\r\nREADY 中文\r\n`)
 let input = ''
 const reports = new Set()
+const sizeQueries = new Set()
 let sent = false
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (chunk) => {
   process.stdout.write(`ECHO:${chunk}`)
   input = (input + chunk).slice(-64000)
+  for (const match of input.matchAll(/HIVE_ACCEPT_SIZE:([a-f0-9-]{36})/g)) {
+    if (sizeQueries.has(match[1])) continue
+    sizeQueries.add(match[1])
+    // ConPTY can resize without refreshing process.stdout's cached columns/rows.
+    // A fresh TTY handle reads the real current size without relying on SIGWINCH.
+    const terminal = new WriteStream(process.stdout.fd)
+    const [cols, rows] = terminal.getWindowSize()
+    terminal.destroy()
+    process.stdout.write(`\r\nPTY_SIZE:${match[1]}:${cols}:${rows}\r\n`)
+  }
   if (process.env.HIVE_AGENT_ID?.endsWith(':orchestrator')) {
     if (!sent && input.includes('HIVE_ACCEPT_SEND')) {
       sent = true

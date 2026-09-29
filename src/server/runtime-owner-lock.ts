@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import BetterSqlite3 from 'better-sqlite3'
+import Database from './sqlite.js'
 
 export class RuntimeAlreadyOwnedError extends Error {
   readonly code = 'runtime_already_owned'
@@ -20,7 +20,7 @@ export const acquireRuntimeOwner = (dataDir?: string) => {
   if (!dataDir) return { runtimeInstanceId, dataDir: null, close() {} }
   mkdirSync(dataDir, { recursive: true })
   const canonical = realpathSync(dataDir)
-  const database = new BetterSqlite3(join(canonical, 'runtime-owner.sqlite'), { timeout: 0 })
+  const database = new Database(join(canonical, 'runtime-owner.sqlite'), { timeout: 0 })
   try {
     database.pragma('journal_mode = DELETE')
     database.pragma('locking_mode = EXCLUSIVE')

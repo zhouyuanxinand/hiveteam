@@ -2,13 +2,13 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { once } from 'node:events'
 import { join } from 'node:path'
-import BetterSqlite3 from 'better-sqlite3'
 import {
   createResourceBudgetStore,
   type ReserveExecutionInput,
 } from '../../src/server/resource-budget-store.js'
 import { openRuntimeDatabase } from '../../src/server/runtime-database.js'
 import { acquireRuntimeOwner } from '../../src/server/runtime-owner-lock.js'
+import BetterSqlite3 from '../../src/server/sqlite.js'
 
 const [mode, directory, instance] = process.argv.slice(2)
 if (!directory) throw new Error('A fixture data directory is required')

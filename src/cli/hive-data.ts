@@ -1,12 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
+import { attachCodexSession } from '../server/codex-session-repair.js'
 import { createDataBackup, inspectDataBackup } from '../server/data-backup.js'
 import { restoreDataBackup } from '../server/data-restore.js'
+import Database from '../server/sqlite.js'
 
 export const HIVE_DATA_USAGE = `hive data backup --data-dir <directory> --output <new-directory>
 hive data inspect --backup <backup-directory>
 hive data restore --backup <backup-directory> --target <new-directory> --manifest-version <hash> --bindings <json-file> --confirm
+hive data attach-codex-session --data-dir <directory> --workspace-id <id> --agent-id <id> --session-id <native-session-uuid>
+Session attachment requires a stopped runtime and an explicit native session ID.
 Backups contain private natural-language data. CLI configuration and devices require rebinding. Restore never overwrites an existing directory.`
 export const runHiveDataCommand = async (argv: string[]) => {
   if (!argv.length || argv.includes('--help')) {
@@ -32,6 +35,9 @@ export const runHiveDataCommand = async (argv: string[]) => {
         '--target',
         '--manifest-version',
         '--bindings',
+        '--workspace-id',
+        '--agent-id',
+        '--session-id',
       ].includes(flag) ||
       options.has(flag)
     )
@@ -51,6 +57,17 @@ export const runHiveDataCommand = async (argv: string[]) => {
     } finally {
       db.close()
     }
+  } else if (action === 'attach-codex-session') {
+    console.log(
+      JSON.stringify(
+        attachCodexSession({
+          dataDir: required('--data-dir'),
+          workspaceId: required('--workspace-id'),
+          agentId: required('--agent-id'),
+          sessionId: required('--session-id'),
+        })
+      )
+    )
   } else if (action === 'inspect')
     console.log(JSON.stringify(await inspectDataBackup(required('--backup'))))
   else if (action === 'restore') {

@@ -1,10 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { createSkillPackReleaseStore } from '../../src/server/skill-pack-release-store.js'
 import { createSkillPackResolver } from '../../src/server/skill-pack-resolver.js'
 import { sourceUriFor } from '../../src/server/skill-pack-source.js'
+import Database from '../../src/server/sqlite.js'
 import type { SkillPackSource } from '../../src/shared/skill-packs.js'
 
 // A locally authored remote-cache fixture: no network and no third-party scripts.

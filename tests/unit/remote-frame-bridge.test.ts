@@ -1,12 +1,11 @@
-import BetterSqlite3 from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
-
 import { createRemoteAuditStore } from '../../src/server/remote-audit-store.js'
 import { InMemoryDeviceSessionProvider } from '../../src/server/remote-device-session.js'
 import {
   createFrameBridge,
   type LoopbackHttpHandlers,
 } from '../../src/server/remote-frame-bridge.js'
+import BetterSqlite3 from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import {
   createOpener,

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 
-import type { IPty } from 'node-pty'
+import type { IPty } from '@lydell/node-pty'
 
 import type { AgentRunRecord, AgentRunSnapshot } from './agent-manager.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
@@ -38,6 +38,7 @@ export const finishAgentRun = (
 export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: PtyOutputBus) => {
   let stdinClosed = false
   let stopRequested = false
+  let ioFailed = false
   let forceKillTimer: ReturnType<typeof setTimeout> | undefined
   const resolveProcessGroupId = () => {
     if (process.platform === 'win32' || pty.pid <= 0) return null
@@ -55,52 +56,39 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   }
   const processGroupId = resolveProcessGroupId()
   const stopped = () => run.status === 'exited' || run.status === 'error'
-  const isAlreadyKilledPtyError = (error: unknown) =>
-    process.platform === 'win32' &&
-    /pty seems to have been killed already|pty is not active|already exited/i.test(
-      error instanceof Error ? error.message : String(error)
-    )
   const ptyErrorEmitter = pty as IPty & {
     on?: (event: 'error', listener: (error: unknown) => void) => unknown
   }
-  const ptyInputSocket = (
+  const windowsAgent = (
     pty as unknown as {
       _agent?: {
         inSocket?: {
           on?: (event: 'error', listener: (error: unknown) => void) => unknown
         }
+        _conoutSocketWorker?: { dispose: () => void }
       }
     }
-  )._agent?.inSocket
-  if (process.platform === 'win32' && typeof ptyErrorEmitter.on === 'function') {
-    // node-pty's WindowsTerminal throws from its internal socket error
-    // handler unless the terminal has at least two error listeners. A PTY
-    // that Hive has just stopped can report this asynchronously, after the
-    // synchronous kill() call has already returned. Consume that benign
-    // teardown error so it cannot become an uncaught exception.
-    ptyErrorEmitter.on('error', (error) => {
-      if (!isAlreadyKilledPtyError(error)) {
-        console.warn('[hive] PTY error during Windows terminal teardown', {
-          error: error instanceof Error ? error.message : String(error),
-          runId: run.runId,
-        })
-      }
-    })
-    ptyErrorEmitter.on('error', () => {})
+  )._agent
+  const handleIoError = (error: unknown) => {
+    stdinClosed = true
+    const code = (error as NodeJS.ErrnoException | null)?.code
+    if (
+      (stopRequested || stopped()) &&
+      code &&
+      ['EOF', 'EPIPE', 'ECONNRESET', 'ERR_STREAM_DESTROYED', 'EBADF'].includes(code)
+    )
+      return
+    ioFailed = true
+    console.error('[hive] PTY I/O failed', { error, runId: run.runId, pid: pty.pid })
+    if (!stopped()) run.process.stop()
   }
-  if (process.platform === 'win32' && typeof ptyInputSocket?.on === 'function') {
-    // Windows node-pty writes through a private input net.Socket. A write
-    // that was queued just before the child exits can complete after the
-    // socket is closed and emit `write EOF` on that socket rather than on the
-    // public IPty event emitter. Always consume the expected teardown error so
-    // it cannot surface as an uncaught exception; unexpected errors remain
-    // visible in the runtime log.
-    ptyInputSocket.on('error', (error) => {
-      const message = error instanceof Error ? error.message : String(error)
-      if (!/write EOF|write EPIPE|stream was destroyed|socket is closed/i.test(message)) {
-        console.warn('[hive] PTY input socket error', { error: message, runId: run.runId })
-      }
-    })
+  if (process.platform === 'win32') {
+    // The terminal's legacy error event forwards its output socket. Its own
+    // socket listener counts toward the two listeners required by node-pty.
+    ptyErrorEmitter.on?.('error', handleIoError)
+    // Input errors are not forwarded by node-pty. Keep this narrow adaptation
+    // until it exposes them publicly; a queued write can fail after native EOF.
+    windowsAgent?.inSocket?.on?.('error', handleIoError)
   }
   const ignoreMissingProcess = (error: unknown) => {
     if ((error as NodeJS.ErrnoException | null)?.code !== 'ESRCH') throw error
@@ -118,7 +106,6 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
       if (code !== 'ESRCH' && code !== 'EPERM') throw error
     }
   }
-  const isWindowsPtyReady = () => (pty as IPty & { _isReady?: boolean })._isReady !== false
   const killProcessGroup = (signal: NodeJS.Signals) => {
     if (process.platform === 'win32' || processGroupId === null) return
     try {
@@ -130,15 +117,10 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   const killPty = (signal: NodeJS.Signals) => {
     try {
       if (process.platform === 'win32') {
-        // node-pty queues kill() until the Winpty data pipe becomes ready.
-        // If shutdown happens before that point, a naturally closing child can
-        // make the deferred kill throw asynchronously. Terminate the concrete
-        // child instead; the Winpty agent then closes its pipes normally.
-        if (isWindowsPtyReady()) pty.kill()
-        else terminateWindowsChild()
+        pty.kill()
       } else pty.kill(signal)
     } catch (error) {
-      if (!isAlreadyKilledPtyError(error)) ignoreMissingProcess(error)
+      ignoreMissingProcess(error)
     }
     killProcessGroup(signal)
   }
@@ -162,7 +144,7 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
         if (process.platform === 'win32') terminateWindowsChild()
         else pty.kill('SIGKILL')
       } catch (error) {
-        if (!isAlreadyKilledPtyError(error)) ignoreMissingProcess(error)
+        ignoreMissingProcess(error)
       }
       killProcessGroup('SIGKILL')
     }, FORCE_KILL_DELAY_MS)
@@ -175,7 +157,9 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
     pause() {
       pty.pause()
     },
-    pid: pty.pid,
+    get pid() {
+      return pty.pid > 0 ? pty.pid : null
+    },
     resize(cols, rows) {
       pty.resize(cols, rows)
     },
@@ -202,21 +186,12 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
       if (stdinClosed || run.status === 'exited' || run.status === 'error') {
         throw new Error(`PTY is not active for run: ${run.runId}`)
       }
-      if (
-        process.platform === 'win32' &&
-        process.env.HIVE_TEST_PTY_BACKEND === 'winpty' &&
-        typeof text === 'string' &&
-        text.endsWith('\n') &&
-        !text.endsWith('\r\n')
-      ) {
-        // Winpty exposes a Windows console input buffer: a bare LF is not
-        // treated as Enter by line-oriented child CLIs. Keep production input
-        // byte-for-byte intact and only normalize the test backend's final
-        // line terminator.
-        pty.write(`${text.slice(0, -1)}\r\n`)
-        return
+      try {
+        pty.write(text)
+      } catch (error) {
+        handleIoError(error)
+        throw error
       }
-      pty.write(text)
     },
   }
 
@@ -231,9 +206,17 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
   pty.onExit((event) => {
     stdinClosed = true
     cleanupProcessGroup()
-    // Winpty may report null or a forced-termination code when Hive closes a
+    if (process.platform === 'win32') {
+      // @lydell/node-pty 1.2.0-beta.15: DLL natural EOF leaves its forwarding
+      // worker's server listening. kill() releases native/input handles, but
+      // its worker cleanup waits for future data which EOF cannot provide.
+      // onExit follows output-pipe close, so all output is already drained.
+      if (!stopRequested && pty.pid > 0) pty.kill()
+      windowsAgent?._conoutSocketWorker?.dispose()
+    }
+    // The native PTY may report a forced-termination code when Hive closes a
     // healthy agent. An explicit Hive stop is a clean lifecycle transition;
     // only spontaneous non-zero exits should mark the run as failed.
-    finishAgentRun(run, stopRequested ? 0 : event.exitCode, ptyOutputBus)
+    finishAgentRun(run, ioFailed ? 1 : stopRequested ? 0 : event.exitCode, ptyOutputBus)
   })
 }

@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import type { DeliveryQueueState } from '../shared/delivery-queue.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
+import type { Database } from './sqlite.js'
 
 const query = `WITH queue AS (
   SELECT d.id, d.workspace_id AS workspaceId, w.name AS workspaceName,

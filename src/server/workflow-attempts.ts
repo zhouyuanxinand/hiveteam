@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import type { WorkflowRun } from '../shared/workflows.js'
 import { BadRequestError, ConflictError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 import type { createWorkflowRunStore } from './workflow-run-store.js'
 import type { WorkflowRuntimeInput } from './workflow-runtime.js'
 export const createWorkflowAttempts = ({
@@ -102,7 +102,7 @@ export const createWorkflowAttempts = ({
     schedule(run.id)
     return requireRun(workspaceId, runId)
   }
-  const settleRerun = (run: WorkflowRun) => {
+  const settleRerun = (run: WorkflowRun, allowAdvance = true) => {
     const pending = run.steps.filter((step) => step.rerunPending)
     if (!pending.length) return run
     let waiting = false
@@ -119,7 +119,7 @@ export const createWorkflowAttempts = ({
       if (!dispatch || (dispatch.status !== 'reported' && !cancellationConfirmed?.(dispatch.id)))
         waiting = true
     }
-    if (waiting) return get(run.workspaceId, run.id) ?? run
+    if (waiting || !allowAdvance) return get(run.workspaceId, run.id) ?? run
     const current = requireRun(run.workspaceId, run.id)
     saveRun({
       ...current,

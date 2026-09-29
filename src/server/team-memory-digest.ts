@@ -61,7 +61,7 @@ export const createTeamMemoryDigestProvider = (store: TeamMemoryStore, settings:
         score: item.score,
         reasons: [...item.reasons],
         hits: item.hits,
-        sources: store.sources(entry.id),
+        sources: store.sources(workspaceId, entry.id),
         injected_chars: 0,
       }
       candidates.push(candidate)
@@ -105,7 +105,7 @@ export const createTeamMemoryDigestProvider = (store: TeamMemoryStore, settings:
       count += 1
     }
     const digest = count ? [...lines, '</hive-memory>'].join('\n') : ''
-    store.recordContext({
+    store.recordPreparation({
       workspace_id: workspaceId,
       agent_id: agentId,
       context,
@@ -116,14 +116,6 @@ export const createTeamMemoryDigestProvider = (store: TeamMemoryStore, settings:
       used_chars: digest.length,
       digest,
       candidates,
-    })
-    store.recordInjection({
-      agentId,
-      context,
-      memoryIds: candidates.filter((c) => c.selected).map((c) => c.memory_id),
-      query,
-      workspaceId,
-      dispatchId,
     })
     return digest
   }

@@ -82,15 +82,21 @@ export const prepareAgentSessionRecovery = ({
     sessionId = candidates[0]
     if (sessionId) sessionStore.setLastSessionId(workspaceId, agentId, sessionId)
   }
+  const recoveredSessionId =
+    pinnedCapture.source === 'codex_session_jsonl_dir' && context?.recoveredSessionId === sessionId
+      ? sessionId
+      : undefined
   return {
     capture: pinnedCapture,
     snapshot,
+    explicitlyRecovered: recoveredSessionId !== undefined,
     commitContext: () =>
       sessionStore.saveCaptureContext(workspaceId, agentId, {
         capture: pinnedCapture,
         cwd,
         knownSessionIds: context?.knownSessionIds ?? [...snapshot.knownSessionIds],
         platform: process.platform,
+        ...(recoveredSessionId ? { recoveredSessionId } : {}),
       }),
   }
 }

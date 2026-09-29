@@ -46,7 +46,7 @@ test('local UI requires explicit unsafe acknowledgement and shows the unchanged 
       enforcement: 'unsupported',
       unsafe_grant: null,
     })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(authorize)
     await screen.findByRole('button', { name: 'Revoke exception and restore restricted defaults' })
     expect(await server.store.executionPolicies.preview(workspace.id, worker.id)).toMatchObject({
@@ -56,6 +56,10 @@ test('local UI requires explicit unsafe acknowledgement and shows the unchanged 
     const run = await server.store.startAgent(workspace.id, worker.id, {
       hivePort: new URL(server.baseUrl).port,
     })
+    await waitFor(
+      () => expect(server.store.getLiveRun(run.runId).output).toContain('synthetic ready'),
+      { timeout: 10_000 }
+    )
     cleanup()
     render(<ExecutionPolicyButton workspaceId={workspace.id} agentId={worker.id} running />)
     fireEvent.click(screen.getByRole('button', { name: 'Execution permissions' }))
@@ -73,7 +77,9 @@ test('local UI requires explicit unsafe acknowledgement and shows the unchanged 
     expect(server.store.getLiveRun(run.runId).status).not.toBe('exited')
     server.store.stopAgentRun(run.runId)
     await waitFor(() => expect(server.store.getLiveRun(run.runId).status).toBe('exited'))
-    await waitFor(() => expect(server.store.resources.getSnapshot().occupancy.global).toBe(0))
+    await waitFor(() => expect(server.store.resources.getSnapshot().occupancy.global).toBe(0), {
+      timeout: 8000,
+    })
     await expect(
       server.store.startAgent(workspace.id, worker.id, { hivePort: new URL(server.baseUrl).port })
     ).rejects.toMatchObject({ code: 'execution_policy_denied' })
@@ -205,7 +211,7 @@ test('a CLI configuration change after preview rejects authorization and keeps t
     expect(
       (await server.store.executionPolicies.preview(workspaceId, agentId)).cli_fingerprint
     ).not.toBe(previous.cli_fingerprint)
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(authorize)
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'CLI or policy changed. Refresh the execution policy and review it again.'
@@ -246,7 +252,7 @@ test.each([
     const view = render(<RetryPolicyButton workspaceId={workspaceId} agentId={agentId} />)
     fireEvent.click(screen.getByRole('button', { name: 'Review execution permissions' }))
     await screen.findByRole('button', { name: 'Authorize and retry launch' })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     const delayed = holdAuthorization()
     fireEvent.click(screen.getByRole('button', { name: 'Authorize and retry launch' }))
     await delayed.received
@@ -262,8 +268,8 @@ test.each([
     expect(screen.getByRole('dialog')).toBeVisible()
     expect(screen.getByText('Next launch: unsupported, start will be rejected')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Retry with authorized permissions' })).toBeNull()
-    expect(screen.getByRole('checkbox')).not.toBeChecked()
-    fireEvent.click(screen.getByRole('checkbox'))
+    expect(screen.getByRole('checkbox', { name: /I trust this CLI/ })).not.toBeChecked()
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     expect(screen.getByRole('button', { name: 'Authorize and retry launch' })).toBeEnabled()
     expect(screen.getByTestId('launch-result')).toHaveTextContent('Not started')
     expect(requests.filter((request) => request.method === 'POST')).toEqual([])
@@ -283,7 +289,7 @@ test('closing the dialog during authorization preserves the grant without starti
     render(<RetryPolicyButton workspaceId={workspaceId} agentId={agentId} />)
     fireEvent.click(screen.getByRole('button', { name: 'Review execution permissions' }))
     await screen.findByRole('button', { name: 'Authorize and retry launch' })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     const delayed = holdAuthorization()
     fireEvent.click(screen.getByRole('button', { name: 'Authorize and retry launch' }))
     await delayed.received
@@ -307,7 +313,7 @@ test('reopening a valid authorization can retry the real launch without issuing 
     render(<ExecutionPolicyButton workspaceId={workspaceId} agentId={agentId} />)
     fireEvent.click(screen.getByRole('button', { name: 'Execution permissions' }))
     await screen.findByRole('button', { name: 'Authorize unsafe exception for this agent' })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(
       screen.getByRole('button', { name: 'Authorize unsafe exception for this agent' })
     )
@@ -351,7 +357,7 @@ test('reopening a stale authorization requires new acknowledgement before launch
     render(<ExecutionPolicyButton workspaceId={workspaceId} agentId={agentId} />)
     fireEvent.click(screen.getByRole('button', { name: 'Execution permissions' }))
     await screen.findByRole('button', { name: 'Authorize unsafe exception for this agent' })
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(
       screen.getByRole('button', { name: 'Authorize unsafe exception for this agent' })
     )
@@ -365,11 +371,11 @@ test('reopening a stale authorization requires new acknowledgement before launch
     fireEvent.click(screen.getByRole('button', { name: 'Review execution permissions' }))
     const authorize = await screen.findByRole('button', { name: 'Authorize and retry launch' })
     expect(authorize).toBeDisabled()
-    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /I trust this CLI/ })).not.toBeChecked()
     expect(screen.queryByRole('button', { name: 'Retry with authorized permissions' })).toBeNull()
     expect(server.store.listAgentRuns(agentId)).toEqual([])
     expect(responses.filter((response) => response.method === 'POST')).toEqual([])
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(authorize)
     await waitFor(() => expect(screen.getByTestId('launch-result')).toHaveTextContent(/^Started /))
     expect(screen.queryByRole('dialog')).toBeNull()

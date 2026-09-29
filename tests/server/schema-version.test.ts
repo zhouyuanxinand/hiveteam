@@ -1,10 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import type { Database as SqliteDatabase } from 'better-sqlite3'
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import type { Database as SqliteDatabase } from '../../src/server/sqlite.js'
+import Database from '../../src/server/sqlite.js'
 import {
   CURRENT_SCHEMA_VERSION,
   initializeRuntimeDatabase,
@@ -14,8 +13,10 @@ import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpe
 
 const tempDirs: string[] = []
 const stores: Array<ReturnType<typeof createRuntimeStore>> = []
+const schemaReaders: SqliteDatabase[] = []
 
 afterEach(async () => {
+  for (const db of schemaReaders.splice(0)) db.close()
   await Promise.all(stores.splice(0).map((store) => store.close()))
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 })
@@ -65,6 +66,7 @@ describe('schema version', () => {
     stores.push(createRuntimeStore({ dataDir }))
 
     const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    schemaReaders.push(db)
     const workspaceColumns = new Set(
       (db.prepare('PRAGMA table_info(workspaces)').all() as Array<{ name: string }>).map(
         (column) => column.name
@@ -228,6 +230,9 @@ describe('schema version', () => {
         'report_revision',
         'accepted_at',
         'artifacts',
+        'message_protocol_version',
+        'parent_dispatch_id',
+        'root_dispatch_id',
       ])
     )
     expect(reportOutboxColumns).toEqual(

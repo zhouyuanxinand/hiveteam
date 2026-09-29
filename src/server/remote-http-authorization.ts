@@ -67,8 +67,13 @@ register(
     `${workspace}/review/document`,
     `${workspace}/review/submissions/:requestId`,
     `${uiWorkspace}/team`,
+    `${uiWorkspace}/members/retired`,
+    `${uiWorkspace}/members/:workerId`,
     `${uiWorkspace}/runs`,
     `${uiWorkspace}/activity`,
+    `${uiWorkspace}/attention`,
+    `${uiWorkspace}/collaboration-stats`,
+    dispatch,
     `${uiWorkspace}/delivery`,
     `${uiWorkspace}/onboarding`,
     `${uiWorkspace}/agents/:agentId/conversation`,
@@ -79,6 +84,8 @@ register(
     `${dispatch}/verifications/:verificationId/log`,
     `${uiWorkspace}/verification-profiles`,
     `${dispatch}/reviews`,
+    `${dispatch}/review-requests`,
+    `${uiWorkspace}/review-requests/:requestId`,
     `${dispatch}/reviews/context`,
     `${dispatch}/integration`,
     `${dispatch}/integration-candidates`,
@@ -94,8 +101,11 @@ register(
     `${uiWorkspace}/memory`,
     `${uiWorkspace}/memory/settings`,
     `${uiWorkspace}/memory/contexts`,
+    `${uiWorkspace}/memory/:memoryId/sources`,
     `${uiWorkspace}/recovery-index`,
     `${uiWorkspace}/memory/dream`,
+    `${uiWorkspace}/memory/dream/history`,
+    `${uiWorkspace}/memory/dream/:runId`,
     `${uiWorkspace}/memory/dream/:runId/reviews`,
     `${uiWorkspace}/skill-packs`,
     '/api/runtime/runs/:runId',
@@ -138,6 +148,7 @@ register(
     `${uiWorkspace}/memory/dream/:runId/reviews`,
     `${uiWorkspace}/memory/dream/:runId/submit`,
     `${uiWorkspace}/memory/dream/:runId/rollback`,
+    `${uiWorkspace}/memory/dream/:runId/discard`,
   ],
   ['memory_write']
 )
@@ -197,6 +208,8 @@ register(
   ],
   ['memory_write', 'agent_start']
 )
+
+register('POST', [`${uiWorkspace}/memory/dream/generate`], ['memory_write', 'agent_start'])
 
 export const workspaceForRun = (store: RuntimeStore, runId: string) => {
   const run = store.getLiveRun(runId)

@@ -1,4 +1,5 @@
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
+import { findCodexResumeCommandIndex } from './codex-resume-arguments.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
 import { ConflictError } from './http-errors.js'
 import type { SessionCaptureSnapshot } from './session-capture.js'
@@ -19,14 +20,17 @@ const getEffectiveResumeTemplate = (
   preset: BoundPreset | null | undefined
 ) => config.resumeArgsTemplate ?? preset?.resumeArgsTemplate ?? null
 
-const hasResumeArgs = (args: string[]) =>
-  args.includes('--resume') ||
-  args.includes('-r') ||
-  args.includes('--continue') ||
-  args.includes('-c') ||
-  args.includes('--session') ||
-  args.includes('-s') ||
-  args[0] === 'resume'
+const hasResumeArgs = (args: string[]) => {
+  return (
+    args.includes('--resume') ||
+    args.includes('-r') ||
+    args.includes('--continue') ||
+    args.includes('-c') ||
+    args.includes('--session') ||
+    args.includes('-s') ||
+    args[0] === 'resume'
+  )
+}
 
 const supportsPresetResume = supportsNativeSessionExistenceCheck
 
@@ -67,7 +71,13 @@ export const withPresetResumeArgs = (
   // will return its active-writer error without causing Hive to discard the
   // persisted session pointer.
   const args = config.args ?? []
-  if (hasResumeArgs(args)) return nextConfig
+  const codex = sessionIdCapture?.source === 'codex_session_jsonl_dir'
+  const codexResumeIndex = codex ? findCodexResumeCommandIndex(args) : -1
+  if (codex ? codexResumeIndex >= 0 : hasResumeArgs(args)) {
+    if (codex && args[codexResumeIndex + 1] === lastSessionId)
+      return { ...nextConfig, resumedSessionId: lastSessionId }
+    return nextConfig
+  }
   const resumeArgs = resumeArgsTemplate.replace('{session_id}', lastSessionId).trim().split(/\s+/)
 
   return {

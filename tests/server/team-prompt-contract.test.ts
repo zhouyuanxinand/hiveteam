@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
-
 import { createAgentManager } from '../../src/server/agent-manager.js'
+import Database from '../../src/server/sqlite.js'
+import { setWorkspaceMemoryEnabled } from '../../src/server/team-memory-digest.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
 
@@ -62,6 +63,7 @@ describe('team prompt contract', () => {
       [
         "process.stdin.setEncoding('utf8')",
         "process.stdin.on('data', (chunk) => process.stdout.write(chunk))",
+        "process.stdout.write('WORKER_READY\\n')",
       ].join('\n')
     )
 
@@ -74,7 +76,7 @@ describe('team prompt contract', () => {
     }
 
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
-    store.memory.create(workspace.id, {
+    const memory = store.memory.create(workspace.id, {
       body: '实现登录必须保留现有 session cookie 兼容性。',
       kind: 'decision',
       tags: ['auth'],
@@ -85,6 +87,12 @@ describe('team prompt contract', () => {
     })
 
     await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    // ConPTY capability negotiation precedes the fixture's native startup.
+    // Keep that phase separate from the prompt delivery deadline below.
+    await waitFor(() => {
+      const run = store.getActiveRunByAgentId(workspace.id, worker.id)
+      expect(run?.output).toContain('WORKER_READY')
+    }, 10_000)
     const dispatch = await store.dispatchTaskByWorkerName(workspace.id, 'Alice', '实现登录', {
       fromAgentId: orchestrator.id,
     })
@@ -113,7 +121,95 @@ describe('team prompt contract', () => {
         /实现登录[\s\S]*<hive-system-reminder>[\s\S]*<\/hive-system-reminder>/
       )
       expect(compactOutput).toContain(`teamreport"<result>"--dispatch${dispatch.id}`)
+      const snapshot = store.memory.contexts(workspace.id, dispatch.id)[0]
+      expect(snapshot).toMatchObject({
+        dispatch_id: dispatch.id,
+        agent_id: worker.id,
+        candidates: [expect.objectContaining({ memory_id: memory.id, selected: true })],
+      })
+      expect(compactOutput).toContain(snapshot?.digest.replace(/\s/g, ''))
     })
+    const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    try {
+      expect(
+        db
+          .prepare(
+            'SELECT memory_id,dispatch_id,target_agent_id_snapshot FROM memory_injections WHERE context_type=? AND dispatch_id=?'
+          )
+          .all('dispatch', dispatch.id)
+      ).toEqual([
+        { memory_id: memory.id, dispatch_id: dispatch.id, target_agent_id_snapshot: worker.id },
+      ])
+    } finally {
+      db.close()
+    }
+  })
+
+  test.each([
+    'disabled',
+    'candidate-only',
+  ] as const)('real PTY receives the task without memory when %s', async (mode) => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'hive-no-memory-prompt-'))
+    const workspacePath = join(dataDir, 'workspace')
+    mkdirSync(workspacePath)
+    tempDirs.push(dataDir)
+    const script = join(workspacePath, 'echo.cjs')
+    writeFileSync(
+      script,
+      "process.stdin.setEncoding('utf8'); process.stdin.on('data', chunk => process.stdout.write(chunk)); process.stdout.write('WORKER_READY\\n')"
+    )
+    const store = createRuntimeStore({ agentManager: createAgentManager(), dataDir })
+    stores.push(store)
+    const workspace = store.createWorkspace(workspacePath, 'Memory switches')
+    const worker = store.addWorker(workspace.id, { name: 'Memory checker', role: 'coder' })
+    store.memory.create(workspace.id, {
+      kind: 'fact',
+      body: 'MEMORY_MUST_STAY_EXCLUDED',
+      status: mode === 'candidate-only' ? 'candidate' : 'active',
+    })
+    if (mode === 'disabled') setWorkspaceMemoryEnabled(store.settings, workspace.id, false)
+    store.configureAgentLaunch(workspace.id, worker.id, {
+      command: process.execPath,
+      args: [script],
+    })
+    await store.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    await waitFor(
+      () =>
+        expect(store.getActiveRunByAgentId(workspace.id, worker.id)?.output).toContain(
+          'WORKER_READY'
+        ),
+      10000
+    )
+    const dispatch = await store.dispatchTask(workspace.id, worker.id, 'TASK_WITHOUT_MEMORY')
+    await waitFor(() => {
+      const output = stripTerminalControls(
+        store.getActiveRunByAgentId(workspace.id, worker.id)?.output ?? ''
+      ).replace(/\s/g, '')
+      expect(output).toContain(`dispatch_id:${dispatch.id}`)
+      expect(output).toContain('TASK_WITHOUT_MEMORY')
+      expect(output).not.toContain('MEMORY_MUST_STAY_EXCLUDED')
+      expect(output).not.toContain('<hive-memory')
+    })
+    const contexts = store.memory.contexts(workspace.id, dispatch.id)
+    if (mode === 'disabled') expect(contexts).toEqual([])
+    else
+      expect(contexts).toEqual([
+        expect.objectContaining({
+          digest: '',
+          used_chars: 0,
+          candidates: [expect.objectContaining({ selected: false })],
+        }),
+      ])
+    const db = new Database(join(dataDir, 'runtime.sqlite'), { readonly: true })
+    try {
+      expect(
+        db
+          .prepare('SELECT COUNT(*) AS count FROM memory_injections WHERE dispatch_id=?')
+          .get(dispatch.id)
+      ).toEqual({ count: 0 })
+    } finally {
+      db.close()
+    }
   })
 
   test('team send submits prompts to interactive CLI agents after bracketed paste', async () => {
@@ -174,7 +270,7 @@ describe('team prompt contract', () => {
       expect(run?.output).toContain('❯')
       expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
-    }, 4000)
+    }, 10_000)
 
     await store.dispatchTaskByWorkerName(workspace.id, 'Alice', '实现登录', {
       fromAgentId: orchestrator.id,
@@ -247,7 +343,7 @@ describe('team prompt contract', () => {
       expect(run?.output).toContain('❯')
       expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
-    }, 4000)
+    }, 10_000)
 
     await store.dispatchTaskByWorkerName(workspace.id, 'Alice', '实现登录', {
       fromAgentId: orchestrator.id,
@@ -316,6 +412,10 @@ describe('team prompt contract', () => {
     })
 
     await store.startAgent(workspace.id, orchestrator.id, { hivePort: '4010' })
+    await waitFor(() => {
+      const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
+      expect(run?.output).toContain('❯')
+    }, 10_000)
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
       expect(run?.output).toContain('[Hive 系统消息：启动说明]')

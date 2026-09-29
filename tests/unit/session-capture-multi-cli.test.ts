@@ -1,16 +1,14 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
 import {
   doesCapturedSessionExist,
   isCapturedSessionWriterActive,
   snapshotSessionIdsForCapture,
 } from '../../src/server/session-capture.js'
 import { readCodexSessionFirstLine } from '../../src/server/session-capture-codex.js'
+import Database from '../../src/server/sqlite.js'
 
 const tempDirs: string[] = []
 const originalCodexHome = process.env.CODEX_HOME
@@ -137,6 +135,37 @@ describe('multi-CLI session capture', () => {
     )
     expect(doesCapturedSessionExist(cwd, capture, sessionId)).toBe(true)
     expect(doesCapturedSessionExist(join(geminiHome, 'other'), capture, sessionId)).toBe(false)
+  })
+
+  test.each([
+    'project-hash',
+    'tmp',
+  ])('finds a pinned Gemini session under project %s when its home has multiple tmp ancestors', (projectName) => {
+    const root = makeTempDir('hive-gemini-pinned-home')
+    const geminiHome = join(root, 'tmp', 'nested', 'tmp', '.gemini')
+    const cwd = join(root, 'workspace')
+    mkdirSync(cwd, { recursive: true })
+    process.env.HIVE_GEMINI_HOME = join(root, 'different-gemini-home')
+    const sessionId = '29405746-aa9b-40bf-961b-f3d77fdcda40'
+    const projectDir = join(geminiHome, 'tmp', projectName)
+    mkdirSync(join(projectDir, 'chats'), { recursive: true })
+    writeFileSync(join(projectDir, '.project_root'), `${cwd}\n`)
+    writeFileSync(
+      join(projectDir, 'chats', 'session-2026-04-30T00-00-29405746.json'),
+      JSON.stringify({ sessionId })
+    )
+    const capture = {
+      pattern: join(geminiHome, 'tmp', projectName, 'chats', '*.json'),
+      source: 'gemini_session_json_dir' as const,
+    }
+
+    expect(snapshotSessionIdsForCapture(cwd, capture)?.knownSessionIds).toEqual(
+      new Set([sessionId])
+    )
+    expect(doesCapturedSessionExist(cwd, capture, sessionId)).toBe(true)
+    expect(doesCapturedSessionExist(join(root, 'other-workspace'), capture, sessionId)).toBe(false)
+    rmSync(join(projectDir, 'chats'), { recursive: true })
+    expect(doesCapturedSessionExist(cwd, capture, sessionId)).toBe(false)
   })
 
   test('captures OpenCode sessions by directory from the session database', () => {

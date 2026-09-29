@@ -2,11 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
 import { stampLoopbackHeaders } from '../../src/server/remote-loopback-auth.js'
+import Database from '../../src/server/sqlite.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

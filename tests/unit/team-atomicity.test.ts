@@ -31,6 +31,7 @@ const createDispatchRecord = ({
   toAgentId,
   workspaceId,
 }: DispatchFixtureInput): DispatchRecord => ({
+  messageProtocolVersion: 0,
   baseHeadSha: null,
   reportOutcome: null,
   reportRevision: 0,
@@ -68,6 +69,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
     const markTaskDispatched = vi.fn()
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
@@ -139,6 +141,7 @@ describe('team atomicity', () => {
     const deleteMessage = vi.fn()
 
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
@@ -214,6 +217,7 @@ describe('team atomicity', () => {
     }
 
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
@@ -267,6 +271,7 @@ describe('team atomicity', () => {
     const writeSendPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
@@ -366,6 +371,7 @@ describe('team atomicity', () => {
     const writeReportPrompt = vi.fn()
 
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {
@@ -426,6 +432,7 @@ describe('team atomicity', () => {
     const reportForwardError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const ops = createTeamOperations({
+      messagePurposeForDispatch: () => 'conversation',
       delivery: store.dispatchDelivery,
       ...rejectUnexpectedTeamSkillOperations,
       agentRuntime: {

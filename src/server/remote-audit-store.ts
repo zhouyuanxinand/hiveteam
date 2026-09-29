@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 export type RemoteAuditResult = 'ok' | 'rejected' | 'error' | 'authorized'
 export type RemoteAuditAction =

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-
 import type { WorkspaceSummary } from '../../src/shared/types.js'
 import { AppOverlays } from './AppOverlays.js'
 import { AppWorkspaceContent } from './AppWorkspaceContent.js'
+import type { AgentInspection } from './activity/activity-attention-api.js'
 import type { FsProbeResponse } from './api.js'
 import { useDemoMode } from './demo/useDemoMode.js'
 import { useDemoReplay } from './demo/useDemoReplay.js'
@@ -49,6 +49,7 @@ export const AppInner = () => {
   const [knowledgeTab, setKnowledgeTab] = useState<KnowledgeTab | null>(null)
   const [gitOpen, setGitOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [agentInspection, setAgentInspection] = useState<AgentInspection | null>(null)
   const [skillsOpen, setSkillsOpen] = useState(false)
   useEffect(() => {
     if (demoMode) {
@@ -116,6 +117,9 @@ export const AppInner = () => {
   }
   const eff = useEffectiveWorkspaceState(wsState)
   const activeId = eff.effectiveActiveWorkspace?.id
+  useEffect(() => {
+    setAgentInspection((current) => (current?.workspaceId === activeId ? current : null))
+  }, [activeId])
   const activeWorkers = activeId ? (eff.effectiveWorkersByWorkspaceId[activeId] ?? []) : []
   const terms = useOptimisticTerminalRuns(eff.pollWorkspaceId, useTerminalRuns(eff.pollWorkspaceId))
   // Always confirm on close. Browsers gate beforeunload on prior page
@@ -245,6 +249,7 @@ export const AppInner = () => {
           <RuntimeOfflinePage onTryDemo={enableDemo} sessionRequired={sessionRequired} />
         ) : (
           <AppWorkspaceContent
+            agentInspection={agentInspection}
             onOpenSkills={() => setSkillsOpen(true)}
             activeId={activeId}
             activeWorkspace={eff.effectiveActiveWorkspace}
@@ -279,6 +284,14 @@ export const AppInner = () => {
           />
         )}
         <AppOverlays
+          onInspectAgent={(workspaceId, agentId) => {
+            setAgentInspection((current) => ({
+              workspaceId,
+              agentId,
+              sequence: (current?.sequence ?? 0) + 1,
+            }))
+            setActivityOpen(false)
+          }}
           onSelectWorkspace={selectWorkspace}
           addDialogTrigger={addDialogTrigger}
           droppedWorkspaceProbe={droppedWorkspaceProbe}

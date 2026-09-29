@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, expect, test, vi } from 'vitest'
-
 import {
   buildAgentRunBootstrap,
   startAgentRunCapture,
@@ -14,6 +19,7 @@ import { createAgentSessionStore } from '../../src/server/agent-session-store.js
 import { buildAgentLegacyIdentityMarker } from '../../src/server/agent-startup-instructions.js'
 import { resetSessionCaptureCoordinatorForTests } from '../../src/server/claude-session-coordinator.js'
 import { encodeClaudeProjectPath } from '../../src/server/session-capture-claude.js'
+import Database from '../../src/server/sqlite.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const cleanups: Array<() => void | Promise<void>> = []
@@ -293,4 +299,41 @@ test('live capture ignores a new same-name Claude conversation with a different 
     buildAgentRunBootstrap(f.workspace, f.alice.id, config, f.sessions, () => undefined, f.alice)
       .startConfig.resumedSessionId
   ).toBe(ownId)
+})
+
+test('explicit offline recovery resumes an unmarked legacy session without rewriting its native file', () => {
+  const f = fixture()
+  f.bootstrap()
+  const id = f.writeSession()
+  const file = join(f.codexHome, 'sessions', '2026', '09', '17', `rollout-${id}.jsonl`)
+  const content = `${JSON.stringify({ type: 'session_meta', payload: { id, cwd: f.workspace.path } })}\n`
+  writeFileSync(file, content)
+  f.sessions.setLastSessionId(f.workspace.id, f.alice.id, id)
+  expect(() => f.bootstrap()).toThrow(/does not belong to this member/)
+  const context = f.sessions.getCaptureContext(f.workspace.id, f.alice.id)
+  if (!context) throw new Error('Expected saved capture context')
+  f.sessions.saveCaptureContext(f.workspace.id, f.alice.id, { ...context, recoveredSessionId: id })
+  const boot = f.bootstrap()
+  expect(boot.startConfig.resumedSessionId).toBe(id)
+  expect(boot.startConfig.args).toEqual(['resume', id])
+  expect(f.sessions.getCaptureContext(f.workspace.id, f.alice.id)?.recoveredSessionId).toBe(id)
+  expect(readFileSync(file, 'utf8')).toBe(content)
+  unlinkSync(file)
+  expect(() => f.bootstrap()).toThrow(/Saved native session/)
+  expect(f.readSession()).toEqual({ last_session_id: id })
+})
+
+test('an explicit recovery record cannot authorize a different saved native ID', () => {
+  const f = fixture()
+  f.bootstrap()
+  const foreignId = f.writeSession(f.bob)
+  const context = f.sessions.getCaptureContext(f.workspace.id, f.alice.id)
+  if (!context) throw new Error('Expected saved capture context')
+  f.sessions.saveCaptureContext(f.workspace.id, f.alice.id, {
+    ...context,
+    recoveredSessionId: randomUUID(),
+  })
+  f.sessions.setLastSessionId(f.workspace.id, f.alice.id, foreignId)
+  expect(() => f.bootstrap()).toThrow(/does not belong to this member/)
+  expect(f.readSession()).toEqual({ last_session_id: foreignId })
 })

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { VerificationProfile } from '../shared/verification-profile.js'
 import { BadRequestError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 const command = (value: unknown) =>
   typeof value === 'string' && !!value.trim() && value.length <= 2000 && !value.includes('\0')

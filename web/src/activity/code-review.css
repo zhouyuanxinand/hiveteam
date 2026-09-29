@@ -46,3 +46,8 @@
     font-size: 16px;
   }
 }
+
+.team-review-requests { margin-block: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.team-review-requests summary { cursor: pointer; padding-block: .5rem; }
+.team-review-request { margin-block-start: 1rem; }
+.team-review-requests code, .team-review-requests dd { overflow-wrap: anywhere; }

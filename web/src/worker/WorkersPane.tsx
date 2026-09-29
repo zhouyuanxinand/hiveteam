@@ -6,11 +6,13 @@ import type { TerminalRunSummary } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { Confirm } from '../ui/Confirm.js'
 import { EmptyState } from '../ui/EmptyState.js'
+import { StaffingSettings } from './StaffingSettings.js'
 import { WorkerAvatarDialog } from './WorkerAvatarDialog.js'
 import { WorkerCard, type WorkerCardActionKind } from './WorkerCard.js'
 import { presentWorkerStatus, type WorkerStatusKind } from './worker-status.js'
 
 type WorkersPaneProps = {
+  workspaceId?: string
   autoResumeBusy?: boolean
   autoResumeOnRestart?: boolean | undefined
   onAddWorkerClick: () => void
@@ -58,6 +60,7 @@ const summarizeWorkers = (workers: TeamListItem[]) => {
 }
 
 export const WorkersPane = ({
+  workspaceId,
   autoResumeBusy = false,
   autoResumeOnRestart,
   onAddWorkerClick,
@@ -211,6 +214,7 @@ export const WorkersPane = ({
       </div>
 
       <div className="workers-pane-body scroll-y flex-1 px-2 py-2">
+        {workspaceId ? <StaffingSettings key={workspaceId} workspaceId={workspaceId} /> : null}
         {workers.length === 0 ? (
           <EmptyState
             icon={<UserPlus size={28} />}

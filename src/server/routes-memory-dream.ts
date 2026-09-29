@@ -1,13 +1,11 @@
-import {
-  isTeamMemoryKind,
-  isTeamMemoryScope,
-  normalizeTeamMemoryProcedureRef,
-  type TeamMemoryDreamReview,
-  type TeamMemoryDreamRun,
-  type TeamMemoryDreamSuggestion,
-  type TeamMemoryProcedureRef,
+import { memoryDreamImpact } from '../shared/memory-dream-plan.js'
+import type {
+  TeamMemoryDreamReview,
+  TeamMemoryDreamRun,
+  TeamMemoryDreamSuggestion,
 } from '../shared/team-memory.js'
 import { BadRequestError, ForbiddenError } from './http-errors.js'
+import { parseDreamHistoryQuery } from './memory-dream-history.js'
 import { getRequiredParam, readJsonBody, route, sendJson } from './route-helpers.js'
 import type { RouteDefinition } from './route-types.js'
 import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
@@ -36,7 +34,14 @@ const serializeReview = (review: TeamMemoryDreamReview) => ({
 })
 
 const serializeRun = (run: TeamMemoryDreamRun, reviews: TeamMemoryDreamReview[] = []) => ({
+  generation: run.generation,
   created_at: run.createdAt,
+  plan_version: run.planVersion,
+  plan_revision: run.planRevision,
+  operations: run.operations,
+  source_snapshots: run.sourceSnapshots,
+  change_receipt: run.receipt,
+  ...memoryDreamImpact(run.operations),
   created_memory_ids: run.createdMemoryIds,
   execution_error: run.executionError,
   execution_status: run.executionStatus,
@@ -56,41 +61,11 @@ const workspaceIdFrom = (context: Parameters<RouteDefinition['handler']>[0]) =>
 const dreamIdFrom = (context: Parameters<RouteDefinition['handler']>[0]) =>
   getRequiredParam(context.response, context.params, 'runId', 'Dream run id is required')
 
-const normalizeSuggestions = (value: unknown): TeamMemoryDreamSuggestion[] => {
-  if (!Array.isArray(value)) throw new BadRequestError('suggestions must be an array')
-  return value.map((item) => {
-    if (!item || typeof item !== 'object') throw new BadRequestError('Invalid Dream suggestion')
-    const record = item as Record<string, unknown>
-    if (typeof record.body !== 'string' || !record.body.trim()) {
-      throw new BadRequestError('Dream suggestion body must not be empty')
-    }
-    if (!isTeamMemoryKind(record.kind)) throw new BadRequestError('Invalid Dream suggestion kind')
-    if (!isTeamMemoryScope(record.scope))
-      throw new BadRequestError('Invalid Dream suggestion scope')
-    let procedureRef: TeamMemoryProcedureRef | null = null
-    try {
-      procedureRef = normalizeTeamMemoryProcedureRef(record.procedure_ref)
-    } catch (error) {
-      throw new BadRequestError(error instanceof Error ? error.message : String(error))
-    }
-    if (record.kind === 'procedure_ref' && !procedureRef) {
-      throw new BadRequestError('procedure_ref is required when kind is procedure_ref')
-    }
-    const sourceMemoryIds = Array.isArray(record.source_memory_ids)
-      ? record.source_memory_ids.filter((id): id is string => typeof id === 'string')
-      : []
-    const tags = Array.isArray(record.tags)
-      ? record.tags.filter((tag): tag is string => typeof tag === 'string')
-      : []
-    return {
-      body: record.body,
-      kind: record.kind,
-      procedureRef,
-      scope: record.scope,
-      sourceMemoryIds,
-      tags,
-    }
-  })
+const readDreamRequestBody = async (request: Parameters<typeof readJsonBody>[0]) => {
+  const body = await readJsonBody<unknown>(request)
+  if (!body || typeof body !== 'object' || Array.isArray(body))
+    throw new BadRequestError('Dream request must be an object')
+  return body as Record<string, unknown>
 }
 
 export const memoryDreamRoutes: RouteDefinition[] = [
@@ -107,6 +82,38 @@ export const memoryDreamRoutes: RouteDefinition[] = [
         .map((run) => serializeRun(run, context.store.memoryDream.listReviews(workspaceId, run.id)))
     )
   }),
+  route('GET', '/api/ui/workspaces/:workspaceId/memory/dream/history', (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    if (!workspaceId) return
+    context.store.getWorkspaceSnapshot(workspaceId)
+    const query = new URL(context.request.url ?? '/', 'http://127.0.0.1').searchParams
+    const page = context.store.memoryDream.history(workspaceId, parseDreamHistoryQuery(query))
+    sendJson(context.response, 200, {
+      runs: page.runs.map((run) =>
+        serializeRun(run, context.store.memoryDream.listReviews(workspaceId, run.id))
+      ),
+      next_cursor: page.nextCursor,
+      review_count: page.reviewCount,
+    })
+  }),
+  route('GET', '/api/ui/workspaces/:workspaceId/memory/dream/:runId', (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    const runId = dreamIdFrom(context)
+    if (!workspaceId || !runId) return
+    context.store.getWorkspaceSnapshot(workspaceId)
+    const run = context.store.memoryDream.get(workspaceId, runId)
+    if (!run) {
+      sendJson(context.response, 404, { error: 'Dream run not found' })
+      return
+    }
+    sendJson(
+      context.response,
+      200,
+      serializeRun(run, context.store.memoryDream.listReviews(workspaceId, runId))
+    )
+  }),
   route('POST', '/api/ui/workspaces/:workspaceId/memory/dream', async (context) => {
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
     const workspaceId = workspaceIdFrom(context)
@@ -118,16 +125,52 @@ export const memoryDreamRoutes: RouteDefinition[] = [
       serializeRun(await context.store.requestMemoryDream(workspaceId))
     )
   }),
+  route('POST', '/api/ui/workspaces/:workspaceId/memory/dream/generate', async (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    if (!workspaceId) return
+    context.store.getWorkspaceSnapshot(workspaceId)
+    const body = await readDreamRequestBody(context.request)
+    if (body.retry !== undefined && typeof body.retry !== 'boolean')
+      throw new BadRequestError('retry must be a boolean')
+    const run = await context.store.requestMemoryDreamGeneration(workspaceId, body.retry === true)
+    if (!run) {
+      context.response.writeHead(204)
+      context.response.end()
+      return
+    }
+    sendJson(context.response, 201, serializeRun(run))
+  }),
+  route('POST', '/api/ui/workspaces/:workspaceId/memory/dream/:runId/discard', async (context) => {
+    requireUiTokenFromRequest(context.request, context.store.validateUiToken)
+    const workspaceId = workspaceIdFrom(context)
+    const runId = dreamIdFrom(context)
+    if (!workspaceId || !runId) return
+    const body = await readDreamRequestBody(context.request)
+    const run = context.store.memoryDream.discard(workspaceId, runId, body.expected_revision)
+    if (!run) {
+      sendJson(context.response, 404, { error: 'Dream run not found' })
+      return
+    }
+    sendJson(
+      context.response,
+      200,
+      serializeRun(run, context.store.memoryDream.listReviews(workspaceId, runId))
+    )
+  }),
   route('PATCH', '/api/ui/workspaces/:workspaceId/memory/dream/:runId', async (context) => {
     requireUiTokenFromRequest(context.request, context.store.validateUiToken)
     const workspaceId = workspaceIdFrom(context)
     const runId = dreamIdFrom(context)
     if (!workspaceId || !runId) return
-    const body = await readJsonBody<{ suggestions?: unknown }>(context.request)
-    const updated = context.store.memoryDream.updateSuggestions(
+    const body = await readJsonBody<{ expected_revision?: unknown; operations?: unknown }>(
+      context.request
+    )
+    const updated = context.store.memoryDream.updateOperations(
       workspaceId,
       runId,
-      normalizeSuggestions(body.suggestions)
+      body.expected_revision,
+      body.operations
     )
     if (!updated) {
       sendJson(context.response, 404, { error: 'Dream run not found' })
@@ -176,7 +219,11 @@ export const memoryDreamRoutes: RouteDefinition[] = [
     const workspaceId = workspaceIdFrom(context)
     const runId = dreamIdFrom(context)
     if (!workspaceId || !runId) return
-    const body = await readJsonBody<{ orchestrator_id?: unknown }>(context.request)
+    const body = await readJsonBody<{
+      orchestrator_id?: unknown
+      expected_revision?: unknown
+      operations?: unknown
+    }>(context.request)
     if (typeof body.orchestrator_id !== 'string' || !body.orchestrator_id.trim()) {
       throw new BadRequestError('orchestrator_id is required')
     }
@@ -184,10 +231,16 @@ export const memoryDreamRoutes: RouteDefinition[] = [
     if (actor.role !== 'orchestrator' || actor.id !== `${workspaceId}:orchestrator`) {
       throw new ForbiddenError('Only the Workspace Orchestrator can submit a Dream')
     }
-    const updated = context.store.memoryDream.submit(workspaceId, runId, {
-      id: actor.id,
-      name: actor.name,
-    })
+    const updated = context.store.memoryDream.submit(
+      workspaceId,
+      runId,
+      {
+        id: actor.id,
+        name: actor.name,
+      },
+      body.expected_revision,
+      body.operations
+    )
     if (!updated) {
       sendJson(context.response, 404, { error: 'Dream run not found' })
       return

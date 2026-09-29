@@ -1,4 +1,3 @@
-import type { Database } from 'better-sqlite3'
 import type { ResourceQueueEntry } from '../shared/resource-queue.js'
 import {
   captureRemoteQueueGrant,
@@ -7,6 +6,7 @@ import {
 } from './remote-action-context.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
 import { RemotePermissionError, type RemotePermissionStore } from './remote-permission-store.js'
+import type { Database } from './sqlite.js'
 
 /** Queued work retains the original grant IDs; a later approval cannot revive it. */
 export const createResourceQueueAuthorization = (

@@ -4,6 +4,11 @@ The optional Electron shell adds OS-backed folder drag and drop. It starts the
 same local HiveTeam runtime and Vite UI used by browser development; ordinary
 browser behavior is unchanged.
 
+The runtime requires Node 22.18+ within 22.x, or Node 24.x. Its built-in SQLite
+and precompiled PTY do not need native rebuilds. Electron remains a separate
+optional dependency installation; the runtime's `--ignore-scripts` package
+acceptance does not cover downloading Electron or building the frontend.
+
 From the repository root:
 
 ```bash

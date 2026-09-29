@@ -15,7 +15,7 @@ research, and report back — all as real PTY processes on your laptop.
 Use HiveTeam when one agent is not enough, but a pile of terminal windows is not a workflow.
 
 [![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-3c873a.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-22.18%2B%20%2822.x%29%20%7C%2024.x-3c873a.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#platform-support)
 
@@ -97,7 +97,7 @@ Useful for deciding whether to install a real CLI.
 
 Prerequisites:
 
-- Node.js 22 or newer.
+- Node.js 22.18 or newer within 22.x, or Node.js 24.x.
 - To run real tasks, at least one supported agent CLI installed, authenticated,
   and available on `PATH`. Basic workspaces can be created before installing a CLI.
 
@@ -114,18 +114,16 @@ npm start
 opens an authenticated browser window, normally on `http://127.0.0.1:5180/`. The existing
 `pnpm dev` command remains available for pnpm-based development.
 
-On npm 11, `npm warn allow-scripts` is advisory. npm 12 instead blocks
-unapproved dependency scripts by default, even when the command ends with
-`added ... packages`. This repository approves only the reviewed
-`node-pty`, `better-sqlite3`, and `esbuild` scripts for a source checkout. For
-a global package install, approve the same known runtime chain explicitly:
+The platform launcher recovers unexpectedly stopped services. **Resources → Platform recovery** also offers current-user sign-in startup on Windows and macOS, off by default. Changes apply at the next sign-in; a normal exit does not restart the platform immediately. See [Platform recovery and sign-in startup](./docs/platform-recovery.md) for recovery limits and CLI path setup.
 
-```bash
-npm install --global --allow-scripts=hiveteam,better-sqlite3,node-pty,esbuild hiveteam
-```
+SQLite uses Node's built-in `node:sqlite`. PTYs use the pinned
+`@lydell/node-pty` package with precompiled platform binaries. The built runtime
+does not need install scripts or a local C/C++ toolchain. Keep optional dependencies
+enabled so the package manager can select the binary for your OS and architecture.
 
-See [npm's install-script approval documentation](https://docs.npmjs.com/cli/v12/commands/npm-install-scripts/)
-and the troubleshooting section below for details.
+A source checkout still uses `esbuild` to build the frontend; it is the only
+approved dependency install script. The optional Electron desktop shell has its
+own installation and acceptance steps.
 
 For a packaged installation, `hive` starts the production UI and opens an
 authenticated browser window. Use `hive --port 4010` for a specific local port.
@@ -172,35 +170,55 @@ policy, not a Hive bug.
 First-run flow:
 
 1. Create a workspace from a project folder.
-2. Use the default basic mode for offline initialization; Skill Packs are optional.
+2. Keep the default installation of `matt` and `code-janitor`, or explicitly choose Basic mode to skip default packs and create offline.
 3. Hive creates `<workspace>/.hive/tasks.md`. Choose and check an Orchestrator preset,
    then start it explicitly (or select the creation dialog's start option). Its session receives the internal `team` command.
 4. Add workers from the Team Members panel.
 5. Ask the Orchestrator to delegate work. It sends tasks with
    `team send <worker-name> "<task>"`; workers report back with `team report`.
 
-If you want the Orchestrator to size the team itself, leave **Auto-staff**
-enabled (it is on by default). Staffing uses the runtime's team-management interface,
-subject to configured member and managed-execution limits and launch permissions.
-`team send` dispatches to existing members; the CLI has no `team spawn` command.
+Manage members and their CLI launch settings from the Team Members panel.
+The Orchestrator uses `team list` to inspect the team and `team send` to
+dispatch to an existing member. Use `team guide dispatch` for the current
+dispatch protocol; `team spawn` and `team dismiss` are not CLI commands.
 
-For stronger automation, enable the experimental **Workflows** toggle in
-settings. The Orchestrator can then author and run multi-agent workflows that
-fan out across implementation, review, testing, or other stages. The topbar
-**Workflows** panel shows runs, phase results, logs, and stop
-controls. The same panel also lets you choose which CLI workflow-created
-agents use by default and which CLIs they are allowed to use.
+For multi-step work, save a JSON definition under `.hive/workflows`, then open
+**Workflows** in the topbar to run it and inspect step results. Each step names
+an existing worker and can declare dependencies on other steps. The panel
+provides stop and step rerun controls. Only JSON definitions are executable;
+TypeScript and other catalogued files are metadata-only. Scheduled workflows
+and workflow-created agents are not available.
+
+After a restart, workflows reconcile stored reports for the current step attempt
+and resume dependencies without creating another dispatch for that attempt.
+Success and human acceptance keep their existing rules; quality conditions must
+still be satisfied. Stopping saves the stop request before cancelling unfinished
+steps. If cancellation fails, the request remains stored and is retried during
+recovery, before affected agents start and replay queued work.
+
+When receipt or cancellation is uncertain, the run is **Interrupted**: new steps
+pause while existing tasks can still report. Open **Review delivery** to inspect
+the original receipt and use the existing local recovery controls. Receipt
+rechecking never resends; resending requires an explicit acknowledgement.
+Marking a delivery handled preserves its dispatch and attempt and does not
+complete the task or satisfy quality conditions. A cancellation-message receipt
+does not prove that execution stopped; reruns still wait for that confirmation.
+Safe pending deliveries retain their existing retry path. Backup restore freezes
+interrupted runs alongside running ones.
 
 ## Share Skills with Skill Packs
 
-New workspaces automatically bind `tt-a1i/matt-skills-with-to-goal` as `matt`
-and `zhouyuanxinand/code-janitor` as `code-janitor` before starting the Orchestrator,
-with role profiles, immutable locks, and native `to-goal`, `to-spec`, `to-tickets`,
+Both workspace creation dialogs default to **Install matt + code-janitor**, binding
+`tt-a1i/matt-skills-with-to-goal` as `matt` and `zhouyuanxinand/code-janitor` as
+`code-janitor` before any requested Orchestrator start. Choose **Basic workspace**
+explicitly to create offline without installing default packs; existing skills and files
+are preserved in either mode. Default installation includes role profiles, immutable locks, and native `to-goal`, `to-spec`, `to-tickets`,
 and `code-janitor` entry points. Janitor is available to the Orchestrator, Coder,
 Reviewer, and Tester on demand; binding it does not run a cleanup. The first download
-requires Git and access to GitHub. Later creations reuse and verify the local
-cache; existing workspace versions are never automatically updated. Explicitly
-resolving a newer release makes that cached version available to new workspaces.
+requires Git and access to GitHub. Later creations in Skill Packs mode reuse
+and verify the local cache; existing workspace versions are never automatically
+updated. Explicitly resolving a newer release makes that cached version
+available to new workspaces in that mode.
 Existing bindings retain their aliases, versions, and selections; only missing
 defaults are added on creation. Existing workspaces are not migrated. Pack-name or native
 directory conflicts fail visibly without overwriting user files or starting an
@@ -224,7 +242,7 @@ for the whole team:
 5. Use **Members** to distinguish universal prompt delivery from native
    discovery, and **Changes** to inspect Receipts or Undo an owned change.
 
-Inside the Orchestrator terminal:
+After binding these Packs, use them inside the Orchestrator terminal:
 
 ```bash
 team skill list
@@ -308,17 +326,15 @@ configured for that home. See [SECURITY.md](SECURITY.md) for the verified bounda
 - Orchestrator and worker terminals backed by real PTYs.
 - Add Worker flow with role presets for coder, reviewer, tester, and fully
   custom prompts and commands — wire any CLI agent into the role you need.
-- Auto-staff (experimental, on by default): the Orchestrator can create
-  temporary coders, testers, and reviewers within the configured member and
-  execution limits. Reporting a result does not itself release a running
-  process or remove its retained worktree.
-- Workflows (experimental, off by default): the Orchestrator can run
-  multi-stage, multi-agent workflows while Hive shows runs, logs, results,
-  and stop controls in the Workflows panel. Scheduled workflows are not available.
-- Workflow CLI policy: choose the default CLI for workflow-created agents and
-  restrict which CLIs workflow scripts may launch.
+- Workflows: run JSON definitions with up to 20 steps across existing team
+  members. Steps support dependencies and quality conditions for reports,
+  reviews, and verification; the Workflows panel shows results and provides
+  stop and rerun controls. Scheduled workflows are not available.
 - Team memory: keep workspace constraints, long-running context, and team
   decisions in Hive so later dispatches can carry the right background.
+  [Dream](./docs/memory-dream.md) prepares explicit memory changes or extracts
+  candidates from new protocol messages through the workspace Orchestrator.
+  Inspect the sources and apply manually; changes have receipts and conflict-aware rollback.
 - Dispatch change review: in Git workspaces Hive records the HEAD commit when
   a dispatch is created, so the Activity center can show the working-tree diff
   produced while that dispatch was being worked on, including new untracked
@@ -361,12 +377,22 @@ Important boundaries:
 | Platform | Status | Notes |
 | --- | --- | --- |
 | macOS | Tier 1 | Main development and release verification target. |
-| Linux | Tier 1 | CI verified. Native folder picking expects `zenity`; manual path entry works without it. |
-| Windows | Tier 2 | CI runs a Windows test subset and a packaged-install smoke. Folder picking uses the in-browser server filesystem browser and the package includes `team.cmd`. Treat as best-effort — full Windows verification before each release is manual. |
+| Linux | Tier 1 | CI configured; see the release workflow results for verification. Native folder picking expects `zenity`; manual path entry works without it. |
+| Windows | Tier 2 | CI runs the full test suite through the shared runner and a packaged-install smoke. Folder picking uses the in-browser server filesystem browser and the package includes `team.cmd`. Treat as best-effort — real CLI and desktop acceptance before each release is manual. |
 
-All platforms require Node.js 22+. Hive depends on native packages
-(`node-pty` and `better-sqlite3`), so native install tooling may be required
-when prebuilt binaries are unavailable.
+All platforms require Node.js 22.18+ within 22.x, or Node.js 24.x. SQLite is
+provided by Node. `@lydell/node-pty@1.2.0-beta.15` supplies precompiled native
+binaries for macOS, Linux and Windows on x64 and arm64. This is not a pure
+JavaScript PTY implementation. Other OS/architecture combinations do not fall
+back to compiling from source.
+
+Windows uses the bundled ConPTY DLL in both production and tests. That upstream
+option is experimental, so the PTY version is pinned and upgrades must pass real
+terminal and lifecycle acceptance. CI coverage is listed below; availability of
+a platform binary alone does not mean that every agent CLI has been certified.
+Headless Windows startup can spend about three seconds negotiating terminal
+capabilities. Autostart uses a four-second observation window and returns early
+on exit, so a CLI that fails during that startup is not reported as successful.
 
 ## Safety Model
 
@@ -430,6 +456,18 @@ honored even when another directory already contains saved data.
 See [Workspace and native session recovery](docs/session-recovery.md) for restart
 behavior, per-member conversation bindings, and recovery failure handling.
 
+Use `team send --messages` to opt a new dispatch into persistent questions,
+answers and progress messages. See [Dispatch conversations](docs/dispatch-messages.md)
+for history, explicit read sequences and rework behavior.
+
+Dynamic staffing is disabled by default. Authorize presets and a temporary-member limit in the member panel, then use `team staffing`, `team spawn` and `team dismiss`. See [Dynamic staffing and retirement](docs/dynamic-staffing.md).
+
+`team review --dispatch <id> [--cli <preset>] "<focus>" requests a temporary reviewer pinned to the reported commit. Findings and retained worktrees remain available after retirement. See [One-shot reviewer tasks](docs/one-shot-reviews.md).
+
+Open **Activity center → Needs attention** to find unanswered questions, pending report delivery, stopped members with queued work, reports awaiting acceptance and remote connection issues. Each item opens its existing controls. See [Needs attention](docs/activity-attention.md).
+
+[Collaboration statistics](docs/collaboration-statistics.md) shows root-task counts, duration coverage, and measured prompt bytes.
+
 Local backup, inspection, restore-to-new-directory and reversible dispatch
 archiving are available in the knowledge drawer and through `hive data --help`.
 Backups exclude credentials and do not include workspace source files. See
@@ -465,28 +503,19 @@ node dist/src/cli/hive.js --port 4010
 If the command still points at a global install, check `which hive` / `where
 hive` and use the built `node dist/src/cli/hive.js` entry point explicitly.
 
-**Native package install fails**
+**PTY platform package is missing**
 
-Hive depends on `node-pty` and `better-sqlite3`, which use native binaries. Use
-Node.js 22+, keep your package manager cache clean, and verify your platform
-build tools are available.
+Check `node --version`, `node -p "process.platform + '/' + process.arch"`, and
+that optional dependencies were installed. Remove `--omit=optional` or equivalent
+package-manager settings and reinstall for the machine running Hive. Do not copy
+`node_modules` between operating systems or architectures.
 
-If npm prints a deprecated warning for `prebuild-install@7.1.3`, it is safe to
-ignore. The warning comes from `better-sqlite3`'s native binary download chain;
-it is an upstream installer maintenance notice, not a Hive install failure, and
-does not affect runtime behavior.
-
-Use the warning text, not only npm's exit code, to decide:
-
-| warning | Source | What to do |
-| --- | --- | --- |
-| `allow-scripts ... not yet covered` | npm 11 install-script review | Advisory unless strict mode is enabled; inspect with `npm install-scripts ls`. |
-| `install-scripts ... blocked` | npm 12 default-deny policy | Do not ignore it. Approve only the listed packages in the consumer project's `allowScripts`, or use the explicit global-install command above. |
-| `prebuild-install@7.1.3 deprecated` | `better-sqlite3` installer chain | Upstream maintenance notice; safe to ignore when the native module built successfully. |
-
-Hive needs `hiveteam`, `better-sqlite3`, and `node-pty` install scripts for a
-packaged runtime; a source checkout also approves `esbuild`. Never use
-`--dangerously-allow-all-scripts` for this purpose.
+The built package supports `npm install --ignore-scripts <archive.tgz>` and
+requires no native rebuild. Source builds still need frontend build tooling;
+if its installation is blocked, review and approve `esbuild` in the source
+checkout. Electron is installed separately with `pnpm desktop:install`.
+Run `pnpm release:compat` from the checkout to inspect runtime modules and CLI
+availability.
 
 **Folder picker does not open on Linux**
 
@@ -510,6 +539,13 @@ node dist/src/cli/hive.js --port 4010
 
 Use `where hive` to find older global shims that may still be ahead of this
 repository in `PATH`.
+
+**Codex reports missing model metadata**
+
+Codex 0.155.1 can fall back to missing metadata for `gpt-6-sol` on a cold start.
+Update the CLI Hive actually launches and restart the member after its task finishes.
+See [model metadata troubleshooting](docs/codex-model-metadata.md) for version checks
+and execution-permission implications.
 
 **Codex terminal cannot scroll on Windows**
 
@@ -564,13 +600,72 @@ To run the real desktop drag acceptance against a known folder:
 pnpm desktop:acceptance -- "/absolute/path/with spaces"
 ```
 
-Useful checks:
+Run these checks before submitting a non-trivial change:
 
 ```bash
 pnpm check
+pnpm typecheck
 pnpm build
 pnpm test
 ```
+
+`pnpm check` runs Biome. `pnpm typecheck` checks the runtime, web UI, tests,
+and gateway without emitting build output. `pnpm build` verifies the production
+build. `pnpm test` runs the full suite through the shared runner with an isolated
+temporary Hive data directory, as CI does on macOS, Linux, and Windows.
+`pnpm test:windows` is an alias for the same full suite.
+
+To run one test file with the same isolation:
+
+```bash
+pnpm test tests/unit/task-markdown.test.ts
+```
+
+### Release artifact verification
+
+To build one package and verify that exact archive locally:
+
+```bash
+pnpm build
+node scripts/create-release-artifact.mjs --output ../hiveteam-release
+node scripts/pack-smoke.mjs --artifact ../hiveteam-release/release-manifest.json --report ../hiveteam-release/smoke-report.json
+```
+
+The manifest records the source commit, dirty-tree state, lockfile hash, packaging
+environment, and archive SHA-256. The smoke command checks the archive before
+installing it in a temporary directory, then exercises the installed runtime's
+HTTP, WebSocket, native PTY, team delivery, stop, and restart paths. Its JSON report
+records the actual environment and results; browser checks are reported as not
+run unless a Playwright module is supplied through `HIVE_PLAYWRIGHT_MODULE`.
+
+Artifact creation packages the existing build without rebuilding it. Install
+lifecycle scripts remain enabled during acceptance.
+
+Without `--artifact` or `HIVE_RELEASE_MANIFEST`, `pnpm pack:smoke` still packages the current build.
+Set `HIVE_RELEASE_MANIFEST` to an absolute manifest path to reuse an existing
+archive, including from package integration tests. The explicit `--artifact`
+option takes precedence. Use `--expected-platform`, `--expected-arch`, and
+`--expected-node` to require a specific environment.
+
+The release workflow is configured to build once on Ubuntu 24.04 / Node 24.14.0
+and share that archive across these twelve installed-package checks (each row runs both default installation
+and installation with lifecycle scripts disabled):
+
+| Runner | Platform / architecture | Exact Node versions |
+| --- | --- | --- |
+| `ubuntu-24.04` | `linux` / `x64` | `22.18.0`, `24.14.0` |
+| `windows-2022` | `win32` / `x64` | `22.18.0`, `24.14.0` |
+| `macos-15` | `darwin` / `arm64` | `22.18.0`, `24.14.0` |
+
+Both install modes run the same HTTP, SQLite restart, `team`, Unicode terminal,
+resize and process cleanup checks. To exercise the second mode locally, add
+`--ignore-scripts` to `pnpm pack:smoke`.
+
+Source checks run on the same three runners with Node 24.14.0. They restore
+`dist/` and `web/dist/` from the verified archive for integration tests. Each
+installed-package job uploads its report even when acceptance fails. This table
+describes the configured coverage; the workflow run and its reports provide the
+pass/fail evidence. The workflow does not publish a package.
 
 Production-style local run:
 
@@ -590,9 +685,9 @@ choose to move to a newer commit.
 
 ## Status
 
-Hive is in alpha. This repository includes multi-CLI agent presets, Auto-staff,
-Workflows, team memory, PWA installation, and optional Remote access. The
-checked-out commit is the source of truth for the running build.
+Hive is in alpha. This repository includes multi-CLI agent presets, member
+management, JSON Workflows, team memory, PWA installation, and optional Remote
+access. The checked-out commit is the source of truth for the running build.
 
 ## A different form factor: squad
 

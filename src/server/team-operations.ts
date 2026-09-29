@@ -6,8 +6,14 @@ import type { AgentRuntime } from './agent-runtime.js'
 import { buildOrchestratorReportPayload } from './agent-stdin-dispatcher.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import type { DispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
-import { BadRequestError, ConflictError, HttpError, PtyInactiveError } from './http-errors.js'
-import type { MessageLogHandle, MessageLogRecord } from './message-log-store.js'
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  HttpError,
+  PtyInactiveError,
+} from './http-errors.js'
+import type { MessageLogHandle, MessageLogPurpose, MessageLogRecord } from './message-log-store.js'
 import { isInteractiveAgentCommand } from './post-start-input-writer.js'
 import { RemotePermissionError } from './remote-permission-store.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
@@ -37,6 +43,8 @@ export interface TeamOperationsInput {
    */
   captureBaseHeadSha?: (workspaceId: string, workerId: string) => Promise<string | null>
   createDispatch: (input: {
+    parentDispatchId?: string
+    messageProtocolVersion?: 0 | 1
     baseHeadSha?: string | null
     fromAgentId?: string
     text: string
@@ -55,6 +63,7 @@ export interface TeamOperationsInput {
   /** Required for the review-feedback path; optional for lightweight callers. */
   getDispatchById?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   isWorkflowDispatch?: (dispatchId: string) => boolean
+  messagePurposeForDispatch: (dispatchId: string) => MessageLogPurpose
   getDispatchActivation: DispatchSkillActivationStore['get']
   clarificationForWorker: DispatchSkillActivationStore['clarificationForWorker']
   listOpenWorkspaceDispatches?: (workspaceId: string) => DispatchRecord[]
@@ -65,6 +74,7 @@ export interface TeamOperationsInput {
     workspaceId: string
   }) => DispatchRecord | undefined
   markDispatchReportedByWorker: (input: {
+    seenSeq?: number
     outcome?: ReportOutcome
     artifacts: string[]
     dispatchId?: string
@@ -91,6 +101,11 @@ export interface TeamOperationsInput {
 }
 
 export interface DispatchTaskInput {
+  /** Auto-handoff persists the interview before admitting its new worker to a PTY. */
+  startStoppedClarification?: boolean
+  messagePurpose?: MessageLogPurpose
+  parentDispatchId?: string
+  messageProtocolVersion?: 0 | 1
   /** Internal transaction hook: attach durable workflow ownership before any delivery. */
   onCreated?: (dispatch: DispatchRecord) => void
   timeouts?: DispatchTimeouts
@@ -100,6 +115,7 @@ export interface DispatchTaskInput {
 }
 
 export interface ReportTaskInput {
+  seenSeq?: number
   outcome?: ReportOutcome
   artifacts?: string[]
   dispatchId?: string
@@ -150,6 +166,7 @@ export const createTeamOperations = ({
   findOpenDispatchById,
   getDispatchById,
   isWorkflowDispatch,
+  messagePurposeForDispatch,
   getDispatchActivation,
   clarificationForWorker,
   listOpenWorkspaceDispatches = () => [],
@@ -291,6 +308,25 @@ export const createTeamOperations = ({
     if (text.trim().length === 0) {
       throw new BadRequestError('Task text cannot be empty')
     }
+    const parentDispatch = input.parentDispatchId
+      ? getDispatchById?.(workspaceId, input.parentDispatchId)
+      : undefined
+    if (input.parentDispatchId && !parentDispatch)
+      throw new ConflictError('Parent dispatch not found in this workspace')
+    if (parentDispatch && input.fromAgentId) {
+      const actor = workspaceStore.getAgent(workspaceId, input.fromAgentId)
+      if (
+        actor.id !== `${workspaceId}:orchestrator` &&
+        actor.id !== parentDispatch.fromAgentId &&
+        actor.id !== parentDispatch.toAgentId
+      )
+        throw new ForbiddenError(
+          'Only the parent dispatch participants or Orchestrator may create a child dispatch'
+        )
+    }
+    const inheritedPurpose = parentDispatch
+      ? messagePurposeForDispatch(parentDispatch.id)
+      : undefined
     let skillActivation: ResolvedSkillActivation | undefined
     if (input.skillName) {
       if (!runDataMutation) {
@@ -302,18 +338,30 @@ export const createTeamOperations = ({
     // before the dispatch can cause worker edits. For ordinary dispatches this
     // preserves the historical pre-await synchronous persistence path.
     const baseHeadCapture = captureBaseHeadSha ? captureBaseHeadSha(workspaceId, workerId) : null
-    const message = createSendMessage(workspaceId, workerId, text, input.fromAgentId)
+    const message = {
+      ...createSendMessage(workspaceId, workerId, text, input.fromAgentId),
+      purpose:
+        inheritedPurpose === 'memory_dream_review'
+          ? inheritedPurpose
+          : (input.messagePurpose ?? ('conversation' as const)),
+    }
     const messageHandle = insertMessage(message)
     let dispatch: DispatchRecord | undefined
 
     try {
       const dispatchInput: {
+        parentDispatchId?: string
+        messageProtocolVersion?: 0 | 1
         baseHeadSha?: string | null
         fromAgentId?: string
         text: string
         toAgentId: string
         workspaceId: string
       } = {
+        ...(input.parentDispatchId ? { parentDispatchId: input.parentDispatchId } : {}),
+        ...(input.messageProtocolVersion === undefined
+          ? {}
+          : { messageProtocolVersion: input.messageProtocolVersion }),
         text,
         toAgentId: workerId,
         workspaceId,
@@ -329,7 +377,11 @@ export const createTeamOperations = ({
           )
         if (skillActivation && isClarificationSkill(skillActivation.skillName)) {
           const worker = workspaceStore.getWorker(workspaceId, workerId)
-          if (worker.status !== 'idle' || findOpenDispatch(workspaceId, workerId))
+          if (
+            (worker.status !== 'idle' &&
+              !(input.startStoppedClarification && worker.status === 'stopped')) ||
+            findOpenDispatch(workspaceId, workerId)
+          )
             throw new ConflictError(
               'Clarification requires an idle member with no pending dispatches.'
             )
@@ -505,6 +557,28 @@ export const createTeamOperations = ({
         throw new PtyInactiveError('The worker is not running. Start it first, then send feedback.')
       }
 
+      if (dispatch.messageProtocolVersion === 1) {
+        let reopened = false
+        runMutation(() => {
+          if (dispatch.status === 'reported') {
+            if (!reopenReportedDispatch) throw new Error('Dispatch reopening is not configured')
+            reopened = reopenReportedDispatch(workspaceId, dispatchId)
+          }
+          delivery.messages.create(workspaceId, dispatchId, `${workspaceId}:orchestrator`, {
+            kind: 'note',
+            body: text,
+          })
+          insertMessage({
+            ...createFeedbackMessage(workspaceId, dispatch.toAgentId, text),
+            purpose: messagePurposeForDispatch(dispatch.id),
+            ...(isInterview ? { type: 'member_feedback' as const } : {}),
+          })
+        })
+        if (reopened) workspaceStore.markTaskDispatched(workspaceId, dispatch.toAgentId)
+        delivery.wake()
+        return getDispatchById(workspaceId, dispatchId) ?? dispatch
+      }
+
       // A reported dispatch reopens so the worker can address the feedback
       // and report again under the same dispatch id. DB first, then the
       // in-memory pending counter.
@@ -516,6 +590,7 @@ export const createTeamOperations = ({
 
       insertMessage({
         ...createFeedbackMessage(workspaceId, dispatch.toAgentId, text),
+        purpose: messagePurposeForDispatch(dispatch.id),
         ...(isInterview ? { type: 'member_feedback' as const } : {}),
       })
       try {
@@ -534,6 +609,21 @@ export const createTeamOperations = ({
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
       const isolated = !!clarificationForWorker(workspaceId, workerId)
+      const explicitDispatch = input.dispatchId
+        ? (getDispatchById?.(workspaceId, input.dispatchId) ??
+          findOpenDispatch(workspaceId, workerId, input.dispatchId))
+        : undefined
+      if (input.dispatchId && (!explicitDispatch || explicitDispatch.toAgentId !== workerId))
+        throw new HttpError(404, 'Dispatch not found for this worker')
+      const pending = input.dispatchId
+        ? []
+        : listOpenWorkspaceDispatches(workspaceId).filter(
+            (dispatch) => dispatch.toAgentId === workerId
+          )
+      const hasPendingDreamReview = pending.some(
+        (dispatch) => messagePurposeForDispatch(dispatch.id) === 'memory_dream_review'
+      )
+      const statusDispatch = explicitDispatch ?? (pending.length === 1 ? pending[0] : undefined)
       if (input.progressState) {
         if (!input.dispatchId)
           throw new BadRequestError('dispatch_id is required for structured progress')
@@ -561,6 +651,13 @@ export const createTeamOperations = ({
       }
       const messageHandle = insertMessage({
         ...createStatusMessage(workspaceId, workerId, text, artifacts),
+        // Ordinary status remains valid without a dispatch. Ambiguous Dream/business
+        // updates are retained in history but must not feed Dream back into itself.
+        purpose: statusDispatch
+          ? messagePurposeForDispatch(statusDispatch.id)
+          : hasPendingDreamReview
+            ? 'memory_dream_review'
+            : 'conversation',
         ...(isolated ? { toAgentId: workerId } : {}),
       })
       try {
@@ -600,6 +697,8 @@ export const createTeamOperations = ({
       const artifacts = input.artifacts ?? []
       const worker = workspaceStore.getWorker(workspaceId, workerId)
       const openDispatch = findOpenDispatch(workspaceId, workerId, input.dispatchId)
+      if (openDispatch?.messageProtocolVersion === 1 && !input.dispatchId)
+        throw new BadRequestError('dispatch_id is required for message protocol 1')
       if (!input.dispatchId && openDispatch && isWorkflowDispatch?.(openDispatch.id))
         throw new BadRequestError(
           'dispatch_id is required for a workflow attempt. Use the id supplied with the current task.'
@@ -649,20 +748,19 @@ export const createTeamOperations = ({
       let dispatch: DispatchRecord | undefined
       let reportQueuedBeforeCommit = false
 
-      if (
-        shouldQueueForOrchestrator &&
-        agentRuntime.getActiveRunByAgentId(workspaceId, orchestratorId)
-      ) {
-        drainReportOutbox(workspaceId, orchestratorId)
-      }
-
       try {
         runMutation(() => {
-          messageHandle = insertMessage(
-            createReportMessage(workspaceId, workerId, text, status, artifacts)
-          )
+          if (openDispatch.messageProtocolVersion === 1)
+            delivery.messages.assertReportSeen(openDispatch.id, workerId, input.seenSeq)
+          messageHandle = insertMessage({
+            ...createReportMessage(workspaceId, workerId, text, status, artifacts),
+            purpose: messagePurposeForDispatch(openDispatch.id),
+          })
           if (shouldQueueForOrchestrator) {
             reportOutbox.enqueue({
+              ...(openDispatch.messageProtocolVersion === 1 && openDispatch.reportRevision > 0
+                ? { replacePrevious: true }
+                : {}),
               dispatchId: openDispatch.id,
               payload,
               targetAgentId: orchestratorId,
@@ -674,6 +772,7 @@ export const createTeamOperations = ({
             artifacts,
             ...(input.outcome ? { outcome: input.outcome } : {}),
             ...(input.dispatchId ? { dispatchId: input.dispatchId } : {}),
+            ...(input.seenSeq === undefined ? {} : { seenSeq: input.seenSeq }),
             reportText: text,
             toAgentId: workerId,
             workspaceId,

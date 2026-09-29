@@ -299,6 +299,13 @@ html, body {
 .bg-3 { background: var(--bg-3); }
 .bg-crust { background: var(--bg-crust); }
 
+.terminal-process-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; padding: 0.25rem 0.75rem; background: var(--bg-crust); }
+.terminal-process-toolbar > span { color: var(--text-secondary); font-size: 0.75rem; }
+.terminal-process-toggle { margin-inline-start: auto; flex-shrink: 0; padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; }
+.terminal-process-toggle[aria-pressed='true'] { color: var(--text-primary); background: var(--bg-2); }
+.terminal-process-toggle:hover { background: var(--bg-3); }
+.terminal-process-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.terminal-process-history__notice { color: var(--text-secondary); }
 .terminal-view__container { position: relative; }
 .terminal-view__container[data-process-collapsed='true'] > .xterm {
   clip-path: inset(var(--terminal-history-height) 0 0 0);

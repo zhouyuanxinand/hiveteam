@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

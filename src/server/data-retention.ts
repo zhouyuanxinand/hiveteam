@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import { BadRequestError, ConflictError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 export const createDataRetention = (db: Database) => {
   const preview = (workspaceId: string) =>
@@ -61,7 +61,7 @@ export const createDataRetention = (db: Database) => {
         if (
           db
             .prepare(
-              "SELECT 1 FROM memory_sources s JOIN memory_entries m ON m.id=s.memory_id WHERE s.source_type='dispatch' AND s.source_id=? AND m.status IN ('active','candidate')"
+              "SELECT 1 FROM memory_sources s JOIN memory_entries m ON m.id=s.memory_id WHERE s.source_type IN ('dispatch','dispatch_message') AND s.source_id=? AND m.status IN ('active','candidate')"
             )
             .get(row.id)
         )

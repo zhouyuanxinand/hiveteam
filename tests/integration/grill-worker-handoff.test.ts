@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { runTeamCommand } from '../../src/cli/team.js'
+import Database from '../../src/server/sqlite.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -59,13 +59,18 @@ const start = async (agentId: string, label: string) => {
   writeFileSync(received, '')
   writeFileSync(
     script,
-    `import {appendFileSync} from 'node:fs';process.stdin.setEncoding('utf8');process.stdin.on('data', text=>{appendFileSync(${JSON.stringify(received)},text);process.stdout.write(text)});setInterval(()=>{},1000)`
+    `import {appendFileSync} from 'node:fs';process.stdin.setEncoding('utf8');process.stdin.on('data', text=>{appendFileSync(${JSON.stringify(received)},text);process.stdout.write(text)});process.stdout.write('READY');setInterval(()=>{},1000)`
   )
   server.store.configureAgentLaunch(workspaceId, agentId, {
     command: process.execPath,
     args: [script],
   })
-  await server.store.startAgent(workspaceId, agentId, { hivePort: new URL(server.baseUrl).port })
+  const run = await server.store.startAgent(workspaceId, agentId, {
+    hivePort: new URL(server.baseUrl).port,
+  })
+  await expect
+    .poll(() => server.store.getLiveRun(run.runId).output, { timeout: 10_000 })
+    .toContain('READY')
   return () => readFileSync(received, 'utf8')
 }
 const post = (suffix: string, input: unknown) =>

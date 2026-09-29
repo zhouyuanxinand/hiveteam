@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3'
 import { describe, expect, test, vi } from 'vitest'
 import { createSkillPackReleaseStore } from '../../src/server/skill-pack-release-store.js'
+import Database from '../../src/server/sqlite.js'
 import { applySchemaVersion35 } from '../../src/server/sqlite-schema-v35.js'
 import type { SkillPackManifest, SkillPackSource } from '../../src/shared/skill-packs.js'
 

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion41 = (db: Database) => {
   db.exec(`

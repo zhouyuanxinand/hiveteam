@@ -1,9 +1,13 @@
-import type { Database } from 'better-sqlite3'
 import type { AgentRuntime } from './agent-runtime.js'
 import { buildWorkerCancelPayload } from './agent-stdin-dispatcher.js'
-import { assertReportSession, createReportJournalReader } from './codex-report-journal.js'
+import { createCodexInitialDispatch } from './codex-initial-dispatch.js'
+import { codexReceiptHash } from './codex-message-wire.js'
+import { resolveCodexReceiptSession } from './codex-receipt-session.js'
+import { createReportJournalReader } from './codex-report-journal.js'
 import { createDispatchHealthStore } from './dispatch-health-store.js'
 import type { createDispatchLedgerStore, DispatchRecord } from './dispatch-ledger-store.js'
+import { buildDispatchMessagePayload } from './dispatch-message-runtime.js'
+import { createDispatchMessageStore, DispatchMessageConflict } from './dispatch-message-store.js'
 import type { DispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import { ConflictError, HttpError } from './http-errors.js'
 import {
@@ -20,6 +24,8 @@ import {
   type SystemMessageDeliveryOptions,
 } from './report-delivery-receipt.js'
 import type { ReportOutboxStore } from './report-outbox-store.js'
+import type { Database } from './sqlite.js'
+import type { TeamMemoryDigestProvider } from './team-memory-digest.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
 export const createTeamDeliveryRuntime = (input: {
@@ -31,8 +37,10 @@ export const createTeamDeliveryRuntime = (input: {
   activations: DispatchSkillActivationStore
   authorize: <T>(dispatchId: string, action: () => T) => T
   onSubmitted: (dispatch: DispatchRecord) => void
+  dispatchMemoryDigest?: TeamMemoryDigestProvider['forDispatch']
 }) => {
   const records = createMessageDeliveryStore(input.db)
+  const messages = createDispatchMessageStore(input.db)
   const health = createDispatchHealthStore(input.db)
   const active = new Map<string, { abort: AbortController; done: Promise<boolean> }>()
   const readers = new Map<
@@ -41,6 +49,7 @@ export const createTeamDeliveryRuntime = (input: {
   >()
   let closing = false
   let timer: ReturnType<typeof setTimeout> | undefined
+  let wakeScheduled = false
   records.recover()
   const requireDispatch = (workspaceId: string, id: string) => {
     const dispatch = input.ledger.getDispatchById(workspaceId, id)
@@ -83,16 +92,27 @@ export const createTeamDeliveryRuntime = (input: {
     if (record.state === 'resolved') return false
     if (record.state === 'attempting') return false
     if (!record.checkpoint) return false
-    const checkpoint = JSON.parse(record.checkpoint) as ReportDeliveryCheckpoint
-    assertReportSession(checkpoint.sessionFile, checkpoint.sessionId, checkpoint.cwd)
+    const saved = JSON.parse(record.checkpoint) as ReportDeliveryCheckpoint
+    const captured = input.db
+      .prepare('SELECT last_session_id FROM agent_sessions WHERE workspace_id=? AND agent_id=?')
+      .get(record.workspace_id, record.recipient_id) as { last_session_id: string } | undefined
+    const checkpoint = resolveCodexReceiptSession(
+      saved,
+      captured?.last_session_id,
+      record.workspace_id,
+      record.recipient_id
+    )
+    if (!checkpoint) return false
+    const checkpointKey = JSON.stringify(checkpoint)
     let reader = readers.get(id)
-    if (!reader || reader.checkpoint !== record.checkpoint) {
+    if (!reader || reader.checkpoint !== checkpointKey) {
       reader = {
-        checkpoint: record.checkpoint,
+        checkpoint: checkpointKey,
         read: createReportJournalReader(
           checkpoint.sessionFile,
           checkpoint.offset,
-          reportReceiptMarker(record.id)
+          reportReceiptMarker(record.id),
+          codexReceiptHash(checkpoint)
         ),
       }
       readers.set(id, reader)
@@ -101,7 +121,7 @@ export const createTeamDeliveryRuntime = (input: {
       const result = reader.read()
       if (result.found) {
         const dispatch = input.db.transaction(() => {
-          records.confirm(id, 'native_receipt')
+          records.confirm(id, 'native_receipt', checkpoint)
           return persistAccepted(record, true)
         })()
         notifyAccepted(record, dispatch)
@@ -137,6 +157,14 @@ export const createTeamDeliveryRuntime = (input: {
               if (closing || abort.signal.aborted) throw new ConflictError('Delivery was cancelled')
               const current = requireDispatch(record.workspace_id, record.dispatch_id)
               if (
+                record.kind === 'message' &&
+                (current.status === 'reported' || current.status === 'cancelled')
+              )
+                throw new DispatchMessageConflict(
+                  'dispatch_closed',
+                  'Dispatch closed before message delivery'
+                )
+              if (
                 record.kind === 'dispatch' &&
                 (current.status === 'cancelled' || current.status === 'reported')
               )
@@ -165,6 +193,7 @@ export const createTeamDeliveryRuntime = (input: {
                 delivery: {
                   signal: abort.signal,
                   timeoutMs: health.get(record.dispatch_id)?.timeouts.delivery_ms ?? 15_000,
+                  prepared: (payload) => records.prepared(id, claimed.attempt, payload),
                   beforeWrite: () => records.beforeWrite(id, claimed.attempt),
                   nativeReceipt: () => {
                     native = true
@@ -190,7 +219,8 @@ export const createTeamDeliveryRuntime = (input: {
                   input.workspaceStore.getWorkspaceSnapshot(record.workspace_id).summary.language ??
                     'zh',
                   input.activations.get(dispatch.id) ?? undefined,
-                  options
+                  options,
+                  dispatch.messageProtocolVersion
                 )
               } else {
                 const entry =
@@ -202,11 +232,16 @@ export const createTeamDeliveryRuntime = (input: {
                 if (record.kind === 'report' && !entry)
                   throw new ConflictError('Report was removed')
                 if (entry) input.outbox.markDeliveryAttempt(entry.id)
+                const message = record.kind === 'message' ? messages.get(record.id) : undefined
+                if (record.kind === 'message' && !message)
+                  throw new ConflictError('Dispatch message was removed')
                 await input.agentRuntime.deliverSystemMessageToAgent(
                   record.workspace_id,
                   record.recipient_id,
-                  entry?.payload ??
-                    buildWorkerCancelPayload(dispatch.id, dispatch.reportText ?? 'Cancelled'),
+                  message
+                    ? buildDispatchMessagePayload(message)
+                    : (entry?.payload ??
+                        buildWorkerCancelPayload(dispatch.id, dispatch.reportText ?? 'Cancelled')),
                   options
                 )
               }
@@ -226,7 +261,9 @@ export const createTeamDeliveryRuntime = (input: {
           id,
           claimed.attempt,
           reason,
-          error instanceof NativeSessionError ? 'manual' : error instanceof RemotePermissionError
+          error instanceof NativeSessionError
+            ? 'manual'
+            : error instanceof RemotePermissionError || error instanceof DispatchMessageConflict
         )
         if (record.kind === 'report') {
           const entry = input.outbox
@@ -249,6 +286,7 @@ export const createTeamDeliveryRuntime = (input: {
   }
   const tick = () => {
     timer = undefined
+    wakeScheduled = false
     if (closing) return
     try {
       health.tick()
@@ -272,13 +310,15 @@ export const createTeamDeliveryRuntime = (input: {
     } catch (error) {
       console.error('[hive] delivery scheduler failed', error)
     }
-    if (!closing) {
+    if (!closing && !timer) {
       timer = setTimeout(tick, 1000)
       timer.unref()
     }
   }
   const wake = () => {
-    if (closing || timer) return
+    if (closing || wakeScheduled) return
+    clearTimeout(timer)
+    wakeScheduled = true
     // Background work never inherits a request's temporary remote approval.
     withoutRemoteActionContext(() => {
       timer = setTimeout(tick, 0)
@@ -287,7 +327,15 @@ export const createTeamDeliveryRuntime = (input: {
   }
   wake()
   return {
+    prepareInitialDispatch: createCodexInitialDispatch({
+      ...input,
+      records,
+      ...(input.dispatchMemoryDigest ? { memoryDigest: input.dispatchMemoryDigest } : {}),
+      isClosing: () => closing,
+      wake,
+    }),
     records,
+    messages,
     health,
     recheck,
     wake,
@@ -370,7 +418,7 @@ export const createTeamDeliveryRuntime = (input: {
       const dispatch = requireDispatch(workspaceId, record.dispatch_id)
       if (
         action === 'resend' &&
-        record.kind === 'dispatch' &&
+        (record.kind === 'dispatch' || record.kind === 'message') &&
         (dispatch.status === 'cancelled' || dispatch.status === 'reported')
       )
         throw new ConflictError('Closed dispatch cannot be resent')

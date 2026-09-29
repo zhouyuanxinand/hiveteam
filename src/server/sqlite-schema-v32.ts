@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Stores durable Supervisor-to-Orchestrator goal sessions and their event stream. */
 export const applySchemaVersion32 = (db: Database) => {

@@ -1,7 +1,6 @@
-import type { Database } from 'better-sqlite3'
-
 import { fromBase64Url, toBase64Url } from '../shared/remote-crypto.js'
 import type { DeviceSession, DeviceSessionProvider } from './remote-device-session.js'
+import type { Database } from './sqlite.js'
 
 export interface RemoteDeviceRecord {
   id: string

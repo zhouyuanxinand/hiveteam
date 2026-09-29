@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import { SkillPackChangeError } from './skill-pack-operation-errors.js'
+import type { Database } from './sqlite.js'
 
 export type WorkspaceInitializationMode = 'basic' | 'packs'
 export const createWorkspaceOnboarding = (db: Database) => ({

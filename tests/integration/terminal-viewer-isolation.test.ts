@@ -93,7 +93,7 @@ test('snapshot cut excludes later live output and replacing a client ID fences t
     'let n=0;setInterval(()=>process.stdout.write(`序号:${n++}\\r\\n`),15);process.stdin.on("data",s=>process.stdout.write("输入:"+s));'
   )
   const first = await f.viewer(true, randomUUID(), true)
-  await vi.waitFor(() => expect(first.received.text).toContain('序号:'))
+  await vi.waitFor(() => expect(first.received.text).toContain('序号:'), { timeout: 10_000 })
   const second = await f.viewer(true, first.id, true)
   await vi.waitFor(() => expect(first.received.closed).toBe(true))
   await vi.waitFor(() =>

@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
+import { writeCodexCli } from '../helpers/codex-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -62,9 +64,13 @@ setTimeout(() => process.stdout.write('open in another app\\r\\n' + details + '\
   const cookie = await getUiCookie(server.baseUrl)
   const workspace = server.store.createWorkspace(directory, 'Recovery')
   const worker = server.store.addWorker(workspace.id, { name: 'Recovery worker', role: 'coder' })
+  const bin = join(directory, 'bin')
+  if (codex) mkdirSync(bin)
   server.store.configureAgentLaunch(workspace.id, worker.id, {
-    command: process.execPath,
-    args: [script],
+    command: codex
+      ? writeCodexCli(bin, `await import(${JSON.stringify(pathToFileURL(script).href)})`)
+      : process.execPath,
+    args: codex ? [] : [script],
     commandPresetId: codex ? 'codex' : null,
     presetAugmentationDisabled: true,
     ...(codex
@@ -79,7 +85,11 @@ setTimeout(() => process.stdout.write('open in another app\\r\\n' + details + '\
   const run = await server.store.startAgent(workspace.id, worker.id, {
     hivePort: new URL(server.baseUrl).port,
   })
-  await expect.poll(() => server.store.getLiveRun(run.runId).output).toContain('ctrl+t transcript')
+  // ConPTY negotiates terminal capabilities before the native ownership screen
+  // appears. Keep startup separate from the recovery and retry deadlines below.
+  await expect
+    .poll(() => server.store.getLiveRun(run.runId).output, { timeout: 10_000 })
+    .toContain('ctrl+t transcript')
   if (codex) {
     await expect
       .poll(() => server.store.listTerminalRuns(workspace.id)[0]?.thread_id)

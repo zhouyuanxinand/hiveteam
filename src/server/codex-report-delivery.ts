@@ -1,7 +1,14 @@
 import type { AgentManager } from './agent-manager.js'
 import type { AgentSessionStorePort } from './agent-runtime-ports.js'
 import {
-  assertReportSession,
+  codexMessageHash,
+  codexReceiptHash,
+  completeCodexEncodedPasteVisible,
+  encodeCodexMessage,
+} from './codex-message-wire.js'
+import { completeCodexPasteVisible } from './codex-prompt-submission.js'
+import { resolveCodexReceiptSession } from './codex-receipt-session.js'
+import {
   createReportJournalReader,
   findReportSession,
   reportJournalOffset,
@@ -44,6 +51,8 @@ export const deliverCodexReport = async ({
   receipt,
   sessions,
   waitMs,
+  onPrepared,
+  allowUnboundSession = false,
 }: {
   agentManager: AgentManager
   agentId: string
@@ -53,17 +62,31 @@ export const deliverCodexReport = async ({
   receipt: ReportDeliveryReceipt
   sessions: AgentSessionStorePort
   waitMs?: number
+  onPrepared?: (payload: string) => void
+  allowUnboundSession?: boolean
 }) => {
   const marker = reportReceiptMarker(receipt.id)
+  const payload = `${text.trimEnd()}\n\n${marker}\n`.replace(/\r\n?/gu, '\n')
   let checkpoint = receipt.checkpoint
+  if (checkpoint?.wireFormat === 'native-initial-v1')
+    throw new Error(
+      'This message was passed to Codex at launch; only its native receipt can confirm it. It will not be pasted again.'
+    )
+  const encoded = checkpoint
+    ? codexReceiptHash(checkpoint) !== undefined
+    : process.platform === 'win32'
+  const wire = encoded ? encodeCodexMessage(payload) : payload
+  const wireHash = encoded ? codexMessageHash(wire) : undefined
+  if (checkpoint && encoded && codexReceiptHash(checkpoint) !== wireHash)
+    throw new Error(
+      'Codex delivery payload changed after its checkpoint; the existing draft was preserved.'
+    )
   const save = (next: ReportDeliveryCheckpoint) => {
     receipt.save(next)
     checkpoint = next
   }
-  if (checkpoint) assertReportSession(checkpoint.sessionFile, checkpoint.sessionId, checkpoint.cwd)
-  let readReceipt = checkpoint
-    ? createReportJournalReader(checkpoint.sessionFile, checkpoint.offset, marker)
-    : undefined
+  let readReceipt: ReturnType<typeof createReportJournalReader> | undefined
+  let flushedAt: number | null = null
   let size = agentManager.getTerminalSize(runId)
   const mirror = new TerminalStateMirror(size)
   mirror.write(agentManager.getRun(runId).output)
@@ -71,6 +94,23 @@ export const deliverCodexReport = async ({
   const deadline = Date.now() + (waitMs ?? WAIT_MS)
   try {
     while (Date.now() < deadline) {
+      if (checkpoint && !readReceipt) {
+        const bound = resolveCodexReceiptSession(
+          checkpoint,
+          sessions.getLastSessionId(workspaceId, agentId),
+          workspaceId,
+          agentId
+        )
+        if (bound) {
+          if (checkpoint.sessionId !== bound.sessionId) save(bound)
+          readReceipt = createReportJournalReader(
+            bound.sessionFile,
+            bound.offset,
+            marker,
+            codexReceiptHash(bound)
+          )
+        }
+      }
       const nextSize = agentManager.getTerminalSize(runId)
       if (size.cols !== nextSize.cols || size.rows !== nextSize.rows) {
         mirror.resize(nextSize.cols, nextSize.rows)
@@ -85,11 +125,11 @@ export const deliverCodexReport = async ({
       const run = agentManager.getRun(runId)
       if (run.status !== 'starting' && run.status !== 'running')
         throw new Error(
-          'Orchestrator stopped before Codex confirmed the report. The report remains queued.'
+          'The recipient stopped before Codex confirmed the message. The message remains queued.'
         )
       if (checkpoint && checkpoint.runId !== runId)
         throw new Error(
-          'The previous terminal ended with an unconfirmed report. Review its session before resending; Hive has retained the report without duplicating it.'
+          'The previous terminal ended with an unconfirmed message. Review its session before resending; Hive has retained the message without duplicating it.'
         )
       const screen = await mirror.getScreenText()
       if (
@@ -98,7 +138,7 @@ export const deliverCodexReport = async ({
         )
       )
         throw new Error(
-          'Codex is showing a confirmation or session-lock dialog. Resolve it in the Orchestrator; Hive will not automatically confirm it. The report remains queued.'
+          'Codex is showing a confirmation or session-lock dialog. Resolve it in the recipient terminal; Hive will not automatically confirm it. The message remains queued.'
         )
       const input = composer(screen)
       if (!checkpoint) {
@@ -107,10 +147,13 @@ export const deliverCodexReport = async ({
         if (
           emptyComposer(input.line) &&
           context?.capture.source === 'codex_session_jsonl_dir' &&
-          sessionId
+          (sessionId || allowUnboundSession)
         ) {
-          const sessionFile = findReportSession(context.capture.pattern, sessionId, context.cwd)
-          const offset = reportJournalOffset(sessionFile)
+          const sessionFile = sessionId
+            ? findReportSession(context.capture.pattern, sessionId, context.cwd)
+            : null
+          const offset = sessionFile ? reportJournalOffset(sessionFile) : 0
+          onPrepared?.(wire)
           save({
             cwd: context.cwd,
             inputSequence: agentManager.getInputSequence(runId) + 1,
@@ -119,26 +162,44 @@ export const deliverCodexReport = async ({
             pasteConfirmed: false,
             runId,
             sessionFile,
-            sessionId,
+            sessionId: sessionId ?? null,
+            ...(!sessionId ? { capturePattern: context.capture.pattern } : {}),
+            ...(wireHash ? { wireFormat: 'json-string-v1' as const, wireSha256: wireHash } : {}),
             submitAttempts: 0,
           })
-          readReceipt = createReportJournalReader(sessionFile, offset, marker)
-          agentManager.writeInput(
-            runId,
-            toBracketedPasteSubmission(`${text.trimEnd()}\n\n${marker}\n`)
-          )
+          if (sessionFile)
+            readReceipt = createReportJournalReader(sessionFile, offset, marker, wireHash)
+          agentManager.writeInput(runId, toBracketedPasteSubmission(wire))
         }
       } else {
         if (agentManager.getInputSequence(runId) !== checkpoint.inputSequence)
           throw new Error(
-            'Other input reached the Orchestrator while a report was pending. Review its composer; Hive will not overwrite or submit your draft. The report remains queued.'
+            'Other input reached the recipient while a message was pending. Review its composer; Hive will not overwrite or submit your draft. The message remains queued.'
           )
-        if (pastedComposer(input, marker)) {
+        if (
+          encoded
+            ? completeCodexEncodedPasteVisible(input.content, wire)
+            : checkpoint.capturePattern
+              ? completeCodexPasteVisible(input.content, payload)
+              : pastedComposer(input, marker)
+        ) {
           if (!checkpoint.pasteConfirmed) save({ ...checkpoint, pasteConfirmed: true })
           if (
             checkpoint.submitAttempts < MAX_SUBMITS &&
             Date.now() - checkpoint.lastSubmitAt >= SUBMIT_INTERVAL_MS
           ) {
+            if ((encoded || checkpoint.capturePattern) && process.platform === 'win32') {
+              if (flushedAt === null) {
+                save({ ...checkpoint, inputSequence: checkpoint.inputSequence + 1 })
+                agentManager.writeInput(runId, '\u001b[C')
+                flushedAt = Date.now()
+                continue
+              }
+              if (Date.now() - flushedAt < 100) {
+                await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+                continue
+              }
+            }
             save({
               ...checkpoint,
               inputSequence: checkpoint.inputSequence + 1,
@@ -146,6 +207,7 @@ export const deliverCodexReport = async ({
               submitAttempts: checkpoint.submitAttempts + 1,
             })
             agentManager.writeInput(runId, '\r')
+            flushedAt = null
           }
         }
       }
@@ -153,8 +215,8 @@ export const deliverCodexReport = async ({
     }
     throw new Error(
       checkpoint
-        ? 'Codex has not confirmed receipt of the report. Open the Orchestrator and check its pasted message or blocking dialog; the report remains queued and will not be pasted twice.'
-        : 'Waiting for the bound Codex session and an empty composer. Finish any current input or dialog; the report remains queued.'
+        ? 'Codex has not confirmed receipt of the message. Open the recipient terminal and check its pasted message or blocking dialog; the message remains queued and will not be pasted twice.'
+        : 'Waiting for the bound Codex session and an empty composer. Finish any current input or dialog; the message remains queued.'
     )
   } finally {
     unsubscribe()

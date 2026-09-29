@@ -6,9 +6,12 @@ import {
   observeTerminalPermissions,
   terminalGrant,
 } from './remote-terminal-authorization.js'
+import { getRequestPrincipal } from './request-principal.js'
 
 import type { RuntimeStore } from './runtime-store.js'
+import { createTerminalColorReplies } from './terminal-color-replies.js'
 import { createTerminalOutputFlow, FLOW_CONTROL } from './terminal-flow-control.js'
+import { createTerminalGrillRouter } from './terminal-grill-router.js'
 import {
   parseTerminalControlMessage,
   serializeTerminalError,
@@ -39,6 +42,8 @@ interface RunState {
   outputUnsubscribe: (() => void) | null
   viewers: Map<string, ViewerState>
   recovery: ReturnType<typeof createTerminalSessionRecovery> | null
+  grill: ReturnType<typeof createTerminalGrillRouter> | null
+  colors: ReturnType<typeof createTerminalColorReplies>
   ptyPaused: boolean
 }
 
@@ -76,7 +81,8 @@ export interface TerminalStreamHub {
     clientId: string,
     socket: WebSocket,
     initialSize?: TerminalMirrorSize,
-    coordinated?: boolean
+    coordinated?: boolean,
+    hivePort?: string
   ) => void
   close: () => void
 }
@@ -108,6 +114,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     state.outputUnsubscribe?.()
     state.exitUnsubscribe?.()
     state.recovery?.close()
+    state.grill?.close()
     state.mirror.dispose()
     runStates.delete(runId)
   }
@@ -181,12 +188,30 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         outputUnsubscribe: null,
         viewers: new Map(),
         recovery: null,
+        grill: null,
+        colors: createTerminalColorReplies(store, runId),
         ptyPaused: false,
       }
       runStates.set(runId, state)
       const liveRun = store.getLiveRun(runId)
       if (liveRun.output.length > 0) state.mirror.write(liveRun.output)
       const nextState = state
+      nextState.grill = createTerminalGrillRouter({
+        store,
+        runId,
+        mirror: nextState.mirror,
+        broadcast(message) {
+          for (const viewer of nextState.viewers.values()) {
+            const socket = viewer.controlSocket
+            if (
+              socket &&
+              socket.readyState === socket.OPEN &&
+              checkTerminalRead(store, runId, socket)
+            )
+              socket.send(JSON.stringify(message))
+          }
+        },
+      })
       nextState.recovery = createTerminalSessionRecovery({
         store,
         runId,
@@ -204,6 +229,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         },
       })
       nextState.outputUnsubscribe = store.getPtyOutputBus().subscribe(runId, (chunk) => {
+        nextState.colors?.observeOutput(chunk)
         nextState.mirror.write(chunk)
         nextState.recovery?.observe()
         for (const viewer of nextState.viewers.values()) {
@@ -266,6 +292,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
     }
     state.exited = true
     state.recovery?.close()
+    state.grill?.close()
     state.exitCode = exitCode
     state.outputUnsubscribe?.()
     state.outputUnsubscribe = null
@@ -296,6 +323,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       const viewer = getOrCreateViewer(state, clientId)
       viewer.coordinated ||= coordinated
       viewer.controlSocket = socket
+      if (state.grill?.current) socket.send(JSON.stringify(state.grill.current))
       checkBootstrap(runId, state, viewer)
       observeTerminalPermissions(store, runId, socket, true)
       // A viewer attaching after the exit event still needs the terminal state.
@@ -369,7 +397,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         cleanupViewer(runId, state, clientId)
       })
     },
-    attachIo(runId, clientId, socket, initialSize, coordinated = false) {
+    attachIo(runId, clientId, socket, initialSize, coordinated = false, hivePort = '') {
       const state = getOrCreateState(runId, initialSize)
       const previous = state.viewers.get(clientId)
       if (previous?.ioSocket)
@@ -400,15 +428,33 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
       socket.on('message', (raw, isBinary) => {
         if (viewer.ioSocket !== socket || state.viewers.get(clientId) !== viewer) return
         try {
-          const input = normalizeTerminalInput(raw, isBinary)
-          executeTerminalAction(
-            store,
-            runId,
-            socket,
-            'terminal_input',
-            () => store.writeRunInput(runId, input),
-            Buffer.byteLength(input)
-          )
+          const received = normalizeTerminalInput(raw, isBinary)
+          terminalGrant(store, runId, socket, 'terminal_input', Buffer.byteLength(received))
+          const input = state.colors?.filter(received) ?? received
+          if (input.length === 0) return
+          state.grill?.accept(input, {
+            hivePort,
+            isCurrent: () =>
+              viewer.ioSocket === socket &&
+              state.viewers.get(clientId) === viewer &&
+              socket.readyState === socket.OPEN,
+            write: (data) =>
+              executeTerminalAction(
+                store,
+                runId,
+                socket,
+                'terminal_input',
+                () => store.writeRunInput(runId, data),
+                Buffer.byteLength(data)
+              ),
+            assertHandoff() {
+              if (getRequestPrincipal(socket)?.kind === 'remote_device')
+                throw new RemotePermissionError(
+                  'remote_action_forbidden',
+                  'Start an interview from the local HiveTeam window. Terminal input permission does not authorize automatic member creation.'
+                )
+            },
+          })
         } catch (error) {
           // A terminal can exit between the browser's keystroke and this
           // message handler. Report the stale input to that socket instead of
@@ -435,6 +481,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         state.outputUnsubscribe?.()
         state.exitUnsubscribe?.()
         state.recovery?.close()
+        state.grill?.close()
         state.mirror.dispose()
         for (const viewer of state.viewers.values()) {
           if (viewer.bootstrapTimer) clearTimeout(viewer.bootstrapTimer)

@@ -1,11 +1,9 @@
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-
 import { createAgentManager } from '../../src/server/agent-manager.js'
+import Database from '../../src/server/sqlite.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { normalizePtyText } from '../helpers/platform-cli.js'
 
@@ -195,6 +193,10 @@ describe('runtime rehydration', () => {
     const secondStore = createRuntimeStore({ agentManager: manager, dataDir })
     stores.push(secondStore)
     const firstRun = await secondStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    await vi.waitFor(
+      () => expect(secondStore.getLiveRun(firstRun.runId).output).toContain('ARGS:'),
+      { timeout: 10_000 }
+    )
     await vi.waitFor(() => {
       const output = normalizePtyText(secondStore.getLiveRun(firstRun.runId).output)
       expect(output).toContain('ARGS:["--dangerously-skip-permissions"]')
@@ -228,6 +230,10 @@ describe('runtime rehydration', () => {
     const thirdStore = createRuntimeStore({ agentManager: manager, dataDir })
     stores.push(thirdStore)
     const secondRun = await thirdStore.startAgent(workspace.id, worker.id, { hivePort: '4010' })
+    await vi.waitFor(
+      () => expect(thirdStore.getLiveRun(secondRun.runId).output).toContain('ARGS:'),
+      { timeout: 10_000 }
+    )
     await vi.waitFor(() => {
       const output = normalizePtyText(thirdStore.getLiveRun(secondRun.runId).output)
       expect(output).toContain(

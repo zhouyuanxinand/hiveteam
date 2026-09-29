@@ -1,9 +1,8 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
@@ -285,7 +284,7 @@ describe('Layer B fallback integration', () => {
       )
       expect(inputResponse.status).toBe(202)
       await waitForPtyOutputFlush()
-      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.status).toBe('exited')
@@ -308,8 +307,8 @@ describe('Layer B fallback integration', () => {
         expect(state.output).toContain('team send "<worker-name>" "<task>"')
         expect(state.output).toContain('不要使用你所在 CLI 的内置 subagent / 子代理工具')
       })
-      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\n')
-      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\r')
+      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         expect((await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)).status).toBe('exited')
         expect((await getRunViaHttp(server.baseUrl, cookie, bobRun.runId)).status).toBe('exited')
@@ -377,7 +376,7 @@ describe('Layer B fallback integration', () => {
         expect.objectContaining({ type: 'user_input', text: '请继续修复 restart bug' })
       )
       await waitForPtyOutputFlush()
-      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.status).toBe('exited')
@@ -405,8 +404,8 @@ describe('Layer B fallback integration', () => {
       expect(recoverySummaries.at(-1)?.text).toContain('请继续修复 restart bug')
       expect(recoverySummaries.at(-1)?.text).toContain('layer b fallback')
       expect(recoverySummaries.at(-1)?.text).toContain('Bob')
-      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\n')
-      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\r')
+      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         expect((await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)).status).toBe('exited')
         expect((await getRunViaHttp(server.baseUrl, cookie, bobRun.runId)).status).toBe('exited')
@@ -461,7 +460,7 @@ describe('Layer B fallback integration', () => {
         expect(state.output).toContain('ARGS:')
       })
       await waitForPtyOutputFlush()
-      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.status).toBe('exited')
@@ -480,7 +479,7 @@ describe('Layer B fallback integration', () => {
         expect(state.output).toContain('Bob')
         expect(state.output).toContain('审查 Phase 3 SSE schema 缺口')
       })
-      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(secondRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(state.status).toBe('exited')
@@ -488,8 +487,9 @@ describe('Layer B fallback integration', () => {
     } finally {
       await server.close()
     }
-  }, 10_000)
+  })
 
+  // Native startup, capture, drain and a second startup share the runtime test budget.
   test('failed native resume keeps its binding instead of substituting a Layer B summary', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-layer-b-failure-home-'))
     const workspacePathRaw = join(homeDir, 'workspace')
@@ -534,12 +534,14 @@ describe('Layer B fallback integration', () => {
       })
 
       const firstRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, alice.id)
-      await waitFor(() => {
-        expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBe(sessionId)
-      })
+      // Native negotiation precedes CLI output and the session-capture timer.
+      // Keep the original capture budget after the fixture is actually ready.
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.output).toContain('ARGS:')
+      }, 10_000)
+      await waitFor(() => {
+        expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBe(sessionId)
       })
       const inputResponse = await fetch(
         `${server.baseUrl}/api/workspaces/${workspace.id}/user-input`,
@@ -550,7 +552,7 @@ describe('Layer B fallback integration', () => {
         }
       )
       expect(inputResponse.status).toBe(202)
-      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(firstRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
         expect(state.status).toBe('exited')
@@ -585,7 +587,7 @@ describe('Layer B fallback integration', () => {
           text: '恢复后检查 Layer B 摘要',
         })
       )
-      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\n')
+      server.store.writeRunInput(bobRun.runId, '__HIVE_TEST_EXIT__\r')
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, bobRun.runId)
         expect(state.status).toBe('exited')
@@ -593,5 +595,5 @@ describe('Layer B fallback integration', () => {
     } finally {
       await server.close()
     }
-  }, 10_000)
+  })
 })

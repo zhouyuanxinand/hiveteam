@@ -9,6 +9,7 @@ import { FsSelectionPreview } from './FsSelectionPreview.js'
 import { buildBreadcrumbs } from './path-breadcrumbs.js'
 import { useFsBrowser } from './useFsBrowser.js'
 import { WorkspaceCommandPresetSelect } from './WorkspaceCommandPresetSelect.js'
+import { WorkspaceInitializationSelect } from './WorkspaceInitializationSelect.js'
 import type { WorkspaceCreateInput } from './workspace-create-input.js'
 
 type ServerBrowseDialogProps = {
@@ -41,6 +42,7 @@ export const ServerBrowseDialog = ({
 }: ServerBrowseDialogProps) => {
   const { t, language } = useI18n()
   const { browse, loading, navigate, probe, selectEntry, selected } = useFsBrowser(open)
+  const [initializationMode, setInitializationMode] = useState<'basic' | 'packs'>('packs')
   const [name, setName] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const [manualPath, setManualPath] = useState('')
@@ -49,6 +51,7 @@ export const ServerBrowseDialog = ({
 
   useEffect(() => {
     if (!open) {
+      setInitializationMode('packs')
       setName('')
       setAdvanced(false)
       setManualPath('')
@@ -83,7 +86,7 @@ export const ServerBrowseDialog = ({
     const path = advanced && manualPath.trim().length > 0 ? manualPath.trim() : (probe?.path ?? '')
     if (!path) return
     onCreate({
-      initializationMode: 'basic',
+      initializationMode,
       autostartOrchestrator: false,
       commandPresetId: commandPresetId || null,
       name: name.trim(),
@@ -202,7 +205,7 @@ export const ServerBrowseDialog = ({
                   />
                 </div>
                 <div
-                  className="flex w-[280px] shrink-0 flex-col gap-3 border-l p-4"
+                  className="flex w-[280px] shrink-0 flex-col gap-3 overflow-y-auto border-l p-4"
                   style={{ borderColor: 'var(--border)' }}
                 >
                   <FsSelectionPreview
@@ -217,6 +220,10 @@ export const ServerBrowseDialog = ({
                     presets={commandPresets}
                     startupCommand={startupCommand}
                     value={commandPresetId}
+                  />
+                  <WorkspaceInitializationSelect
+                    value={initializationMode}
+                    onChange={setInitializationMode}
                   />
                   <button
                     type="button"
@@ -280,8 +287,8 @@ export const ServerBrowseDialog = ({
             >
               <span className="mr-auto text-xs text-ter">
                 {language === 'zh'
-                  ? '创建基础工作区，稍后手动启动成员。'
-                  : 'Create a basic workspace. Start agents when ready.'}
+                  ? '创建后可检查 CLI，再手动启动成员。'
+                  : 'Check the CLI after creation and start agents when ready.'}
               </span>
               {creating ? (
                 <span role="status" className="mr-auto text-xs text-ter">

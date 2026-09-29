@@ -1,6 +1,33 @@
 import '@testing-library/jest-dom/vitest'
 
-import { afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { delimiter, dirname, join, resolve } from 'node:path'
+import { afterAll, afterEach, beforeEach, vi } from 'vitest'
+
+const testDataParent = resolve(tmpdir())
+const testDataRoot = mkdtempSync(join(testDataParent, 'hive-test-data-'))
+// Temporary workspaces without their own repository must never discover a
+// developer's ancestor repository when runtime snapshotting invokes Git.
+process.env.GIT_CEILING_DIRECTORIES = [testDataParent, process.env.GIT_CEILING_DIRECTORIES]
+  .filter(Boolean)
+  .join(delimiter)
+// Setup runs before test modules, including CLI modules that resolve runtime
+// data during import. A test that clears this variable must not expose the next
+// test to the user's normal runtime directory.
+process.env.HIVE_DATA_DIR = testDataRoot
+beforeEach(() => {
+  process.env.HIVE_DATA_DIR = mkdtempSync(join(testDataRoot, 'case-'))
+})
+afterAll(() => {
+  // The runner removes its entire root after the Vitest child closes. Direct
+  // Vitest invocations still get isolated data and own just this suite directory.
+  if (process.env.HIVE_TEST_RUN_ROOT) return
+  if (dirname(resolve(testDataRoot)) !== testDataParent) {
+    throw new Error('Unexpected test data directory')
+  }
+  rmSync(testDataRoot, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 })
+})
 
 // Model the trusted launcher in tests; no server auth path is mocked or weakened.
 vi.mock('../../src/server/app.js', async (importOriginal) => {
@@ -23,13 +50,6 @@ vi.mock('../../src/server/default-workspace-skill-pack.js', async (importOrigina
   ...(await importOriginal<typeof import('../../src/server/default-workspace-skill-pack.js')>()),
   prepareDefaultWorkspaceSkillPacks: async () => async () => {},
 }))
-
-// node-pty's ConPTY cleanup helper calls AttachConsole from a forked process.
-// Vitest is not attached to a Windows console, so use winpty for real-PTY
-// integration tests; production launches retain ConPTY by default.
-if (process.platform === 'win32' && process.env.HIVE_TEST_PTY_BACKEND === undefined) {
-  process.env.HIVE_TEST_PTY_BACKEND = 'winpty'
-}
 
 // Node 25 ships an experimental localStorage that overrides jsdom's implementation
 // but lacks standard methods (setItem, getItem, clear, removeItem). Polyfill when needed.

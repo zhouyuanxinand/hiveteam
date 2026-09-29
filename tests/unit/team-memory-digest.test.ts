@@ -1,9 +1,9 @@
-import type { Database as SqliteDatabase } from 'better-sqlite3'
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 import { buildAgentStartupInstructions } from '../../src/server/agent-startup-instructions.js'
 import { buildWorkerDispatchPayload } from '../../src/server/agent-stdin-dispatcher.js'
 import { createSettingsStore } from '../../src/server/settings-store.js'
+import type { Database as SqliteDatabase } from '../../src/server/sqlite.js'
+import Database from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import {
   createTeamMemoryDigestProvider,

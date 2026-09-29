@@ -54,10 +54,19 @@ export const teamRoutes: RouteDefinition[] = [
       workspaceId: projectId,
     })
     requireCommandForRole(agent, 'send')
+    if (
+      body.message_protocol_version !== undefined &&
+      body.message_protocol_version !== 0 &&
+      body.message_protocol_version !== 1
+    )
+      throw new BadRequestError('message_protocol_version must be 0 or 1')
     let dispatch: Awaited<ReturnType<typeof store.dispatchTaskByWorkerName>>
     try {
       dispatch = await store.dispatchTaskByWorkerName(projectId, to, text, {
         fromAgentId,
+        ...(body.message_protocol_version === undefined
+          ? {}
+          : { messageProtocolVersion: body.message_protocol_version }),
         hivePort: String(request.socket.localPort ?? ''),
         ...(skillName ? { skillName } : {}),
         ...(body.timeouts === undefined
@@ -75,6 +84,7 @@ export const teamRoutes: RouteDefinition[] = [
     const activation = store.skills.getDispatchActivation(dispatch.id)
     sendJson(response, 202, {
       dispatch_id: dispatch.id,
+      ...(dispatch.messageProtocolVersion === 1 ? { message_protocol_version: 1 } : {}),
       status: dispatch.status,
       ...(dispatch.status === 'queued'
         ? {
@@ -234,10 +244,18 @@ export const teamRoutes: RouteDefinition[] = [
       workspaceId: projectId,
     })
     requireCommandForRole(agent, 'report')
+    if (
+      body.seen_seq !== undefined &&
+      (typeof body.seen_seq !== 'number' ||
+        !Number.isSafeInteger(body.seen_seq) ||
+        body.seen_seq < 0)
+    )
+      throw new BadRequestError('seen_seq must be a non-negative integer')
     if (body.outcome !== undefined && !isReportOutcome(body.outcome)) {
       throw new BadRequestError('outcome must be success, failed, blocked, or partial')
     }
     const reportInput = {
+      ...(typeof body.seen_seq === 'number' ? { seenSeq: body.seen_seq } : {}),
       ...(isReportOutcome(body.outcome) ? { outcome: body.outcome } : {}),
       artifacts: getArtifacts(body.artifacts),
       ...(typeof body.dispatch_id === 'string' ? { dispatchId: body.dispatch_id } : {}),

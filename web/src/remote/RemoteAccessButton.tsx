@@ -158,10 +158,14 @@ const AuditRows = ({ records, language }: { records: RemoteAuditRecord[]; langua
   </div>
 )
 
-export const RemoteAccessButton = () =>
-  isRemoteMode() ? <RemotePermissionStatus /> : <LocalRemoteAccessButton />
+export const RemoteAccessButton = ({ inlinePanel = false }: { inlinePanel?: boolean }) =>
+  isRemoteMode() ? (
+    <RemotePermissionStatus />
+  ) : (
+    <LocalRemoteAccessButton inlinePanel={inlinePanel} />
+  )
 
-const LocalRemoteAccessButton = () => {
+const LocalRemoteAccessButton = ({ inlinePanel }: { inlinePanel: boolean }) => {
   const { language, t } = useI18n()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<RemoteStatus | null>(null)
@@ -260,7 +264,7 @@ const LocalRemoteAccessButton = () => {
   const pairingCopy = ticket ? `${ticket.code}\n${ticket.qr}` : ''
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={inlinePanel ? 'relative w-full min-w-0' : 'relative'}>
       <Tooltip label={t('remote.status')}>
         <button
           ref={triggerRef}
@@ -268,13 +272,13 @@ const LocalRemoteAccessButton = () => {
           aria-expanded={open}
           aria-haspopup="dialog"
           aria-label={t('remote.status')}
-          className="flex h-7 cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium text-sec hover:bg-3 hover:text-pri focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
+          className={`flex ${inlinePanel ? 'icon-btn min-h-11' : 'h-7'} cursor-pointer items-center gap-1.5 rounded px-2 text-xs font-medium text-sec hover:bg-3 hover:text-pri focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]`}
           data-testid="topbar-remote"
           onClick={() => setOpen((value) => !value)}
         >
           <Globe2 size={14} aria-hidden />
           <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} aria-hidden />
-          <span>{label}</span>
+          <span>{inlinePanel ? t('remote.status') : label}</span>
         </button>
       </Tooltip>
 
@@ -282,7 +286,11 @@ const LocalRemoteAccessButton = () => {
         <div
           role="dialog"
           aria-label={t('remote.status')}
-          className="elev-2 absolute top-8 right-0 z-50 max-h-[calc(100vh-64px)] w-[460px] max-w-[calc(100vw-24px)] overflow-y-auto rounded border p-4"
+          className={
+            inlinePanel
+              ? 'mt-2 max-h-[calc(100vh-64px)] w-full overflow-y-auto rounded border p-4'
+              : 'elev-2 absolute top-8 right-0 z-50 max-h-[calc(100vh-64px)] w-[460px] max-w-[calc(100vw-24px)] overflow-y-auto rounded border p-4'
+          }
           style={{ background: 'var(--bg-elevated)', borderColor: 'var(--border-bright)' }}
           data-testid="remote-access-panel"
         >

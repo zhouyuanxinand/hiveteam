@@ -15,6 +15,7 @@ const startRuntime = (dataDir: string) => {
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
   })
+  if (!child.stdout || !child.stderr) throw new Error('Runtime output pipes were not created')
   let output = ''
   child.stdout.on('data', (chunk) => {
     output += chunk.toString()
@@ -35,9 +36,10 @@ const startRuntime = (dataDir: string) => {
     },
     async stop() {
       if (child.exitCode !== null || child.signalCode !== null) return
-      const exited = once(child, 'exit')
-      child.kill('SIGTERM')
-      await exited
+      const closed = once(child, 'close')
+      child.send({ type: 'hive:shutdown' })
+      const [code, signal] = await closed
+      expect({ code, signal }).toEqual({ code: 0, signal: null })
     },
   }
 }

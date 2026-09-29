@@ -6,6 +6,7 @@ type BlockView = {
   text: HTMLElement
   summary?: HTMLElement
   count?: HTMLElement
+  phase?: TerminalHistoryBlock['phase']
 }
 
 /** DOM text is deliberately used here: terminal output is untrusted, not HTML. */
@@ -34,12 +35,13 @@ export const createTerminalProcessHistory = (container: HTMLElement) => {
 
   const createView = (block: TerminalHistoryBlock): BlockView => {
     const text = document.createElement('pre')
-    if (block.kind !== 'tool') {
+    if (block.kind !== 'tool' && block.kind !== 'process') {
       text.className = `terminal-process-history__${block.kind}`
       return { element: text, text }
     }
     const element = document.createElement('details')
     element.className = 'terminal-process-history__call'
+    element.open = block.phase === 'running' || block.phase === 'interrupted'
     const summary = document.createElement('summary')
     const label = document.createElement('span')
     const count = document.createElement('span')
@@ -47,7 +49,7 @@ export const createTerminalProcessHistory = (container: HTMLElement) => {
     summary.append(label, count)
     text.className = 'terminal-process-history__output'
     element.append(summary, text)
-    return { element, text, summary: label, count }
+    return { element, text, summary: label, count, phase: block.phase }
   }
 
   return {
@@ -69,7 +71,19 @@ export const createTerminalProcessHistory = (container: HTMLElement) => {
         }
         remaining.delete(block.id)
         if (view.text.textContent !== block.text) view.text.textContent = block.text
-        if (view.summary) view.summary.textContent = labels.internalCall
+        if (view.summary) {
+          view.summary.textContent =
+            block.kind === 'process'
+              ? block.phase === 'running'
+                ? labels.running
+                : labels.process
+              : labels.internalCall
+          if (view.phase !== block.phase && view.element instanceof HTMLDetailsElement) {
+            if (block.phase === 'complete') view.element.open = false
+            if (block.phase === 'interrupted') view.element.open = true
+            view.phase = block.phase
+          }
+        }
         if (view.count)
           view.count.textContent = labels.lines.replace(
             '{count}',

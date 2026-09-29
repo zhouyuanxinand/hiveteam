@@ -21,7 +21,7 @@ const hiddenPath = (path: string) =>
     .some((part) => part.toLowerCase() === '.git' || isSensitiveExecutionName(part.toLowerCase()))
 
 /** A checkout and all its worktrees share this identity; replacing .git changes it. */
-const repositoryId = async (cwd: string) => {
+export const readCodeReviewRepositoryId = async (cwd: string) => {
   const common = await realpath(
     (await runGit(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim()
   )
@@ -51,8 +51,8 @@ export const readCodeReviewVersion = async (input: {
   if (!reason && source.repoRoot && target.repoRoot && source.headSha && baseSha) {
     try {
       const [sourceId, targetId] = await Promise.all([
-        repositoryId(source.repoRoot),
-        repositoryId(target.repoRoot),
+        readCodeReviewRepositoryId(source.repoRoot),
+        readCodeReviewRepositoryId(target.repoRoot),
       ])
       if (sourceId !== targetId)
         reason = 'The source checkout no longer belongs to the workspace repository.'

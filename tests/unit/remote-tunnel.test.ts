@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events'
-import BetterSqlite3 from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
 import { createRemoteAuditStore } from '../../src/server/remote-audit-store.js'
 import { createRemoteTunnel, relayDaemonUrl } from '../../src/server/remote-tunnel.js'
+import BetterSqlite3 from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 
 class FakeSocket extends EventEmitter {

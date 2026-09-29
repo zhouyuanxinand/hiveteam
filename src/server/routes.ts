@@ -9,8 +9,10 @@ import type {
   WorkerRole,
 } from './route-types.js'
 import { activityRoutes } from './routes-activity.js'
+import { activityAttentionRoutes } from './routes-activity-attention.js'
 import { agentConversationRoutes } from './routes-agent-conversation.js'
 import { codeReviewRoutes } from './routes-code-reviews.js'
+import { collaborationStatsRoutes } from './routes-collaboration-stats.js'
 import { dataRecoveryRoutes } from './routes-data-recovery.js'
 import { deliveryQueueRoutes } from './routes-delivery-queue.js'
 import { dispatchRoutes } from './routes-dispatches.js'
@@ -27,6 +29,7 @@ import { messageDeliveryRoutes } from './routes-message-delivery.js'
 import { nativeSessionRoutes } from './routes-native-sessions.js'
 import { onboardingRoutes } from './routes-onboarding.js'
 import { openWorkspaceRoutes } from './routes-open-workspace.js'
+import { platformRecoveryRoutes } from './routes-platform-recovery.js'
 import { pullRequestRoutes } from './routes-pull-requests.js'
 import { recoveryIndexRoutes } from './routes-recovery-index.js'
 import { remoteRoutes } from './routes-remote.js'
@@ -39,12 +42,17 @@ import { skillPackRoutes } from './routes-skill-packs.js'
 import { taskRoutes } from './routes-tasks.js'
 import { teamRoutes } from './routes-team.js'
 import { teamGoalRoutes } from './routes-team-goals.js'
+import { teamGrillRoutes } from './routes-team-grill.js'
+import { teamMemoryDreamRoutes } from './routes-team-memory-dream.js'
+import { teamMessageRoutes } from './routes-team-messages.js'
+import { teamReviewRoutes } from './routes-team-review.js'
 import { teamScenarioRoutes } from './routes-team-scenarios.js'
 import { teamTasksRoutes } from './routes-team-tasks.js'
 import { uiRoutes } from './routes-ui.js'
 import { verificationRoutes } from './routes-verifications.js'
 import { versionRoutes } from './routes-version.js'
 import { workerBranchRoutes } from './routes-worker-branches.js'
+import { workerLifecycleRoutes } from './routes-worker-lifecycle.js'
 import { workflowRoutes } from './routes-workflows.js'
 import { workspaceDeliveryRoutes } from './routes-workspace-delivery.js'
 import { workspaceMemoryRoutes } from './routes-workspace-memory.js'
@@ -53,6 +61,9 @@ import { workspaceRoutes } from './routes-workspaces.js'
 import { worktreeResourceRoutes } from './routes-worktree-resources.js'
 
 const routes: RouteDefinition[] = [
+  ...teamGrillRoutes,
+  ...workerLifecycleRoutes,
+  ...teamReviewRoutes,
   ...dataRecoveryRoutes,
   ...memoryContextRoutes,
   ...recoveryIndexRoutes,
@@ -62,8 +73,11 @@ const routes: RouteDefinition[] = [
   ...sessionAdapterRoutes,
   ...messageDeliveryRoutes,
   ...resourceRoutes,
+  ...platformRecoveryRoutes,
   ...executionPolicyRoutes,
   ...activityRoutes,
+  ...activityAttentionRoutes,
+  ...collaborationStatsRoutes,
   ...agentConversationRoutes,
   ...workspaceRoutes,
   ...workspaceReviewRoutes,
@@ -90,6 +104,8 @@ const routes: RouteDefinition[] = [
   ...remotePermissionRoutes,
   ...externalGoalRoutes,
   ...teamRoutes,
+  ...teamMessageRoutes,
+  ...teamMemoryDreamRoutes,
   ...teamTasksRoutes,
   ...teamGoalRoutes,
   ...teamScenarioRoutes,

@@ -10,10 +10,10 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test, vi } from 'vitest'
 import * as nativeProfiles from '../../src/server/native-backup-profile.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import Database from '../../src/server/sqlite.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -98,6 +98,11 @@ test('WAL backup exports a fresh sanitized database, validates attachments, and 
     )
   mkdirSync(join(f.dataDir, 'verification-logs'))
   writeFileSync(join(f.dataDir, 'verification-logs', `${verification}.log`), log)
+  const interruptedRun = randomUUID()
+  f.db
+    .prepare(`INSERT INTO workflow_runs(id,workspace_id,workflow_id,name,definition_json,steps_json,hive_port,status,error,created_at,started_at,updated_at)
+    VALUES(?,?,?,'Interrupted backup fixture','{"name":"Backup","steps":[]}','[]','','interrupted','Uncertain original delivery',?,?,?)`)
+    .run(interruptedRun, f.workspace.id, 'backup.json', Date.now(), Date.now(), Date.now())
   const output = join(f.root, 'backup')
   // Real concurrent source commits while SQLite's backup API owns snapshot consistency.
   const writing = setInterval(
@@ -150,6 +155,12 @@ test('WAL backup exports a fresh sanitized database, validates attachments, and 
     expect(
       db.prepare('SELECT receipt_id FROM report_outbox WHERE dispatch_id=?').get(dispatch.id)
     ).toEqual(receipt)
+    expect(
+      db.prepare('SELECT status,error FROM workflow_runs WHERE id=?').get(interruptedRun)
+    ).toEqual({
+      status: 'failed',
+      error: 'Restored: manual reconciliation required',
+    })
     expect(db.prepare('SELECT * FROM remote_devices').all()).toEqual([])
     expect(db.prepare('SELECT * FROM execution_unsafe_grants').all()).toEqual([])
     expect(db.prepare('SELECT * FROM agent_launch_configs').all()).toEqual([])
@@ -168,6 +179,8 @@ test('WAL backup exports a fresh sanitized database, validates attachments, and 
         .agents.every((agent) => agent.status === 'stopped')
     ).toBe(true)
     expect(runtime.listTerminalRuns(f.workspace.id)).toEqual([])
+    await runtime.workflows.refresh(f.workspace.id, interruptedRun)
+    expect(runtime.workflows.get(f.workspace.id, interruptedRun)?.status).toBe('failed')
   } finally {
     await runtime.close()
   }

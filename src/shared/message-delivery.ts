@@ -1,4 +1,4 @@
-export type DeliveryKind = 'dispatch' | 'report' | 'cancel'
+export type DeliveryKind = 'dispatch' | 'report' | 'cancel' | 'message'
 export type DeliveryState =
   | 'pending'
   | 'attempting'

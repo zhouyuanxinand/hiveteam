@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { DispatchPullRequest } from '../shared/pull-request.js'
+import type { Database } from './sqlite.js'
 
 type Row = Omit<DispatchPullRequest, 'snapshot'> & { snapshot: string | null }
 const select = `SELECT dispatch_id AS dispatchId, workspace_id AS workspaceId,

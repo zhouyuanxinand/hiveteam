@@ -182,9 +182,14 @@ describe('AddWorkerDialog marketplace integration', () => {
     expect(toast.textContent ?? '').toContain('Code Reviewer')
   })
 
-  test('importing an agent fills the AddWorker form with name + description and flips role to custom', async () => {
+  test.each([
+    null,
+    'My manual alias',
+  ])('importing an agent fills role details and preserves a manual name (%s)', async (manualName) => {
     const submitCapture = vi.fn<(snapshot: WorkerComposerSnapshot) => void>()
     render(<Harness onSubmitCapture={submitCapture} />)
+    if (manualName)
+      fireEvent.change(screen.getByPlaceholderText('e.g. Alice'), { target: { value: manualName } })
 
     fireEvent.click(screen.getByTestId('open-marketplace'))
     await waitFor(
@@ -204,7 +209,9 @@ describe('AddWorkerDialog marketplace integration', () => {
       expect(screen.queryByTestId('marketplace-content')).not.toBeInTheDocument()
     })
 
-    // The AddWorker form should now show the imported name + description and
+    expect(screen.getByPlaceholderText('e.g. Alice')).toHaveValue(manualName ?? 'Code Reviewer')
+
+    // The AddWorker form should now show its chosen name and imported description and
     // have flipped to the Custom role. We assert by submitting and inspecting
     // the composer snapshot, which captures the state visible on save.
     const submitButton = screen.getByTestId('add-worker-submit')
@@ -216,7 +223,7 @@ describe('AddWorkerDialog marketplace integration', () => {
     const firstCall = submitCapture.mock.calls[0]
     if (!firstCall) throw new Error('Expected the submitted worker composer snapshot')
     const [snapshot] = firstCall
-    expect(snapshot.workerName).toBe('Code Reviewer')
+    expect(snapshot.workerName).toBe(manualName ?? 'Code Reviewer')
     expect(snapshot.workerRole).toBe('custom')
     expect(snapshot.roleDescription).toContain('You review every PR.')
     expect(snapshot.roleDescription).toContain('Focus on correctness.')

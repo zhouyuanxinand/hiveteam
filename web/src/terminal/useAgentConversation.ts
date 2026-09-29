@@ -4,7 +4,12 @@ import { apiFetch } from '../api.js'
 
 const recent = new Map<string, AgentConversation>()
 
-export const useAgentConversation = (workspaceId: string, agentId: string, runId: string) => {
+export const useAgentConversation = (
+  workspaceId: string,
+  agentId: string,
+  runId: string,
+  enabled = true
+) => {
   const key = JSON.stringify([workspaceId, agentId, runId])
   const [state, setState] = useState<{
     key: string
@@ -14,6 +19,7 @@ export const useAgentConversation = (workspaceId: string, agentId: string, runId
   const [retry, setRetry] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit retry restarts polling for the same recipient.
   useEffect(() => {
+    if (!enabled) return
     let disposed = false
     let timer: ReturnType<typeof setTimeout>
     let controller: AbortController | undefined
@@ -29,7 +35,7 @@ export const useAgentConversation = (workspaceId: string, agentId: string, runId
       let supported = true
       try {
         const response = await apiFetch(
-          `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/conversation`,
+          `/api/ui/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/conversation?run_id=${encodeURIComponent(runId)}`,
           { signal: controller.signal }
         )
         if (!response.ok) throw new Error(`Conversation HTTP ${response.status}`)
@@ -53,7 +59,7 @@ export const useAgentConversation = (workspaceId: string, agentId: string, runId
       clearTimeout(timer)
       controller?.abort()
     }
-  }, [workspaceId, agentId, key, retry])
+  }, [workspaceId, agentId, key, runId, retry, enabled])
   return {
     ...(state.key === key ? state : { data: recent.get(key), failed: false }),
     retry: () => setRetry((value) => value + 1),

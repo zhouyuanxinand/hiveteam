@@ -14,6 +14,11 @@ import { getUiCookie } from '../helpers/ui-session.js'
 
 const tempDirs: string[] = []
 const restoreEnv: Array<[string, string | undefined]> = []
+const sockets: WebSocket[] = []
+
+const closeSockets = () => {
+  for (const socket of sockets.splice(0)) socket.terminate()
+}
 
 const waitFor = async (
   assertion: () => void | Promise<void>,
@@ -38,9 +43,27 @@ const waitFor = async (
 
 const toWsUrl = (baseUrl: string, suffix: string) => baseUrl.replace('http://', 'ws://') + suffix
 
-const openSocket = async (url: string, cookie: string) => {
+const waitForFixture = async (
+  server: Awaited<ReturnType<typeof startTestServer>>,
+  runId: string,
+  marker: string
+) => {
+  // A connected native PID can precede the CLI's console initialization.
+  // Keep the WebSocket assertions separate from this actual fixture readiness.
+  await waitFor(() => {
+    expect(server.store.getLiveRun(runId).output).toContain(marker)
+  }, 10000)
+}
+
+const openSocket = async (
+  url: string,
+  cookie: string,
+  onMessage?: (chunk: WebSocket.RawData) => void
+) => {
   return await new Promise<WebSocket>((resolve, reject) => {
     const socket = new WebSocket(url, { headers: { cookie } })
+    sockets.push(socket)
+    if (onMessage) socket.on('message', onMessage)
     socket.once('open', () => resolve(socket))
     socket.once('error', reject)
   })
@@ -123,6 +146,7 @@ const startAgent = async (
 }
 
 afterEach(() => {
+  closeSockets()
   vi.restoreAllMocks()
   while (restoreEnv.length > 0) {
     const [key, value] = restoreEnv.pop() ?? ['', undefined]
@@ -149,10 +173,9 @@ describe('terminal websocket server', () => {
       script,
       [
         'let count = 0',
-        'const interval = setInterval(() => {',
+        'setInterval(() => {',
         '  count += 1',
         "  console.log('ready:' + count)",
-        '  if (count >= 20) clearInterval(interval)',
         '}, 50)',
         'process.stdin.resume()',
       ].join('\n')
@@ -167,12 +190,13 @@ describe('terminal websocket server', () => {
         script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-      const io = await openSocket(toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`), cookie)
+      await waitForFixture(server, run.runId, 'ready:')
       const received: string[] = []
-
-      io.on('message', (chunk) => {
-        received.push(chunk.toString())
-      })
+      const io = await openSocket(
+        toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`),
+        cookie,
+        (chunk) => received.push(chunk.toString())
+      )
 
       await waitFor(() => {
         expect(received.join('')).toContain('ready:')
@@ -180,6 +204,7 @@ describe('terminal websocket server', () => {
 
       io.close()
     } finally {
+      closeSockets()
       await server.close()
     }
   }, 60000)
@@ -196,6 +221,7 @@ describe('terminal websocket server', () => {
         "process.stdin.on('data', (chunk) => {",
         "  process.stdout.write('IN:' + chunk)",
         '})',
+        "console.log('READY')",
       ].join('\n')
     )
 
@@ -208,13 +234,14 @@ describe('terminal websocket server', () => {
         script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-      const io = await openSocket(toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`), cookie)
+      await waitForFixture(server, run.runId, 'READY')
       const received: string[] = []
-
-      io.on('message', (chunk) => {
-        received.push(chunk.toString())
-      })
-      io.send('hello from terminal\n')
+      const io = await openSocket(
+        toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`),
+        cookie,
+        (chunk) => received.push(chunk.toString())
+      )
+      io.send('hello from terminal\r')
 
       await waitFor(() => {
         expect(received.join('')).toContain('IN:hello from terminal')
@@ -222,6 +249,7 @@ describe('terminal websocket server', () => {
 
       io.close()
     } finally {
+      closeSockets()
       await server.close()
     }
   }, 60000)
@@ -254,16 +282,13 @@ describe('terminal websocket server', () => {
           script,
         ])
         const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-        const io = await openSocket(toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`), cookie)
+        await waitForFixture(server, run.runId, 'READY')
         const received: string[] = []
-
-        io.on('message', (chunk) => {
-          received.push(chunk.toString())
-        })
-
-        await waitFor(() => {
-          expect(received.join('')).toContain('READY')
-        })
+        const io = await openSocket(
+          toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/io`),
+          cookie,
+          (chunk) => received.push(chunk.toString())
+        )
         io.send(Buffer.from([0x1b, 0x5b, 0x4d, 0xc8, 0x21, 0x21]))
 
         await waitFor(() => {
@@ -272,6 +297,7 @@ describe('terminal websocket server', () => {
 
         io.close()
       } finally {
+        closeSockets()
         await server.close()
       }
     },
@@ -284,6 +310,7 @@ describe('terminal websocket server', () => {
       const cookie = await getUiCookie(server.baseUrl)
       await expectUpgradeStatus(toWsUrl(server.baseUrl, '/ws/terminal/missing-run/io'), cookie, 404)
     } finally {
+      closeSockets()
       await server.close()
     }
   })
@@ -301,6 +328,7 @@ describe('terminal websocket server', () => {
         }
       )
     } finally {
+      closeSockets()
       await server.close()
     }
   })
@@ -318,6 +346,7 @@ describe('terminal websocket server', () => {
         }
       )
     } finally {
+      closeSockets()
       await server.close()
     }
   })
@@ -335,6 +364,7 @@ describe('terminal websocket server', () => {
         }
       )
     } finally {
+      closeSockets()
       await server.close()
     }
   })
@@ -379,17 +409,21 @@ describe('terminal websocket server', () => {
 
       control.close()
     } finally {
+      closeSockets()
       await store.close()
       await new Promise<void>((resolve) => app.server.close(() => resolve()))
     }
   })
 
-  test('control socket receives an exit event when the PTY exits', async () => {
+  test.each([
+    'before',
+    'after',
+  ] as const)('control socket receives an exit event when the PTY exits %s subscription', async (exitTiming) => {
     const workspacePath = join(tmpdir(), `hive-terminal-exit-${Date.now()}`)
     mkdirSync(workspacePath, { recursive: true })
     tempDirs.push(workspacePath)
     const script = join(workspacePath, 'exit.js')
-    writeFileSync(script, 'setTimeout(() => process.exit(0), 20)\n')
+    writeFileSync(script, "process.stdin.on('data', () => process.exit(0)); console.log('READY')\n")
 
     const server = await startTestServer()
     try {
@@ -400,15 +434,21 @@ describe('terminal websocket server', () => {
         script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
+      await waitForFixture(server, run.runId, 'READY')
+      if (exitTiming === 'before') {
+        server.store.writeRunInput(run.runId, 'EXIT\r')
+        await waitFor(() => {
+          expect(server.store.getLiveRun(run.runId).status).toBe('exited')
+        })
+      }
+      const messages: Array<{ code: number | null; type: string }> = []
       const control = await openSocket(
         toWsUrl(server.baseUrl, `/ws/terminal/${run.runId}/control`),
-        cookie
+        cookie,
+        (chunk) =>
+          messages.push(JSON.parse(chunk.toString()) as { code: number | null; type: string })
       )
-      const messages: Array<{ code: number | null; type: string }> = []
-
-      control.on('message', (chunk) => {
-        messages.push(JSON.parse(chunk.toString()) as { code: number | null; type: string })
-      })
+      if (exitTiming === 'after') server.store.writeRunInput(run.runId, 'EXIT\r')
 
       await waitFor(() => {
         expect(messages).toContainEqual({ type: 'exit', code: 0 })
@@ -416,6 +456,7 @@ describe('terminal websocket server', () => {
 
       control.close()
     } finally {
+      closeSockets()
       await server.close()
     }
   })
@@ -427,9 +468,10 @@ describe('terminal websocket server', () => {
     const fakeShell = writeNodeCli(
       workspacePath,
       'fake-shell',
-      ["process.stdout.write('shell ready\\n')", 'setTimeout(() => process.exit(0), 150)'].join(
-        '\n'
-      )
+      [
+        "process.stdin.on('data', () => process.exit(0))",
+        "process.stdout.write('shell ready\\n')",
+      ].join('\n')
     )
     setEnv('SHELL', fakeShell)
     if (process.platform === 'win32') setEnv('ComSpec', fakeShell)
@@ -444,15 +486,15 @@ describe('terminal websocket server', () => {
       )
       expect(startResponse.status).toBe(201)
       const shell = (await startResponse.json()) as { run_id: string }
+      await waitForFixture(server, shell.run_id, 'shell ready')
+      const messages: Array<{ code: number | null; type: string }> = []
       const control = await openSocket(
         toWsUrl(server.baseUrl, `/ws/terminal/${shell.run_id}/control`),
-        cookie
+        cookie,
+        (chunk) =>
+          messages.push(JSON.parse(chunk.toString()) as { code: number | null; type: string })
       )
-      const messages: Array<{ code: number | null; type: string }> = []
-
-      control.on('message', (chunk) => {
-        messages.push(JSON.parse(chunk.toString()) as { code: number | null; type: string })
-      })
+      server.store.writeRunInput(shell.run_id, 'EXIT\r')
 
       await waitFor(() => {
         expect(messages).toContainEqual({ type: 'exit', code: 0 })
@@ -460,6 +502,7 @@ describe('terminal websocket server', () => {
 
       control.close()
     } finally {
+      closeSockets()
       await server.close()
     }
   })

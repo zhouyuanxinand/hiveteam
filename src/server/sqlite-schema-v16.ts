@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion16 = (db: Database) => {
   const launchConfigColumns = new Set(

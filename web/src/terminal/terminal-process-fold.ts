@@ -1,4 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
+import type { AgentConversation } from '../../../src/shared/agent-conversation.js'
+import { conversationHistory } from './terminal-conversation-history.js'
 import { readTerminalProcessHistory } from './terminal-process-bounds.js'
 import { createTerminalProcessHistory } from './terminal-process-history.js'
 import { readTerminalAppearance } from './terminal-theme.js'
@@ -7,16 +9,25 @@ export interface TerminalProcessLabels {
   history: string
   internalCall: string
   lines: string
+  process: string
+  running: string
+  interrupted: string
+  truncated: string
 }
 
 /** Read-only disclosure over scrollback. The original xterm owns every input byte,
  * cursor, native confirmation and history record; its buffer is never rewritten.
  */
-export const createTerminalProcessFold = (terminal: Terminal, container: HTMLElement) => {
+export const createTerminalProcessFold = (
+  terminal: Terminal,
+  container: HTMLElement,
+  runId: string
+) => {
   const history = createTerminalProcessHistory(container)
   let labels: TerminalProcessLabels | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
+  let conversation: AgentConversation | undefined
 
   const revealNative = () => {
     history.hide()
@@ -27,7 +38,10 @@ export const createTerminalProcessFold = (terminal: Terminal, container: HTMLEle
     clearTimeout(timer)
     timer = undefined
     if (disposed) return
-    const snapshot = labels ? readTerminalProcessHistory(terminal.buffer.active) : null
+    const structured = labels ? conversationHistory(conversation, runId, labels) : undefined
+    const snapshot = labels
+      ? readTerminalProcessHistory(terminal.buffer.active, structured !== undefined)
+      : null
     const screen = terminal.element?.querySelector<HTMLElement>('.xterm-screen')
     if (
       !labels ||
@@ -51,7 +65,7 @@ export const createTerminalProcessFold = (terminal: Terminal, container: HTMLEle
       '--terminal-message-selection',
       appearance.theme.selectionBackground
     )
-    history.render(snapshot.blocks, labels)
+    history.render(structured ?? snapshot.blocks, labels)
     container.dataset.processCollapsed = 'true'
   }
   const schedule = () => {
@@ -61,6 +75,10 @@ export const createTerminalProcessFold = (terminal: Terminal, container: HTMLEle
   document.addEventListener('selectionchange', schedule)
 
   return {
+    setConversation(next: AgentConversation | undefined) {
+      conversation = next?.run_id === runId ? next : undefined
+      schedule()
+    },
     setLabels(next: TerminalProcessLabels | undefined) {
       labels = next
       if (!next) revealNative()

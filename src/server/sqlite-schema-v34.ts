@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Persists immutable evidence from read-only effective-Skill scans. */
 export const applySchemaVersion34 = (db: Database) => {

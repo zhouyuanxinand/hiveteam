@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
 import { runGit } from '../../src/server/git-command.js'
+import Database from '../../src/server/sqlite.js'
 import { commitReviewFixture, createCodeReviewFixture } from '../helpers/code-review-fixture.js'
 
 const required = <T>(value: T | null | undefined): T => {

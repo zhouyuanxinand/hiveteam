@@ -121,6 +121,36 @@ describe('new workspace default Skill Packs', () => {
     expect(available.map((skill) => skill.qualifiedName)).toEqual(
       expect.arrayContaining(['matt/tdd', 'code-janitor/code-janitor'])
     )
+
+    const orchestratorId = `${workspace.id}:orchestrator`
+    ctx.store.configureAgentLaunch(workspace.id, orchestratorId, {
+      command: process.execPath,
+      args: ['-e', 'process.stdin.resume()'],
+    })
+    const started = await fetch(
+      `${ctx.baseUrl}/api/workspaces/${workspace.id}/agents/${orchestratorId}/start`,
+      { method: 'POST', headers: { cookie: ctx.cookie } }
+    )
+    expect(started.status).toBe(201)
+    const token = ctx.store.peekAgentToken(orchestratorId)
+    if (!token) throw new Error('Expected active Orchestrator token')
+    // This is the authenticated endpoint used by team skill list. Verify
+    // visibility through the member protocol, beyond the local binding files.
+    const listed = await fetch(
+      `${ctx.baseUrl}/api/team/skills?project_id=${encodeURIComponent(workspace.id)}`,
+      { headers: { 'x-hive-agent-id': orchestratorId, 'x-hive-agent-token': token } }
+    )
+    expect(listed.status).toBe(200)
+    expect(await listed.json()).toMatchObject({
+      skills: expect.arrayContaining([
+        expect.objectContaining({ qualified_name: 'matt/to-goal', release_id: ctx.release.id }),
+        expect.objectContaining({ qualified_name: 'matt/grilling', release_id: ctx.release.id }),
+        expect.objectContaining({
+          qualified_name: 'code-janitor/code-janitor',
+          release_id: ctx.janitorRelease.id,
+        }),
+      ]),
+    })
   })
 
   test('new workspaces and a restarted runtime reuse the same locked release without downloading', async () => {

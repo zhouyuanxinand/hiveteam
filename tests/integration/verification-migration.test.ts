@@ -1,5 +1,5 @@
-import BetterSqlite3 from 'better-sqlite3'
 import { expect, test } from 'vitest'
+import BetterSqlite3 from '../../src/server/sqlite.js'
 import { applySchemaVersion39 } from '../../src/server/sqlite-schema-v39.js'
 import { applySchemaVersion40 } from '../../src/server/sqlite-schema-v40.js'
 import { applySchemaVersion41 } from '../../src/server/sqlite-schema-v41.js'

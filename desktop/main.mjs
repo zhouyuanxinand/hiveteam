@@ -93,6 +93,9 @@ const startWebMode = async () => {
     showError(getDesktopLaunchCopy(getLocale()).webServiceError, error)
     void stopAndQuit()
   })
+  webHost.onRecovered(() => {
+    if (!stopping) void openWebInterface()
+  })
   tray = createWebModeTray()
   await shell.openExternal(await webHost.createLaunchUrl())
 }

@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { WorkerWorktree } from '../shared/worker-worktree.js'
+import type { Database } from './sqlite.js'
 
 export const createWorkerWorktreeStore = (db: Database) => ({
   interruptPreparing() {
@@ -10,18 +10,23 @@ export const createWorkerWorktreeStore = (db: Database) => ({
     )
   },
   get(workspaceId: string, workerId: string): WorkerWorktree | undefined {
-    return db
+    const row = db
       .prepare(`SELECT worker_id AS workerId, workspace_id AS workspaceId,
       repo_root AS repoRoot, checkout_path AS checkoutPath, workspace_path AS workspacePath,
-      branch, target_branch AS targetBranch, base_sha AS baseSha, state, error
+      branch, target_branch AS targetBranch, base_sha AS baseSha, state, error, pinned_head_sha AS pinnedHeadSha
       FROM worker_worktrees WHERE workspace_id = ? AND worker_id = ?`)
-      .get(workspaceId, workerId) as WorkerWorktree | undefined
+      .get(workspaceId, workerId) as
+      | (Omit<WorkerWorktree, 'pinnedHeadSha'> & { pinnedHeadSha: string | null })
+      | undefined
+    if (!row) return undefined
+    const { pinnedHeadSha, ...tree } = row
+    return { ...tree, ...(pinnedHeadSha ? { pinnedHeadSha } : {}) }
   },
   insert(tree: WorkerWorktree) {
     db.transaction(() => {
       db.prepare(`INSERT INTO worker_worktrees
-      (worker_id, workspace_id, repo_root, checkout_path, workspace_path, branch, target_branch, base_sha, state, error)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      (worker_id, workspace_id, repo_root, checkout_path, workspace_path, branch, target_branch, base_sha, state, error, pinned_head_sha)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         tree.workerId,
         tree.workspaceId,
         tree.repoRoot,
@@ -31,7 +36,8 @@ export const createWorkerWorktreeStore = (db: Database) => ({
         tree.targetBranch,
         tree.baseSha,
         tree.state,
-        tree.error
+        tree.error,
+        tree.pinnedHeadSha ?? null
       )
       db.prepare(`INSERT INTO worktree_resources
       (worker_id, workspace_id, workspace_name, repo_root, checkout_path, workspace_path, branch, target_branch)

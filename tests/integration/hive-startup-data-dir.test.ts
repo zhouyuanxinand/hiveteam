@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import {
   copyFileSync,
@@ -14,7 +14,6 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { promisify } from 'node:util'
 
 import { afterEach, describe, expect, test } from 'vitest'
 
@@ -26,7 +25,6 @@ const cliUrl = new URL('../../src/cli/hive.ts', import.meta.url).href
 const launcherUrl = new URL('../../src/cli/ui-launcher.ts', import.meta.url).href
 const require = createRequire(import.meta.url)
 const tsxUrl = pathToFileURL(require.resolve('tsx')).href
-const execFileAsync = promisify(execFile)
 const cleanups: Array<() => Promise<void>> = []
 const tempRoots: string[] = []
 
@@ -59,6 +57,12 @@ const createFixture = (sourceCheckout = false) => {
   for (const path of [
     'scripts/dev-start.mjs',
     'scripts/ui-launcher.mjs',
+    'scripts/platform-console.mjs',
+    'scripts/platform-launch.mjs',
+    'scripts/platform-environment.mjs',
+    'scripts/platform-owner.mjs',
+    'scripts/platform-supervisor.mjs',
+    'scripts/managed-node.mjs',
     'desktop/app.mjs',
     'desktop/service-environment.mjs',
   ]) {
@@ -73,7 +77,8 @@ const createFixture = (sourceCheckout = false) => {
     `import { runHiveCommand } from ${JSON.stringify(cliUrl)};
 import { installUiLauncher } from ${JSON.stringify(launcherUrl)};
 const runtime = await runHiveCommand(process.argv.slice(2));
-installUiLauncher(runtime.store, runtime.port);`
+installUiLauncher(runtime.store, runtime.port);
+process.send?.({ type: 'hive:runtime-ready', port: runtime.port });`
   )
   if (sourceCheckout) {
     mkdirSync(join(installDir, 'node_modules'), { recursive: true })
@@ -178,13 +183,10 @@ const start = async (
   const stop = async () => {
     if (child.exitCode === null && child.signalCode === null) {
       if (mode === 'desktop' || mode === 'web') child.stdin?.end('close\n')
-      else if (process.platform === 'win32' && child.pid) {
-        await execFileAsync('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
-          windowsHide: true,
-        })
-      } else child.kill('SIGTERM')
+      else child.send({ type: 'hive:shutdown' })
     }
-    await closed
+    const [code, signal] = await closed
+    expect({ code, signal }).toEqual({ code: 0, signal: null })
   }
   cleanups.push(stop)
   const ready =

@@ -1,10 +1,8 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
-
 import { captureSessionIdWithCoordinator } from './claude-session-coordinator.js'
+import Database from './sqlite.js'
 
 const expandHome = (path: string) =>
   path === '~' || path.startsWith('~/') ? join(homedir(), path.slice(2)) : path

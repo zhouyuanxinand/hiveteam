@@ -19,7 +19,7 @@ const waitFor = async (assertion: () => void, timeoutMs = 1000, intervalMs = 10)
   throw lastError
 }
 
-vi.mock('node-pty', () => ({
+vi.mock('@lydell/node-pty', () => ({
   spawn: () => {
     const exitCodes = exitSequences.shift() ?? [0, 0]
     const exitHandlers: Array<(event: { exitCode: number | null }) => void> = []

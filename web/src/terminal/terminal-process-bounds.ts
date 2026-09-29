@@ -2,18 +2,19 @@ import type { IBuffer } from '@xterm/xterm'
 
 export interface TerminalHistoryBlock {
   id: string
-  kind: 'message' | 'prompt' | 'tool'
+  kind: 'message' | 'prompt' | 'tool' | 'process' | 'notice'
+  phase?: 'running' | 'complete' | 'interrupted'
   text: string
 }
 
-const prompt = /^\s?[›❯](?: |$)/u
+const prompt = /^\s?[›❯»](?: |$)/u
 const cell = /^\s?[•●·] /u
 const tool = /^\s?[•●·] (?:Ran|Running|Called|Calling|Explored)\b/u
 
 /** Project scrollback only when the cursor identifies a native CLI composer.
  * Approval screens, full-screen TUIs and ordinary shells keep their original view.
  */
-export const readTerminalProcessHistory = (buffer: IBuffer) => {
+export const readTerminalProcessHistory = (buffer: IBuffer, hasConversation = false) => {
   if (buffer.type !== 'normal' || buffer.viewportY !== buffer.baseY) return null
   let composerRow = buffer.baseY + buffer.cursorY
   while (composerRow > 0 && buffer.getLine(composerRow)?.isWrapped) composerRow--
@@ -41,6 +42,6 @@ export const readTerminalProcessHistory = (buffer: IBuffer) => {
     }
   }
   for (const block of blocks) block.text = block.text.trimEnd()
-  if (!blocks.some((block) => block.kind === 'tool')) return null
+  if (!hasConversation && !blocks.some((block) => block.kind === 'tool')) return null
   return { composerRow, blocks: blocks.filter((block) => block.text) }
 }

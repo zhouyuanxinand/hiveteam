@@ -2,6 +2,7 @@
 // server-side scenario launcher.
 export {
   type GenerateWorkerNameOptions,
+  generateRoleWorkerName,
   generateWorkerName,
   WORKER_NAME_POOL,
 } from '../../../src/shared/random-worker-name.js'

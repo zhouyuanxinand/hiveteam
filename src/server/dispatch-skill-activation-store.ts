@@ -1,7 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import { type ClarificationAssignment, isClarificationSkill } from '../shared/clarification.js'
-
 import type { DispatchSkillActivation, ResolvedSkillActivation } from '../shared/skill-packs.js'
+import type { Database } from './sqlite.js'
 
 interface ActivationRow {
   created_at: number

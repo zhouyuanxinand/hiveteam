@@ -11,6 +11,10 @@ import { createAgentRuntime } from './agent-runtime.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
 import { createAgentSessionStore } from './agent-session-store.js'
 import { createDispatchLedgerStore } from './dispatch-ledger-store.js'
+import {
+  createDispatchMessageRuntime,
+  type DispatchMessageRuntime,
+} from './dispatch-message-runtime.js'
 import { createDispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import {
   createExecutionPolicyRuntime,
@@ -20,6 +24,8 @@ import { createExternalGoalStore } from './external-goal-store.js'
 import { createGitTurnCoordinator, type GitTurnCoordinator } from './git-turn-coordinator.js'
 import { createGitWorkspaceService } from './git-workspace-service.js'
 import { ConflictError } from './http-errors.js'
+import { ExecutionCancelledError } from './managed-execution.js'
+import { createMemoryDreamGenerationStore } from './memory-dream-generation-store.js'
 import { createMessageLogStore } from './message-log-store.js'
 import { seedOrchestratorLaunchConfig } from './orchestrator-launch.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
@@ -77,6 +83,7 @@ import { createWorkspaceShellRuntime } from './workspace-shell-runtime.js'
 import { createWorkspaceStore } from './workspace-store.js'
 
 export interface RuntimeStoreServices {
+  dispatchMessages: DispatchMessageRuntime
   dispatchDelivery: TeamDeliveryRuntime
   resourceQueue: ResourceStartQueue
   resources: ResourceBudgetStore
@@ -96,6 +103,7 @@ export interface RuntimeStoreServices {
   messageLogStore: ReturnType<typeof createMessageLogStore>
   memoryStore: ReturnType<typeof createTeamMemoryStore>
   memoryDreamStore: ReturnType<typeof createTeamMemoryDreamStore>
+  memoryDreamGeneration: ReturnType<typeof createMemoryDreamGenerationStore>
   reportOutbox: ReturnType<typeof createReportOutboxStore>
   remoteAudit: RemoteAuditStore
   remoteConfig: RemoteConfigSource
@@ -192,6 +200,12 @@ const buildRuntimeStoreServices = (
   const skillSnapshotStore = createSkillSnapshotStore(db)
   const memoryStore = createTeamMemoryStore(db)
   const memoryDreamStore = createTeamMemoryDreamStore(db, memoryStore)
+  const memoryDreamGeneration = createMemoryDreamGenerationStore(
+    db,
+    memoryStore,
+    memoryDreamStore,
+    messageLogStore
+  )
   if (!settings.internalAppState.get(REMOTE_DAEMON_ID_KEY)?.value) {
     settings.internalAppState.set(REMOTE_DAEMON_ID_KEY, randomUUID())
   }
@@ -270,10 +284,12 @@ const buildRuntimeStoreServices = (
     getWorkspace: (workspaceId) => workspaceStore.getWorkspaceSnapshot(workspaceId).summary,
     getWorkspacePaths: () => workspaceStore.listWorkspaces().map((workspace) => workspace.path),
     getAgent: workspaceStore.getAgent,
+    getCommandPreset: settings.getCommandPreset,
     getConfig: (workspaceId, agentId) => agentRuntime.peekAgentLaunchConfig(workspaceId, agentId),
     getActiveRun: (workspaceId, agentId) =>
       agentRuntime.getActiveRunByAgentId(workspaceId, agentId),
   })
+  const memoryDigestProvider = createTeamMemoryDigestProvider(memoryStore, settings)
   const agentRuntime = createAgentRuntime(
     options.agentManager,
     agentRunStore,
@@ -288,12 +304,13 @@ const buildRuntimeStoreServices = (
     },
     restartPolicy,
     (workspaceId, agentId) => workspaceStore.getAgent(workspaceId, agentId),
-    createTeamMemoryDigestProvider(memoryStore, settings),
+    memoryDigestProvider,
     (workspaceId): WorkspaceLanguage =>
       workspaceStore.getWorkspaceSnapshot(workspaceId).summary.language ?? 'zh',
     worktrees.withLaunchWorkspace,
     executionPolicies,
-    resources
+    resources,
+    (context) => dispatchDelivery.prepareInitialDispatch(context)
   )
   const dispatchDelivery = createTeamDeliveryRuntime({
     db,
@@ -302,11 +319,28 @@ const buildRuntimeStoreServices = (
     ledger: dispatchLedgerStore,
     outbox: reportOutbox,
     activations: dispatchSkillActivationStore,
+    dispatchMemoryDigest: memoryDigestProvider.forDispatch,
     authorize: queueAuthorization.deliverDispatch,
     onSubmitted: (dispatch) =>
       workflowRuntime.recordDispatchSubmitted(dispatch.workspaceId, dispatch.id),
   })
   const teamOps = createTeamOperations({
+    messagePurposeForDispatch: (id) =>
+      db
+        .prepare(`
+      WITH RECURSIVE ancestry(id,workspace_id,parent_dispatch_id) AS (
+        SELECT id,workspace_id,parent_dispatch_id FROM dispatches WHERE id=?
+        UNION
+        SELECT parent.id,parent.workspace_id,parent.parent_dispatch_id
+        FROM dispatches parent JOIN ancestry child ON parent.id=child.parent_dispatch_id
+          AND parent.workspace_id=child.workspace_id
+      )
+      SELECT 1 FROM ancestry a JOIN memory_dream_reviews r
+        ON r.dispatch_id=a.id AND r.workspace_id=a.workspace_id LIMIT 1
+    `)
+        .get(id)
+        ? 'memory_dream_review'
+        : 'conversation',
     isWorkflowDispatch: (id) =>
       !!db.prepare('SELECT 1 FROM workflow_step_attempts WHERE dispatch_id=? LIMIT 1').get(id),
     delivery: dispatchDelivery,
@@ -372,6 +406,7 @@ const buildRuntimeStoreServices = (
 
   return {
     dispatchDelivery,
+    dispatchMessages: createDispatchMessageRuntime(db, dispatchDelivery, worktrees.assertIdle),
     resourceQueue,
     resources,
     owner,
@@ -390,6 +425,7 @@ const buildRuntimeStoreServices = (
     messageLogStore,
     memoryStore,
     memoryDreamStore,
+    memoryDreamGeneration,
     reportOutbox,
     remoteAudit,
     remoteConfig,
@@ -422,12 +458,16 @@ export const createRuntimeStoreLifecycle = ({
 }: CreateRuntimeStoreLifecycleOptions) => {
   const AUTO_RESUME_INTERVAL_MS = 500
   let autoResumePromise: Promise<AutoResumeResult[]> | null = null
+  let autoResumeStopped = false
+  const stopAutoResume = () => {
+    autoResumeStopped = true
+  }
   let runtimeHivePort = ''
   let handlersInstalled = false
-  const installQueueHandlers = (hivePort: string) => {
+  const installQueueHandlers = (hivePort: string, workspaceId?: string) => {
     if (!hivePort) return
     runtimeHivePort ||= hivePort
-    services.workflowRuntime.resume(runtimeHivePort)
+    services.workflowRuntime.resume(runtimeHivePort, workspaceId)
     if (handlersInstalled) return
     handlersInstalled = true
     for (const source of ['dispatch', 'scenario', 'recovery'] as const) {
@@ -476,7 +516,7 @@ export const createRuntimeStoreLifecycle = ({
     agentId: string,
     input: { autoResume?: boolean; hivePort: string }
   ): Promise<LiveAgentRun> => {
-    installQueueHandlers(input.hivePort)
+    installQueueHandlers(input.hivePort, workspaceId)
     services.workspaceStore.getAgent(workspaceId, agentId)
     services.workspaceStore.markAgentStarted(workspaceId, agentId)
     try {
@@ -502,6 +542,7 @@ export const createRuntimeStoreLifecycle = ({
           ),
         })
         queueMicrotask(() => {
+          services.dispatchDelivery.wake()
           void services.teamOps
             .replayQueuedDispatches(workspaceId, agentId)
             .catch((error: unknown) => {
@@ -541,6 +582,8 @@ export const createRuntimeStoreLifecycle = ({
         .getWorkspaceSnapshot(workspace.id)
         .agents.filter(
           (agent) =>
+            agent.retiredAt === undefined &&
+            !agent.preparationState &&
             !services.agentRuntime.getActiveRunByAgentId(workspace.id, agent.id) &&
             !services.workspaceStore.isAgentManuallyStopped?.(workspace.id, agent.id) &&
             services.agentRuntime.peekAgentLaunchConfig(workspace.id, agent.id)
@@ -574,7 +617,8 @@ export const createRuntimeStoreLifecycle = ({
     return Promise.all(starts)
   }
 
-  const autoResumeInterruptedAgents = (input: { hivePort: string }) => {
+  const autoResumeInterruptedAgents = async (input: { hivePort: string }) => {
+    if (autoResumeStopped) return Promise.resolve([])
     installQueueHandlers(input.hivePort)
     if (autoResumePromise) return autoResumePromise
 
@@ -603,9 +647,11 @@ export const createRuntimeStoreLifecycle = ({
 
       const results: AutoResumeResult[] = []
       for (const [index, candidate] of candidates.entries()) {
+        if (autoResumeStopped) break
         if (index > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, AUTO_RESUME_INTERVAL_MS))
         }
+        if (autoResumeStopped) break
 
         const settings = services.workspaceStore.getWorkspaceRecoverySettings(candidate.workspaceId)
         if (
@@ -680,11 +726,13 @@ export const createRuntimeStoreLifecycle = ({
           })
         } catch (error) {
           const queued =
-            error instanceof ResourceLimitError
+            !autoResumeStopped && error instanceof ResourceLimitError
               ? enqueueRecovery(candidate.workspaceId, candidate.agentId, error, true)
               : null
           const message = error instanceof Error ? error.message : String(error)
-          console.error(`[hive] auto-resume failed: ${candidate.agentId}`, error)
+          if (!(autoResumeStopped && error instanceof ExecutionCancelledError)) {
+            console.error(`[hive] auto-resume failed: ${candidate.agentId}`, error)
+          }
           results.push({
             ...(queued ? { queueId: queued.id } : {}),
             agentId: candidate.agentId,
@@ -704,7 +752,12 @@ export const createRuntimeStoreLifecycle = ({
   }
 
   return {
+    stopAutoResume,
     close: async () => {
+      stopAutoResume()
+      // A recovery may still be finishing a cancelled start or waiting between
+      // candidates. Its final state writes must settle before SQLite closes.
+      await autoResumePromise
       await services.resourceQueue.close()
       await services.shellRuntime.close()
       await services.agentRuntime.close()
@@ -731,6 +784,10 @@ export const createRuntimeStoreLifecycle = ({
       services.shellRuntime.closeRun(workspaceId, runId),
     getLiveRun: (runId: string) =>
       services.shellRuntime.getLiveRun(runId) ?? services.agentRuntime.getLiveRun(runId),
+    getRunInputSequence: (runId: string) => {
+      if (!agentManager) throw new Error('Agent manager is required for PTY input tracking')
+      return agentManager.getInputSequence(runId)
+    },
     getPtyOutputBus: (): PtyOutputBus => {
       if (!agentManager) throw new Error('Agent manager is required for PTY output subscriptions')
       return agentManager.getOutputBus()

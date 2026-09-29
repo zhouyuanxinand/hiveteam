@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { MessageDelivery } from '../shared/message-delivery.js'
 import { ConflictError, HttpError } from './http-errors.js'
 import type { ReportDeliveryCheckpoint } from './report-delivery-receipt.js'
+import type { Database } from './sqlite.js'
 
 export interface DeliveryRecord extends MessageDelivery {
   checkpoint: string | null
@@ -13,6 +13,17 @@ export const publicDelivery = ({
   write_started: _write,
   ...record
 }: DeliveryRecord): MessageDelivery => record
+
+// Select only the next writable message for each recipient before applying the
+// batch limit. A blocked recipient must not crowd other workspaces out of a tick.
+const unblockedRecipient = `NOT EXISTS (
+  SELECT 1 FROM message_deliveries AS blocker
+  WHERE blocker.workspace_id = candidate.workspace_id
+    AND blocker.recipient_id = candidate.recipient_id
+    AND blocker.id <> candidate.id
+    AND (blocker.state IN ('attempting','unknown','manual')
+      OR (blocker.state = 'pending' AND blocker.rowid < candidate.rowid))
+)`
 
 export const createMessageDeliveryStore = (db: Database, now = Date.now) => {
   const atomic = <Args extends unknown[], Result>(
@@ -73,7 +84,12 @@ export const createMessageDeliveryStore = (db: Database, now = Date.now) => {
     due() {
       return db
         .prepare(
-          "SELECT * FROM message_deliveries WHERE state IN ('pending','unknown') AND (next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY COALESCE(next_attempt_at,0),created_at,rowid LIMIT 200"
+          `SELECT candidate.* FROM message_deliveries AS candidate
+           WHERE candidate.state IN ('pending','unknown')
+             AND (candidate.next_attempt_at IS NULL OR candidate.next_attempt_at<=?)
+             AND (candidate.state='unknown' OR ${unblockedRecipient})
+           ORDER BY COALESCE(candidate.next_attempt_at,0),candidate.created_at,candidate.rowid
+           LIMIT 200`
         )
         .all(now()) as DeliveryRecord[]
     },
@@ -91,31 +107,55 @@ export const createMessageDeliveryStore = (db: Database, now = Date.now) => {
         event(row.id, 'interrupted', 'runtime', 'Preserved write checkpoint; no lease-based resend')
       }
     }),
-    claim: atomic((id: string, runId: string) => {
+    claim: atomic((id: string, runId: string, startingRecipient = false) => {
       const row = get(id)
       if (
         !row ||
         row.state !== 'pending' ||
-        (row.next_attempt_at !== null && row.next_attempt_at > now())
+        (!startingRecipient && row.next_attempt_at !== null && row.next_attempt_at > now())
       )
         return undefined
       // An uncertain composer blocks this recipient, not other recipients/workspaces.
-      const blocked = db
+      const available = db
         .prepare(
-          "SELECT 1 FROM message_deliveries WHERE workspace_id=? AND recipient_id=? AND id<>? AND (state IN ('attempting','unknown','manual') OR (state='pending' AND rowid<(SELECT rowid FROM message_deliveries WHERE id=?))) LIMIT 1"
+          `SELECT 1 FROM message_deliveries AS candidate
+           WHERE candidate.id=? AND ${unblockedRecipient}`
         )
-        .get(row.workspace_id, row.recipient_id, id, id)
-      if (blocked) return undefined
+        .get(id)
+      if (!available) return undefined
       db.prepare(
         "UPDATE message_deliveries SET state='attempting',attempt=attempt+1,run_id=?,reason=NULL,next_attempt_at=NULL WHERE id=?"
       ).run(runId, id)
       event(id, 'attempt_started', 'runtime', 'Recipient claimed before terminal input')
       return get(id)
     }),
+    prepared: atomic((id: string, attempt: number, payload: string) => {
+      requireAttempt(id, attempt)
+      db.prepare(`INSERT INTO delivery_payload_measurements
+        (delivery_id,attempt,utf8_bytes,prepared_at) VALUES(?,?,?,?)
+        ON CONFLICT(delivery_id,attempt) DO NOTHING`).run(
+        id,
+        attempt,
+        Buffer.byteLength(payload, 'utf8'),
+        now()
+      )
+    }),
     beforeWrite: atomic((id: string, attempt: number) => {
       requireAttempt(id, attempt)
       db.prepare('UPDATE message_deliveries SET write_started=1 WHERE id=?').run(id)
       event(id, 'write_started', 'runtime', 'Persisted before PTY input')
+    }),
+    awaitingReceipt: atomic((id: string, attempt: number) => {
+      const current = get(id)
+      if (current?.attempt === attempt && ['confirmed', 'resolved'].includes(current.state)) return
+      requireAttempt(id, attempt)
+      setState(id, 'unknown', 'none', 'Waiting for Codex to journal its initial dispatch', now())
+      event(
+        id,
+        'initial_prompt_launched',
+        'runtime',
+        'Awaiting native receipt without terminal input'
+      )
     }),
     saveCheckpoint: atomic((id: string, attempt: number, checkpoint: ReportDeliveryCheckpoint) => {
       requireAttempt(id, attempt)
@@ -144,13 +184,25 @@ export const createMessageDeliveryStore = (db: Database, now = Date.now) => {
         native ? 'Native user-message receipt' : 'Submission is not model acceptance'
       )
     }),
-    confirm: atomic((id: string, source: 'native_receipt' | 'worker_ack') => {
-      const row = get(id)
-      if (!row || row.state === 'confirmed' || row.state === 'resolved') return
-      db.prepare('UPDATE message_deliveries SET confirmed_at=? WHERE id=?').run(now(), id)
-      setState(id, 'confirmed', source, null)
-      event(id, 'confirmed', source, 'Receipt reconciled without terminal input')
-    }),
+    confirm: atomic(
+      (
+        id: string,
+        source: 'native_receipt' | 'worker_ack',
+        checkpoint?: ReportDeliveryCheckpoint
+      ) => {
+        const row = get(id)
+        if (!row || row.state === 'confirmed' || row.state === 'resolved') return
+        if (checkpoint)
+          db.prepare('UPDATE message_deliveries SET checkpoint=?,session_id=? WHERE id=?').run(
+            JSON.stringify(checkpoint),
+            checkpoint.sessionId,
+            id
+          )
+        db.prepare('UPDATE message_deliveries SET confirmed_at=? WHERE id=?').run(now(), id)
+        setState(id, 'confirmed', source, null)
+        event(id, 'confirmed', source, 'Receipt reconciled without terminal input')
+      }
+    ),
     failed: atomic(
       (id: string, attempt: number, error: string, terminal: boolean | 'manual' = false) => {
         const row = get(id)

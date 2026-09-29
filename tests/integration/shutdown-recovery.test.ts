@@ -77,7 +77,9 @@ const expectReady = async (server: TestServer, runId: string) => {
         const run = (await response.json()) as { output: string; status: string }
         return { output: normalizePtyText(run.output), status: run.status }
       },
-      { interval: 25, timeout: 3000 }
+      // ConPTY waits about 3s for a terminal DA reply when this HTTP-only
+      // fixture has no attached terminal. Include that native wait.
+      { interval: 25, timeout: 5000 }
     )
     .toEqual({ output: expect.stringContaining('READY'), status: 'running' })
 }
@@ -165,9 +167,17 @@ test('shutdown recovers only active members, leaving stopped, completed and unst
   })
   expect(stopResponse.status).toBe(202)
   server.store.writeRunInput(completedRunId, 'finish\r')
+  // Stop is accepted asynchronously; both members must have exited before
+  // this scenario shuts down the one remaining active member.
   await expect
-    .poll(() => server.store.getLiveRun(completedRunId).status, { interval: 25, timeout: 3000 })
-    .toBe('exited')
+    .poll(
+      () => [
+        server.store.getLiveRun(stoppedRunId).status,
+        server.store.getLiveRun(completedRunId).status,
+      ],
+      { interval: 25, timeout: 3000 }
+    )
+    .toEqual(['exited', 'exited'])
   await closeServer(server)
 
   const reopened = await openServer(dataDir)
@@ -239,4 +249,80 @@ test('a launch failure retains the shutdown checkpoint for the next platform res
   })
   expect(recovered).toEqual([expect.objectContaining({ agentId: worker.id, ok: true })])
   await expectReady(repaired, recovered[0]?.runId ?? '')
+})
+
+test.each([
+  'before-first-spawn',
+  'between-candidates',
+] as const)('shutdown drains automatic recovery %s and preserves the remaining checkpoint', async (phase) => {
+  const { command, dataDir, server, worker, workspace } = await createFixture()
+  const other = server.store.addWorker(workspace.id, { name: 'Other', role: 'coder' })
+  server.store.configureAgentLaunch(workspace.id, other.id, { command })
+  const [first, second] = [worker, other].sort((left, right) => left.id.localeCompare(right.id))
+  if (!first || !second) throw new Error('Expected two recovery candidates')
+  const originalRuns = await Promise.all(
+    [first, second].map((member) => startViaHttp(server, workspace.id, member.id))
+  )
+  const dispatch = await server.store.dispatchTask(
+    workspace.id,
+    second.id,
+    'Preserve this pending task across interrupted recovery'
+  )
+  await closeServer(server)
+
+  const reopened = await openServer(dataDir)
+  const pendingDispatch = reopened.store.getDispatch(workspace.id, dispatch.id)
+  expect(pendingDispatch).toMatchObject({
+    reportedAt: null,
+    text: 'Preserve this pending task across interrupted recovery',
+  })
+  let recoverySettled = false
+  const recovery = reopened.store
+    .autoResumeInterruptedAgents({ hivePort: new URL(reopened.baseUrl).port })
+    .finally(() => {
+      recoverySettled = true
+    })
+  if (phase === 'between-candidates') {
+    await expect
+      .poll(() => reopened.store.getActiveRunByAgentId(workspace.id, first.id)?.status, {
+        interval: 10,
+        timeout: 5000,
+      })
+      .toBe('running')
+  }
+
+  await closeServer(reopened)
+  const settledAtClose = recoverySettled
+  // Drain even the failing implementation, so its late database access cannot
+  // escape this test and interfere with a different runtime.
+  const results = await recovery
+  expect(settledAtClose).toBe(true)
+  expect(results).toHaveLength(1)
+  expect(results[0]).toMatchObject({ agentId: first.id })
+
+  const again = await openServer(dataDir)
+  expect(again.store.resources.getSnapshot().occupancy.global).toBe(0)
+  expect(again.store.listAgentRuns(second.id)).toEqual([
+    expect.objectContaining({ runId: originalRuns[1] }),
+  ])
+  expect(again.store.getWorker(workspace.id, second.id)).toMatchObject({
+    pendingTaskCount: 1,
+    status: 'stopped',
+  })
+  expect(again.store.getDispatch(workspace.id, dispatch.id)).toEqual(pendingDispatch)
+
+  const resumed = await again.store.autoResumeInterruptedAgents({
+    hivePort: new URL(again.baseUrl).port,
+  })
+  expect(resumed).toEqual(
+    [first, second].map((member) => expect.objectContaining({ agentId: member.id, ok: true }))
+  )
+  await Promise.all(resumed.map((result) => expectReady(again, result.runId ?? '')))
+  expect(again.store.getWorker(workspace.id, second.id)).toMatchObject({
+    pendingTaskCount: 1,
+    status: 'working',
+  })
+  await closeServer(again)
+  const final = await openServer(dataDir)
+  expect(final.store.resources.getSnapshot().occupancy.global).toBe(0)
 })

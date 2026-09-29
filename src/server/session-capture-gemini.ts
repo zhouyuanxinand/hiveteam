@@ -13,7 +13,11 @@ const expandHome = (path: string) =>
 
 export const getGeminiHome = (pattern?: string) => {
   if (!pattern) return getDefaultGeminiHome()
-  const markerIndex = pattern.replace(/\\/g, '/').indexOf('/tmp/')
+  const normalizedPattern = pattern.replace(/\\/g, '/')
+  // Match Gemini's chat layout from the end: a home ancestor or project may also be named tmp.
+  const markerIndex =
+    normalizedPattern.match(/\/tmp\/[^/]+\/chats\/[^/]+$/)?.index ??
+    normalizedPattern.indexOf('/tmp/')
   if (markerIndex === -1) return getDefaultGeminiHome()
   const rawRoot = pattern.slice(0, markerIndex)
   if (rawRoot === '~/.gemini' || rawRoot === '~/.gemini/') return getDefaultGeminiHome()

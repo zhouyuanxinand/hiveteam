@@ -1,4 +1,10 @@
-export const workflowRunStatuses = ['running', 'completed', 'failed', 'stopped'] as const
+export const workflowRunStatuses = [
+  'running',
+  'interrupted',
+  'completed',
+  'failed',
+  'stopped',
+] as const
 
 export const workflowStepStatuses = [
   'queued',
@@ -70,7 +76,22 @@ export interface WorkflowRunStep {
   worker: string
 }
 
+export interface WorkflowRecoveryIssue {
+  step_id: string
+  dispatch_id: string
+  delivery_id: string | null
+  reason:
+    | 'delivery_unknown'
+    | 'delivery_manual'
+    | 'delivery_unavailable'
+    | 'delivery_blocked'
+    | 'dispatch_cancelled'
+    | 'cancellation_unconfirmed'
+  detail: string | null
+}
+
 export interface WorkflowRun {
+  recoveryIssues?: WorkflowRecoveryIssue[]
   createdAt: number
   endedAt: number | null
   error: string | null

@@ -10,9 +10,10 @@ import { createAgentRuntimeFlowAdapter } from './agent-runtime-flow-adapter.js'
 import { listRunsWithFallback } from './agent-runtime-list-runs.js'
 import type { AgentRunStorePort, AgentSessionStorePort } from './agent-runtime-ports.js'
 import { stopLiveRun } from './agent-runtime-stop-run.js'
-import type { LiveAgentRun } from './agent-runtime-types.js'
+import { type LiveAgentRun, RUN_SESSION_CONTEXT } from './agent-runtime-types.js'
 import { createAgentStdinDispatcher } from './agent-stdin-dispatcher.js'
 import { createAgentTokenRegistry } from './agent-tokens.js'
+import type { PrepareCodexInitialDispatch } from './codex-initial-dispatch.js'
 import type { CommandPresetRecord } from './command-preset-store.js'
 import type { ExecutionPolicyRuntime } from './execution-policy-runtime.js'
 import { createLiveRunRegistry } from './live-run-registry.js'
@@ -43,7 +44,8 @@ export const createAgentRuntime = (
     launch: (workspace: WorkspaceSummary) => Promise<LiveAgentRun>
   ) => Promise<LiveAgentRun>,
   executionPolicies?: Pick<ExecutionPolicyRuntime, 'prepare'>,
-  resources?: ResourceBudgetStore
+  resources?: ResourceBudgetStore,
+  prepareInitialDispatch?: PrepareCodexInitialDispatch
 ): AgentRuntime => {
   const registry = createLiveRunRegistry()
   const launchCache = createAgentLaunchCache(agentRunStore)
@@ -85,6 +87,7 @@ export const createAgentRuntime = (
     assertSkillLaunchReady: teamSkillRuntime.assertLaunchReady,
     restartPolicy,
     executionPolicies,
+    ...(prepareInitialDispatch ? { prepareInitialDispatch } : {}),
   })
 
   return {
@@ -119,6 +122,12 @@ export const createAgentRuntime = (
       const run = registry.get(runId)
       if (!run) throw new Error(`Live run not found: ${runId}`)
       return syncRun(run)
+    },
+    getRunSessionContext(workspaceId, agentId, runId) {
+      const run = registry.get(runId)
+      if (run?.agentId !== agentId || launchCache.getWorkspaceId(agentId) !== workspaceId)
+        return undefined
+      return run[RUN_SESSION_CONTEXT]
     },
     getPtyOutputBus() {
       return flowAdapter.getOutputBus()
@@ -227,7 +236,8 @@ export const createAgentRuntime = (
       text,
       language,
       skillActivation,
-      deliveryOptions
+      deliveryOptions,
+      messageProtocolVersion
     ) {
       return stdinDispatcher.writeSendPrompt(
         workspaceId,
@@ -238,7 +248,8 @@ export const createAgentRuntime = (
         text,
         language,
         skillActivation,
-        deliveryOptions
+        deliveryOptions,
+        messageProtocolVersion
       )
     },
     writeCancelPrompt(workspaceId, workerId, dispatchId, reason, input = {}) {

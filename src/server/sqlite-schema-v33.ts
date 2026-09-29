@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /**
  * Records the workspace Git HEAD at dispatch creation time so the UI can show

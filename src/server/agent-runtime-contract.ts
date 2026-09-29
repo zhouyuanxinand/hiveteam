@@ -2,7 +2,7 @@ import type { ResolvedSkillActivation } from '../shared/skill-packs.js'
 import type { WorkspaceLanguage, WorkspaceSummary } from '../shared/types.js'
 
 import type { PersistedAgentRun } from './agent-run-store.js'
-import type { LiveAgentRun } from './agent-runtime-types.js'
+import type { LiveAgentRun, RunSessionContext } from './agent-runtime-types.js'
 import type { AgentTokenRegistry } from './agent-tokens.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 import type { SystemMessageDeliveryOptions } from './report-delivery-receipt.js'
@@ -28,6 +28,11 @@ export interface AgentRuntime {
     agentId: string
   ) => import('./agent-run-store.js').AgentLaunchConfigInput | undefined
   getLiveRun: (runId: string) => LiveAgentRun
+  getRunSessionContext: (
+    workspaceId: string,
+    agentId: string,
+    runId: string
+  ) => RunSessionContext | undefined
   getPtyOutputBus: () => PtyOutputBus
   listAgentRuns: (agentId: string) => PersistedAgentRun[]
   pauseRun: (runId: string) => void
@@ -80,7 +85,8 @@ export interface AgentRuntime {
     text: string,
     language?: WorkspaceLanguage,
     skillActivation?: ResolvedSkillActivation,
-    deliveryOptions?: SystemMessageDeliveryOptions
+    deliveryOptions?: SystemMessageDeliveryOptions,
+    messageProtocolVersion?: 0 | 1
   ) => Promise<void>
   writeCancelPrompt: (
     workspaceId: string,

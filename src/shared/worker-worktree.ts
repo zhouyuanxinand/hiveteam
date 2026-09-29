@@ -1,4 +1,5 @@
 export interface WorkerWorktree {
+  pinnedHeadSha?: string
   workerId: string
   workspaceId: string
   repoRoot: string

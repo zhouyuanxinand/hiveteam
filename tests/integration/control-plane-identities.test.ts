@@ -97,7 +97,9 @@ describe('control plane identities over HTTP and child processes', () => {
         },
       })
       runId = run.runId
-      await expect.poll(() => manager.getRun(run.runId).output).toContain('CHILD_IDENTITY:')
+      await expect
+        .poll(() => manager.getRun(run.runId).output, { timeout: 10_000 })
+        .toContain('CHILD_IDENTITY:')
       const output = manager.getRun(run.runId).output
       expect(output).toContain('"agent":"synthetic-team-token"')
       expect(output).not.toContain('synthetic-supervisor-secret')

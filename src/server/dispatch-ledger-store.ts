@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database, Statement } from 'better-sqlite3'
 import type { DispatchResult, ReportOutcome } from '../shared/dispatch-result.js'
+import { createDispatchMessageStore } from './dispatch-message-store.js'
 import { ConflictError } from './http-errors.js'
+import type { Database, Statement } from './sqlite.js'
+import { assertWorkerAvailable } from './worker-lifecycle-store.js'
 
 export type DispatchStatus = 'queued' | 'submitted' | 'failed' | 'reported' | 'cancelled'
 
 export interface DispatchRecord extends DispatchResult {
+  parentDispatchId?: string
+  rootDispatchId?: string
+  messageProtocolVersion: 0 | 1
   artifacts: string[]
   /**
    * Git HEAD of the workspace captured when the dispatch was created. Serves
@@ -45,6 +49,9 @@ export interface DispatchRecord extends DispatchResult {
 }
 
 interface DispatchRow {
+  parent_dispatch_id: string | null
+  root_dispatch_id: string | null
+  message_protocol_version: 0 | 1
   report_outcome: ReportOutcome | null
   report_revision: number
   accepted_at: number | null
@@ -74,6 +81,8 @@ interface DispatchRow {
 }
 
 interface CreateDispatchInput {
+  parentDispatchId?: string
+  messageProtocolVersion?: 0 | 1
   baseHeadSha?: string | null
   fromAgentId?: string
   text: string
@@ -82,6 +91,7 @@ interface CreateDispatchInput {
 }
 
 interface ReportDispatchInput {
+  seenSeq?: number
   outcome?: ReportOutcome
   artifacts: string[]
   dispatchId?: string
@@ -116,6 +126,10 @@ const parseArtifacts = (value: string | null) => {
 
 const toRecord = (row: DispatchRow): DispatchRecord => {
   const record: DispatchRecord = {
+    ...(row.parent_dispatch_id
+      ? { parentDispatchId: row.parent_dispatch_id, rootDispatchId: row.root_dispatch_id ?? row.id }
+      : {}),
+    messageProtocolVersion: row.message_protocol_version,
     reportOutcome: row.report_outcome ?? null,
     reportRevision: row.report_revision ?? 0,
     acceptedAt: row.accepted_at ?? null,
@@ -167,6 +181,7 @@ const dispatchSelect = `
 `
 
 export const createDispatchLedgerStore = (db: Database) => {
+  const messages = createDispatchMessageStore(db)
   // Statement handles are prepared once: the team-list poll runs the pending
   // counts twice per second per workspace, and prepare-per-call dominated the
   // CPU cost of that endpoint.
@@ -184,8 +199,11 @@ export const createDispatchLedgerStore = (db: Database) => {
       reported_at,
       report_text,
       artifacts,
-      base_head_sha
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      base_head_sha,
+      message_protocol_version,
+      parent_dispatch_id,
+      root_dispatch_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const deleteFailureStmt = db.prepare(
     'DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?'
@@ -300,6 +318,7 @@ export const createDispatchLedgerStore = (db: Database) => {
 
   const createDispatch = (input: CreateDispatchInput) => {
     const record: DispatchRecord = {
+      messageProtocolVersion: input.messageProtocolVersion ?? 0,
       reportOutcome: null,
       reportRevision: 0,
       acceptedAt: null,
@@ -319,21 +338,37 @@ export const createDispatchLedgerStore = (db: Database) => {
       workspaceId: input.workspaceId,
     }
 
-    insertDispatchStmt.run(
-      record.id,
-      record.workspaceId,
-      record.fromAgentId,
-      record.toAgentId,
-      record.text,
-      record.status,
-      record.createdAt,
-      record.deliveredAt,
-      record.submittedAt,
-      record.reportedAt,
-      record.reportText,
-      JSON.stringify(record.artifacts),
-      record.baseHeadSha
-    )
+    db.transaction(() => {
+      assertWorkerAvailable(db, input.workspaceId, input.toAgentId)
+      if (input.parentDispatchId) {
+        const parent = db
+          .prepare('SELECT id,root_dispatch_id FROM dispatches WHERE workspace_id=? AND id=?')
+          .get(input.workspaceId, input.parentDispatchId) as
+          | { id: string; root_dispatch_id: string | null }
+          | undefined
+        if (!parent) throw new ConflictError('Parent dispatch not found in this workspace')
+        record.parentDispatchId = parent.id
+        record.rootDispatchId = parent.root_dispatch_id ?? parent.id
+      }
+      insertDispatchStmt.run(
+        record.id,
+        record.workspaceId,
+        record.fromAgentId,
+        record.toAgentId,
+        record.text,
+        record.status,
+        record.createdAt,
+        record.deliveredAt,
+        record.submittedAt,
+        record.reportedAt,
+        record.reportText,
+        JSON.stringify(record.artifacts),
+        record.baseHeadSha,
+        record.messageProtocolVersion,
+        record.parentDispatchId ?? null,
+        record.rootDispatchId ?? record.id
+      )
+    }).immediate()
 
     return record
   }
@@ -368,7 +403,9 @@ export const createDispatchLedgerStore = (db: Database) => {
    * can address it and report again under the same dispatch id. Returns false
    * when the dispatch is not currently in the reported state.
    */
-  const reopenReportedDispatch = (workspaceId: string, dispatchId: string) => {
+  const reopenReportedDispatch = db.transaction((workspaceId: string, dispatchId: string) => {
+    const dispatch = getDispatchById(workspaceId, dispatchId)
+    if (dispatch) assertWorkerAvailable(db, workspaceId, dispatch.toAgentId)
     const result = db
       .prepare(
         `UPDATE dispatches
@@ -384,7 +421,7 @@ export const createDispatchLedgerStore = (db: Database) => {
     if (result.changes === 0) return false
     db.prepare('DELETE FROM dispatch_delivery_failures WHERE dispatch_id = ?').run(dispatchId)
     return true
-  }
+  }).immediate
 
   const markSubmitted = (dispatchId: string) => {
     const submittedAt = Date.now()
@@ -417,12 +454,14 @@ export const createDispatchLedgerStore = (db: Database) => {
     return row ? toRecord(row) : undefined
   }
 
-  const markReportedByWorker = (input: ReportDispatchInput) => {
+  const markReportedByWorker = db.transaction((input: ReportDispatchInput) => {
     const dispatch = findOpenDispatch(input.workspaceId, input.toAgentId, input.dispatchId)
     if (!dispatch) {
       return undefined
     }
 
+    if (dispatch.messageProtocolVersion === 1)
+      messages.assertReportSeen(dispatch.id, input.toAgentId, input.seenSeq)
     const reportedAt = Date.now()
     markReportedStmt.run(
       'reported',
@@ -433,6 +472,7 @@ export const createDispatchLedgerStore = (db: Database) => {
       dispatch.id
     )
     deleteFailureStmt.run(dispatch.id)
+    messages.closePending(dispatch.id)
 
     return {
       ...dispatch,
@@ -444,9 +484,9 @@ export const createDispatchLedgerStore = (db: Database) => {
       acceptedAt: null,
       status: 'reported' as const,
     }
-  }
+  }).immediate
 
-  const markCancelled = (input: CancelDispatchInput) => {
+  const markCancelled = db.transaction((input: CancelDispatchInput) => {
     const dispatch = findOpenDispatchById(input.workspaceId, input.dispatchId)
     if (!dispatch) {
       return undefined
@@ -455,6 +495,7 @@ export const createDispatchLedgerStore = (db: Database) => {
     const cancelledAt = Date.now()
     markCancelledStmt.run('cancelled', cancelledAt, input.reason, dispatch.id)
     deleteFailureStmt.run(dispatch.id)
+    messages.closePending(dispatch.id)
 
     return {
       ...dispatch,
@@ -462,7 +503,7 @@ export const createDispatchLedgerStore = (db: Database) => {
       reportText: input.reason,
       status: 'cancelled' as const,
     }
-  }
+  }).immediate
 
   const listWorkspaceDispatches = (workspaceId: string, options: ListDispatchesOptions = {}) => {
     const offset = options.offset ?? 0

@@ -44,12 +44,14 @@ test('a failed first spawn does not prevent correcting the member launch configu
   const corrected = await fetch(url, { method: 'POST', headers: { cookie } })
   expect(corrected.status).toBe(201)
   const run = (await corrected.json()) as { run_id: string }
+  // A headless ConPTY waits about 3s for a terminal DA reply before the CLI
+  // prints. Give this native-ready phase its own budget.
   await expect
-    .poll(() => server.store.getLiveRun(run.run_id).output, { timeout: 3000 })
+    .poll(() => server.store.getLiveRun(run.run_id).output, { timeout: 10_000 })
     .toContain('READY')
 })
 
-test('server restart keeps each member attached to its original native conversation and home', async () => {
+test('server restart preserves native conversations, homes and Codex configuration overrides', async () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'hive-native-restart-'))
   dirs.push(dataDir)
   const workspacePath = join(dataDir, '项目 with space')
@@ -95,6 +97,7 @@ setInterval(() => {}, 1000)
     if (!member) throw new Error('Expected orchestrator')
     first.store.configureAgentLaunch(workspace.id, member.id, {
       command,
+      args: ['-c', 'model_reasoning_effort="ultra"'],
       resumeArgsTemplate: 'resume {session_id}',
       sessionIdCapture: {
         source: 'codex_session_jsonl_dir',
@@ -110,6 +113,11 @@ setInterval(() => {}, 1000)
     )
     expect(response.status).toBe(201)
     const run = (await response.json()) as { run_id: string }
+    // Session capture has its own four-second deadline after the CLI has
+    // completed native terminal negotiation and written its session file.
+    await expect
+      .poll(() => first.store.getLiveRun(run.run_id).output, { timeout: 10_000 })
+      .toContain('SESSION:')
     await expect
       .poll(
         () =>

@@ -1,4 +1,5 @@
-import type { Server } from 'node:http'
+import type { IncomingMessage, Server } from 'node:http'
+import type { Duplex } from 'node:stream'
 
 import type { WebSocket as WsSocket } from 'ws'
 import { WebSocketServer } from 'ws'
@@ -40,7 +41,12 @@ export const createTasksWebSocketServer = (
   const wss = new WebSocketServer({ noServer: true })
   const socketsByWorkspaceId = new Map<string, Set<WsSocket>>()
 
-  server.on('upgrade', (request, socket, head) => {
+  let closed = false
+  const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (closed) {
+      rejectUpgrade(socket, '503 Service Unavailable')
+      return
+    }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     const workspaceId = matchTasksPath(url.pathname)
     if (!workspaceId) return
@@ -125,12 +131,16 @@ export const createTasksWebSocketServer = (
         }
       })
     })
-  })
+  }
+  server.on('upgrade', handleUpgrade)
 
   return {
     close: () => {
+      if (closed) return
+      closed = true
+      server.off('upgrade', handleUpgrade)
       for (const sockets of socketsByWorkspaceId.values()) {
-        for (const socket of sockets) socket.close()
+        for (const socket of sockets) socket.terminate()
       }
       socketsByWorkspaceId.clear()
       wss.close()

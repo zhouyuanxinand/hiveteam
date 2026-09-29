@@ -6,8 +6,7 @@ import { join, resolve } from 'node:path'
 import WebSocket from 'ws'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 
-if (process.platform !== 'win32' || process.env.HIVE_TEST_PTY_BACKEND !== 'conpty')
-  throw new Error('Run in the Windows ConPTY console host')
+if (process.platform !== 'win32') throw new Error('ConPTY acceptance requires Windows')
 const result = resolve(process.argv[2] ?? '.validation/conpty.json')
 const root = mkdtempSync(join(tmpdir(), 'hive-conpty-')),
   project = join(root, '中文 路径')
@@ -134,7 +133,7 @@ try {
         ok: true,
         node: process.version,
         platform: process.platform,
-        pty_backend: 'ConPTY',
+        pty_backend: 'ConPTY DLL',
         checks: [
           'HTTP basic workspace',
           'Chinese and space path',
@@ -157,4 +156,3 @@ try {
   await server.close()
   rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
 }
-process.exit(0)

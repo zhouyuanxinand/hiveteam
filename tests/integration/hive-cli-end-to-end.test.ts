@@ -30,7 +30,10 @@ const trackChild = (child: ChildProcess) => {
 
 afterEach(async () => {
   for (const { child, closed } of childProcesses.splice(0)) {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    if (child.exitCode === null && child.signalCode === null) {
+      if (child.connected) child.send({ type: 'hive:shutdown' })
+      else child.kill('SIGTERM')
+    }
     await closed
   }
   for (const dir of tempDirs.splice(0)) {
@@ -359,8 +362,8 @@ describe('hive cli end to end', () => {
         ],
       })
     } finally {
-      processHandle.kill('SIGTERM')
-      await closed
+      processHandle.send({ type: 'hive:shutdown' })
+      expect(await closed).toBe(0)
     }
   })
 })

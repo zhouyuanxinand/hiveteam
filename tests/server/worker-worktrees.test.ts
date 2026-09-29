@@ -238,8 +238,11 @@ describe('isolated worker delivery', () => {
       )
     )
     for (const worker of [first, second]) {
-      await vi.waitFor(() =>
-        expect(existsSync(join(worker.tree.workspacePath, 'session.runtime'))).toBe(true)
+      // The native CLI writes this marker only after ConPTY's headless DA
+      // negotiation. Keep that startup phase separate from worktree assertions.
+      await vi.waitFor(
+        () => expect(existsSync(join(worker.tree.workspacePath, 'session.runtime'))).toBe(true),
+        { timeout: 10_000 }
       )
       expect(
         JSON.parse(readFileSync(join(worker.tree.workspacePath, 'session.runtime'), 'utf8'))
@@ -278,13 +281,14 @@ describe('isolated worker delivery', () => {
         expect(restarted.store.getDispatch(ctx.workspace.id, resumed.id)?.status).toBe('submitted'),
       { timeout: 5000 }
     )
+    await vi.waitFor(
+      () => expect(existsSync(join(first.tree.workspacePath, 'session.runtime'))).toBe(true),
+      { timeout: 10_000 }
+    )
     await vi.waitFor(() =>
       expect(readFileSync(join(first.tree.workspacePath, 'input.runtime'), 'utf8')).toContain(
         'Continue isolated work'
       )
-    )
-    await vi.waitFor(() =>
-      expect(existsSync(join(first.tree.workspacePath, 'session.runtime'))).toBe(true)
     )
     expect(
       JSON.parse(readFileSync(join(first.tree.workspacePath, 'session.runtime'), 'utf8')).cwd

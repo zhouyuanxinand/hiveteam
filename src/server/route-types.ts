@@ -11,6 +11,7 @@ import type { TasksFileService } from './tasks-file.js'
 import type { VersionService } from './version-service.js'
 
 export interface SendTaskBody {
+  message_protocol_version?: unknown
   timeouts?: unknown
   hive_port?: string
   project_id: string
@@ -38,6 +39,7 @@ export interface ReadSkillBody {
 }
 
 export interface ReportTaskBody {
+  seen_seq?: unknown
   progress_state?: unknown
   outcome?: unknown
   dispatch_id?: string

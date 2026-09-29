@@ -88,6 +88,10 @@ const formatOpenTasks = (
       lines.push(
         `- dispatch_id=${task.id} report_revision=${task.reportRevision} status=${task.status} agent_id=${target.id}:\n${wrapUntrustedPromptData('dispatch-task', task.text, 1000)}${suffix}`
       )
+      if (task.messageProtocolVersion === 1)
+        lines.push(
+          `  message_protocol_version=1: read all pages with team messages --dispatch ${task.id}; address incoming messages before reporting with --seen-seq <required_seen_seq>.`
+        )
     }
     if (queue.length > 8)
       lines.push(

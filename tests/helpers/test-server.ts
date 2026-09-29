@@ -12,7 +12,7 @@ import type { OpenWorkspaceService } from '../../src/server/route-types.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
 import { installSyntheticAgentAuthorization } from './authorized-runtime.js'
 
-interface TestServerContext {
+export interface TestServerContext {
   terminalMetrics: ReturnType<typeof createApp>['terminalMetrics']
   baseUrl: string
   close: () => Promise<void>

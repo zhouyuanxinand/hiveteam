@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
-
 import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
 import { ConflictError } from './http-errors.js'
 import { assertWorkerCapacityInTransaction } from './resource-budget-store.js'
 import { getDefaultRoleDescription } from './role-templates.js'
+import type { Database } from './sqlite.js'
+import { assertWorkerAvailable, createWorkerLifecycleStore } from './worker-lifecycle-store.js'
 import type { WorkerInput, WorkspaceRecord, WorkspaceStore } from './workspace-store-contract.js'
 import { hydrateWorkspaceFromDb, seedWorkspacesFromDb } from './workspace-store-hydration.js'
 import {
@@ -38,6 +38,8 @@ export const createWorkspaceStore = (
   db: Database,
   messageKinds: MessageKindRecord[]
 ): WorkspaceStore => {
+  const workerLifecycle = createWorkerLifecycleStore(db)
+  workerLifecycle.recoverPreparation()
   const workspaces = new Map<string, WorkspaceRecord>()
   seedWorkspacesFromDb(db, workspaces, messageKinds)
 
@@ -57,6 +59,10 @@ export const createWorkspaceStore = (
       names.add(name)
       return {
         ...(input.avatar ? { avatar: input.avatar } : {}),
+        ...(input.spawnedByAgentId
+          ? { lifecycleKind: 'ephemeral', spawnedByAgentId: input.spawnedByAgentId }
+          : {}),
+        ...(input.preparing ? { preparationState: 'preparing' } : {}),
         id: randomUUID(),
         workspaceId,
         name,
@@ -71,7 +77,7 @@ export const createWorkspaceStore = (
     db.transaction(() => {
       assertWorkerCapacityInTransaction(db, workspaceId, workers.length)
       const insert = db.prepare(
-        'INSERT INTO workers (id, workspace_id, name, avatar, description, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO workers (id, workspace_id, name, avatar, description, role, created_at, lifecycle_kind, spawned_by_agent_id, preparation_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
       for (const worker of workers)
         insert.run(
@@ -81,7 +87,10 @@ export const createWorkspaceStore = (
           worker.avatar ?? null,
           worker.description,
           worker.role,
-          Date.now()
+          Date.now(),
+          worker.lifecycleKind ?? 'persistent',
+          worker.spawnedByAgentId ?? null,
+          worker.preparationState ?? 'ready'
         )
       persist?.(workers)
     }).immediate()
@@ -89,6 +98,26 @@ export const createWorkspaceStore = (
     return workers
   }
   return {
+    retireWorker(workspaceId, workerId) {
+      const worker = getWorkerRecord(workspaces, workspaceId, workerId)
+      const retiredAt = workerLifecycle.retire(workspaceId, workerId)
+      worker.retiredAt = retiredAt
+      markAgentManuallyStopped(workspaces, workspaceId, workerId)
+      return worker
+    },
+    finishWorkerPreparation(workspaceId, workerId, error) {
+      const worker = getWorkerRecord(workspaces, workspaceId, workerId)
+      db.prepare(
+        'UPDATE workers SET preparation_state=?,preparation_error=? WHERE workspace_id=? AND id=?'
+      ).run(error === null ? 'ready' : 'failed', error, workspaceId, workerId)
+      if (error === null) {
+        delete worker.preparationState
+        delete worker.preparationError
+      } else {
+        worker.preparationState = 'failed'
+        worker.preparationError = error
+      }
+    },
     addWorkers,
     addWorker(workspaceId, input) {
       const worker = addWorkers(workspaceId, [input])[0]
@@ -198,7 +227,12 @@ export const createWorkspaceStore = (
     listWorkers(workspaceId) {
       return getWorkspace(workspaceId)
         .agents.filter(isWorkerAgent)
-        .map(({ avatar, id, name, role, status, pendingTaskCount }) => ({
+        .filter((agent) => agent.retiredAt === undefined)
+        .map(({ avatar, id, name, role, status, pendingTaskCount, ...details }) => ({
+          ...(details.lifecycleKind ? { lifecycleKind: details.lifecycleKind } : {}),
+          ...(details.spawnedByAgentId ? { spawnedByAgentId: details.spawnedByAgentId } : {}),
+          ...(details.preparationState ? { preparationState: details.preparationState } : {}),
+          ...(details.preparationError ? { preparationError: details.preparationError } : {}),
           ...(avatar ? { avatar } : {}),
           id,
           name,
@@ -220,6 +254,7 @@ export const createWorkspaceStore = (
     },
     markAgentStarted(workspaceId, agentId) {
       db.transaction(() => {
+        assertWorkerAvailable(db, workspaceId, agentId)
         db.prepare('DELETE FROM resource_agent_pauses WHERE workspace_id=? AND agent_id=?').run(
           workspaceId,
           agentId

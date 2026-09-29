@@ -1,11 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
 import { createAgentManager } from '../../src/server/agent-manager.js'
+import Database from '../../src/server/sqlite.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
 const tempDirs: string[] = []
@@ -76,10 +74,12 @@ describe('report outbox recovery', () => {
       interactiveCommand: 'claude',
     })
     await store.startAgent(workspace.id, orchestrator.id, { hivePort: '4010' })
+    // Wait for native startup, including ConPTY capability negotiation, before
+    // exercising the in-flight report checkpoint and shutdown boundary.
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
       expect(run?.output).toContain('❯')
-    })
+    }, 10_000)
 
     await store.dispatchTask(workspace.id, worker.id, 'Implement login')
     expect(
@@ -123,6 +123,7 @@ describe('report outbox recovery', () => {
       [
         "process.stdin.setEncoding('utf8')",
         "process.stdin.on('data', (chunk) => process.stdout.write('ORCH:' + chunk))",
+        "process.stdout.write('ORCH_READY\\n')",
       ].join('\n')
     )
 
@@ -147,6 +148,12 @@ describe('report outbox recovery', () => {
     })
     await store.startAgent(workspace.id, orchestrator.id, { hivePort: '4010' })
 
+    // The report remains queued before startup; observe native readiness before
+    // applying the original replay deadline, without a team-list poll.
+    await waitFor(() => {
+      const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
+      expect(run?.output).toContain('ORCH_READY')
+    }, 10_000)
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
       const output = normalizeTerminalText(run?.output ?? '')

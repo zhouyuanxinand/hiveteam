@@ -1,12 +1,12 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 
 import { afterEach, describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
 
 import { getWorkspaceShellAgentId } from '../../src/server/workspace-shell-runtime.js'
-import { writeNodeCli } from '../helpers/platform-cli.js'
+import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -168,7 +168,7 @@ describe('workspace shell terminal', () => {
   }, 60000)
 
   test('starts one workspace shell and wires it through the terminal websocket', async () => {
-    const workspacePath = mkdtempSync(join(tmpdir(), 'hive-shell-terminal-'))
+    const workspacePath = realpathSync(mkdtempSync(join(tmpdir(), 'hive-shell-terminal-')))
     tempDirs.push(workspacePath)
     const server = await startTestServer()
 
@@ -265,8 +265,10 @@ describe('workspace shell terminal', () => {
       io.send(process.platform === 'win32' ? 'cd\r' : 'pwd\r')
 
       await waitFor(() => {
-        const output = received.join('').toLowerCase()
-        expect(output).toContain(basename(workspacePath).toLowerCase())
+        // A real terminal can wrap a long cwd and insert ANSI cursor controls.
+        // Compare the full path after terminal normalization, not just its name.
+        const output = normalizePtyText(received.join('')).toLowerCase()
+        expect(output).toContain(workspacePath.toLowerCase())
       })
 
       io.close()

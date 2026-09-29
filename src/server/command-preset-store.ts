@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import { ConflictError } from './http-errors.js'
 import { parseSessionIdCapture, type SessionIdCaptureConfig } from './session-capture.js'
+import type { Database } from './sqlite.js'
 
 export interface CommandPresetRecord {
   id: string

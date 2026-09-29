@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { createCodeReviewFixture } from '../helpers/code-review-fixture.js'
 
 const fixtures: Awaited<ReturnType<typeof createCodeReviewFixture>>[] = []

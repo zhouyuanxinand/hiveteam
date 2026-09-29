@@ -1,0 +1,21 @@
+.memory-source-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+  min-width: 0;
+  margin-block: 16px;
+  border: 0;
+  padding: 0;
+}
+.memory-source-fields legend { margin-bottom: 8px; font-weight: 600; }
+.memory-source-fields label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.memory-source-fields input, .memory-source-fields select { min-width: 0; width: 100%; }
+.memory-source-fields p { grid-column: 1 / -1; margin: 0; }
+.memory-sources { margin-block: 12px; }
+.memory-sources summary, .memory-source-list summary { cursor: pointer; }
+.memory-source-list { list-style: none; padding: 0; margin-block: 12px; }
+.memory-source-list li { padding-block: 12px; overflow-wrap: anywhere; }
+.memory-source-list li + li { border-top: 1px solid var(--border); }
+.memory-source-list p { margin-block: 6px; }
+.memory-source-list blockquote { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-primary); }
+.memory-source-list code { white-space: normal; overflow-wrap: anywhere; }

@@ -12,15 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-latest
-          - ubuntu-latest
-          - windows-latest
-    runs-on: ${{ matrix.os }}
+  build-artifact:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -28,18 +21,120 @@ jobs:
           version: 10.30.3
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24.14.0
+          architecture: x64
           cache: pnpm
-      - run: npm install -g node-gyp
-        if: runner.os == 'Linux'
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - run: pnpm typecheck
       - run: pnpm build
-      - run: pnpm vitest run --no-file-parallelism --maxWorkers=1 --testTimeout=60000 --hookTimeout=60000
-        if: runner.os != 'Windows'
-      - run: pnpm test:windows
-        if: runner.os == 'Windows'
+      - name: Create release artifact
+        run: node scripts/create-release-artifact.mjs --output "${{ runner.temp }}/hive-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/hive-release/
+          if-no-files-found: error
+
+  verify:
+    name: Source (${{ matrix.os }}, ${{ matrix.arch }})
+    needs: build-artifact
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: x64
+          - os: windows-2022
+            arch: x64
+          - os: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      HIVE_RELEASE_MANIFEST: ${{ runner.temp }}/hive-release/release-manifest.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.14.0
+          architecture: ${{ matrix.arch }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm typecheck
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/hive-release/
+      - name: Restore the shared build for source integration tests
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process'
+          import { verifyReleaseArtifact } from './scripts/release-artifact.mjs'
+          const { tarballPath } = await verifyReleaseArtifact(process.env.HIVE_RELEASE_MANIFEST)
+          execFileSync('tar', [
+            '-xzf', tarballPath, '--strip-components=1', 'package/dist', 'package/web/dist',
+          ], { stdio: 'inherit' })
+          NODE
+      - run: pnpm test
       - run: node tests/manual/run-windows-conpty.mjs
         if: runner.os == 'Windows'
       - run: pnpm pack:check
-      - run: pnpm pack:smoke
+
+  installed-package:
+    name: Installed (${{ matrix.target.platform }}, ${{ matrix.target.arch }}, Node ${{ matrix.node }}, ${{ matrix.install.mode }})
+    needs: build-artifact
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.18.0', '24.14.0']
+        install:
+          - mode: default
+            args: ''
+          - mode: ignore-scripts
+            args: --ignore-scripts
+        target:
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - os: windows-2022
+            platform: win32
+            arch: x64
+          - os: macos-15
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.target.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          architecture: ${{ matrix.target.arch }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/hive-release/
+      - name: Verify the installed release artifact
+        run: >-
+          node scripts/pack-smoke.mjs
+          --artifact "${{ runner.temp }}/hive-release/release-manifest.json"
+          --report "${{ runner.temp }}/hive-release-report/smoke-report.json"
+          --expected-platform "${{ matrix.target.platform }}"
+          --expected-arch "${{ matrix.target.arch }}"
+          --expected-node "${{ matrix.node }}"
+          ${{ matrix.install.args }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-${{ matrix.target.platform }}-${{ matrix.target.arch }}-node-${{ matrix.node }}-${{ matrix.install.mode }}
+          path: ${{ runner.temp }}/hive-release-report/
+          if-no-files-found: error

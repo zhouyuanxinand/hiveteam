@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 export const EXTERNAL_GOAL_STATUSES = [
   'open',

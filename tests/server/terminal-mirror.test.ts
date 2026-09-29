@@ -1,10 +1,9 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 import WebSocket from 'ws'
+import Database from '../../src/server/sqlite.js'
 
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
@@ -262,7 +261,7 @@ describe('terminal mirror', () => {
       const viewerA = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
       const viewerB = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-b')
 
-      viewerA.io.send('world\n')
+      viewerA.io.send('world\r')
 
       await waitFor(() => {
         expect(viewerA.outputs.join('')).toContain('IN:world')
@@ -314,7 +313,7 @@ describe('terminal mirror', () => {
       viewerB.control.close()
       await new Promise((resolve) => setTimeout(resolve, 50))
 
-      viewerA.io.send('after close\n')
+      viewerA.io.send('after close\r')
 
       await waitFor(() => {
         expect(viewerA.outputs.join('')).toContain('IN:after close')

@@ -1,11 +1,11 @@
 import { existsSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
-import type { Database } from 'better-sqlite3'
 import type { AgentRuntime } from './agent-runtime-contract.js'
 import { GitCommandError, runGit } from './git-command.js'
 import { readMergeState } from './git-merge-state.js'
 import { ConflictError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 import { createWorktreeResourceStore } from './worktree-resource-store.js'
 

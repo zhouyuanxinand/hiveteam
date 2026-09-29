@@ -4,8 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import type { TranslationKey } from '../i18n.js'
 import { useI18n } from '../i18n.js'
+import { GrillHandoffNotice } from './GrillHandoffNotice.js'
 import { SessionRecoveryBanner } from './SessionRecoveryBanner.js'
 import { retainParkedTerminal } from './terminal-retention.js'
+import { useAgentConversation } from './useAgentConversation.js'
 import { useTerminalRun } from './useTerminalRun.js'
 import type { TerminalWheelInputProfile } from './wheelFallback.js'
 
@@ -260,21 +262,66 @@ const TerminalPtyView = ({
     status,
     readOnly,
     recovery,
+    grillHandoff,
     retrySession,
     connectionStatus,
     reconnect,
     updateProcess,
+    updateConversation,
   } = useTerminalRun(runId, inputProfile)
+  const [collapseProcess, setCollapseProcess] = useState(true)
+  const conversation = useAgentConversation(
+    owner?.workspaceId ?? '',
+    owner?.agentId ?? '',
+    runId,
+    owner !== undefined && visible && collapseProcess
+  )
+  useEffect(() => {
+    updateConversation(conversation.failed || !visible ? undefined : conversation.data)
+    return () => updateConversation(undefined)
+  }, [conversation.data, conversation.failed, visible, updateConversation])
   const historyLabel = t('terminal.messageHistory')
   const callLabel = t('terminal.internalCall')
   const linesLabel = t('terminal.internalCallLines')
+  const processLabel = t('terminal.executionProcess')
+  const runningLabel = t('terminal.processRunning')
+  const interruptedLabel = t('terminal.processInterrupted')
+  const truncatedLabel = t('terminal.processTruncated')
   const hasOwner = owner !== undefined
   useEffect(() => {
     updateProcess(
-      hasOwner ? { history: historyLabel, internalCall: callLabel, lines: linesLabel } : undefined
+      hasOwner && collapseProcess
+        ? {
+            history: historyLabel,
+            internalCall: callLabel,
+            lines: linesLabel,
+            process: processLabel,
+            running: runningLabel,
+            interrupted: interruptedLabel,
+            truncated: truncatedLabel,
+          }
+        : undefined
     )
     return () => updateProcess(undefined)
-  }, [hasOwner, historyLabel, callLabel, linesLabel, updateProcess])
+  }, [
+    hasOwner,
+    collapseProcess,
+    historyLabel,
+    callLabel,
+    linesLabel,
+    processLabel,
+    runningLabel,
+    interruptedLabel,
+    truncatedLabel,
+    updateProcess,
+  ])
+  const processNotice = !collapseProcess
+    ? undefined
+    : conversation.failed
+      ? t('terminal.processReadFailed')
+      : conversation.data?.status === 'pending' || conversation.data?.run_id !== runId
+        ? t('terminal.processPending')
+        : undefined
   const statusKey = STATUS_KEYS[status]
   const retryOriginalSession = useCallback(async () => {
     const result = await retrySession()
@@ -322,6 +369,20 @@ const TerminalPtyView = ({
   return (
     <div className="terminal-view flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <p className="sr-only">{statusKey ? t(statusKey) : status}</p>
+      {hasOwner ? (
+        <div className="terminal-process-toolbar">
+          {processNotice ? <span role="status">{processNotice}</span> : null}
+          <button
+            type="button"
+            className="terminal-process-toggle"
+            aria-pressed={collapseProcess}
+            title={t('terminal.processToggleHint')}
+            onClick={() => setCollapseProcess((current) => !current)}
+          >
+            {t('terminal.collapseProcess')}
+          </button>
+        </div>
+      ) : null}
       {readOnly ? (
         <p
           role="status"
@@ -355,6 +416,7 @@ const TerminalPtyView = ({
           connected={connectionStatus === 'connected'}
         />
       ) : null}
+      {grillHandoff ? <GrillHandoffNotice handoff={grillHandoff} /> : null}
       {error ? (
         <p
           role="alert"

@@ -40,6 +40,9 @@ export interface ExecutionPolicyView {
   missing_capabilities: string[]
   warnings: string[]
   unsafe_grant: UnsafeExecutionGrant | null
+  trust_automatic_workers: boolean
+  automatic_worker_trust_configured: boolean
+  automatic_worker: boolean
   checkout_head_sha?: string
   active_policy?: {
     policy_id: string
@@ -60,6 +63,7 @@ export interface ExecutionPolicyUpdate {
   expected_cli_version: string | null
   policy_revision: number
   acknowledge_unsafe?: boolean
+  trust_automatic_workers?: boolean
 }
 
 export interface ExecutionPolicySnapshot extends ExecutionPolicyView {

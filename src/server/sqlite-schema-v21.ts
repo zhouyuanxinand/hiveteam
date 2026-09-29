@@ -1,6 +1,5 @@
-import type { Database } from 'better-sqlite3'
-
 import { BUILTIN_COMMAND_PRESETS } from './command-preset-defaults.js'
+import type { Database } from './sqlite.js'
 
 /** Backfill new built-in CLI presets without replacing user configuration. */
 export const applySchemaVersion21 = (db: Database) => {

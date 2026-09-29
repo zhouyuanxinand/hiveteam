@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import type { ExecutionKind } from '../shared/resource-budget.js'
 import type { ResourceBudgetStore } from './resource-budget-store.js'
+import type { Database } from './sqlite.js'
 
 /** Capture pre-budget executions before other stores replace their unfinished state. */
 export const recoverRuntimeResources = (db: Database, resources: ResourceBudgetStore) =>

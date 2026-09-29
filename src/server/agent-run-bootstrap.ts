@@ -115,11 +115,13 @@ export const buildAgentRunBootstrap = (
     preset,
     sessionStore.getLastSessionId(workspace.id, agentId),
     workspace.path,
-    createSessionCaptureDiscriminator(
-      workspace,
-      agent,
-      capture?.source === 'claude_project_jsonl_dir'
-    )
+    recovery.explicitlyRecovered
+      ? undefined
+      : createSessionCaptureDiscriminator(
+          workspace,
+          agent,
+          capture?.source === 'claude_project_jsonl_dir'
+        )
   )
   const sessionCaptureSnapshot = startConfig.resumedSessionId ? undefined : recovery.snapshot
   return {
@@ -138,6 +140,7 @@ export const buildAgentRunBootstrap = (
 }
 
 export const startAgentRunCapture = ({
+  onCapture,
   agentId,
   sessionCaptureSnapshot,
   sessionStore,
@@ -145,6 +148,7 @@ export const startAgentRunCapture = ({
   workspace,
 }: {
   agentId: string
+  onCapture?: (sessionId: string) => void
   sessionCaptureSnapshot: SessionCaptureSnapshot | undefined
   sessionStore: AgentSessionStorePort
   startConfig: AgentLaunchConfigInput
@@ -158,6 +162,7 @@ export const startAgentRunCapture = ({
     sessionCaptureSnapshot,
     (sessionId) => {
       sessionStore.setLastSessionId(workspace.id, agentId, sessionId)
+      onCapture?.(sessionId)
     },
     null,
     SESSION_CAPTURE_INTERVAL_MS,

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Rebuild the verification CHECK without deleting integration or pull-request evidence. */
 export const applySchemaVersion51 = (db: Database) => {

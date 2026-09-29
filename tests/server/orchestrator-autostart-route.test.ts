@@ -8,6 +8,7 @@ import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
+import { listenOnFetchSafePort } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
 const servers: Array<{ close: () => Promise<void> }> = []
@@ -55,6 +56,11 @@ const waitFor = async (assertion: () => void, timeoutMs = 2000, intervalMs = 25)
   throw lastError
 }
 
+// CLI side effects follow ConPTY's headless negotiation. Keep native readiness
+// separate from the shorter behavioral assertion budget.
+const waitForNativeFile = (path: string) =>
+  waitFor(() => expect(existsSync(path)).toBe(true), 10_000)
+
 const isProcessAlive = (pid: number) => {
   try {
     process.kill(pid, 0)
@@ -72,9 +78,7 @@ const startServer = async (input: { dataDir?: string } = {}) => {
   })
   const app = createApp({ store })
 
-  await new Promise<void>((resolve) => {
-    app.server.listen(0, '127.0.0.1', () => resolve())
-  })
+  await listenOnFetchSafePort(app.server)
 
   servers.push({
     async close() {
@@ -291,6 +295,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     const runIds = new Set(startBodies.map((item) => item.run_id))
     expect(runIds.size).toBe(1)
     let spawnedPid: number | undefined
+    await waitForNativeFile(pidsFile)
     await waitFor(() => {
       expect(existsSync(pidsFile)).toBe(true)
       const pids = readFileSync(pidsFile, 'utf8').trim().split('\n').filter(Boolean)
@@ -354,9 +359,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     tempDirs.push(dataDir)
     const store = createRuntimeStore({ agentManager, dataDir })
     const app = createApp({ store })
-    await new Promise<void>((resolve) => {
-      app.server.listen(0, '127.0.0.1', () => resolve())
-    })
+    await listenOnFetchSafePort(app.server)
     servers.push({
       async close() {
         await store.close()
@@ -421,6 +424,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     const body = (await response.json()) as {
       orchestrator_start: { run_id: string | null }
     }
+    await waitForNativeFile(portFile)
     await waitFor(() => {
       expect(existsSync(portFile)).toBe(true)
       expect(readFileSync(portFile, 'utf8')).toBe(port)
@@ -436,12 +440,20 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     writeNodeCli(
       binDir,
       'codex',
-      ["process.stdout.write('codex orchestrator up\\n')", 'setInterval(() => {}, 60000)'].join(
-        '\n'
-      )
+      [
+        "if (process.argv.includes('--help')) {",
+        "  console.log('Codex CLI\\nUsage: codex [OPTIONS]\\n  --no-daemon  Run without a shared daemon')",
+        '  process.exit(0)',
+        '}',
+        "process.stdout.write('codex orchestrator up\\n')",
+        'setInterval(() => {}, 60000)',
+      ].join('\n')
     )
     setEnv('PATH', `${binDir}${pathDelimiter}${process.env.PATH ?? ''}`)
     const codexHome = mkdtempSync(join(tmpdir(), 'hive-codex-home-'))
+    // Resolve the synthetic CLI directly, like Codex's native executable;
+    // cmd.exe cannot transport its multiline initial prompt unchanged.
+    if (process.platform === 'win32') setEnv('PATHEXT', `.MJS;${process.env.PATHEXT ?? ''}`)
     tempDirs.push(codexHome)
     setEnv('CODEX_HOME', codexHome)
 
@@ -522,6 +534,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     expect(config?.command).toBe('opencode')
     expect(config?.commandPresetId).toBe('opencode')
 
+    await waitForNativeFile(argsFile)
     await waitFor(() => {
       expect(readFileSync(argsFile, 'utf8')).toBe('\n')
     })
@@ -591,6 +604,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
       presetAugmentationDisabled: true,
       sessionIdCapture: expect.objectContaining({ source: 'claude_project_jsonl_dir' }),
     })
+    await waitForNativeFile(shellCommandFile)
     await waitFor(() => {
       expect(readFileSync(shellCommandFile, 'utf8')).toBe(
         'ccs --resume f500de1d-df89-470f-a2ce-e385acffef19 --label "old session"\n'
@@ -665,6 +679,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     )
     expect(startResponse.status).toBe(201)
     const startBody = (await startResponse.json()) as { run_id: string }
+    await waitForNativeFile(shellCommandFile)
     await waitFor(() => {
       expect(readFileSync(shellCommandFile, 'utf8')).toBe(
         'claude --resume f500de1d-df89-470f-a2ce-e385acffef19\n'
@@ -733,6 +748,13 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
       id: string
       orchestrator_start: { ok: boolean; error: string | null; run_id: string | null }
     }
+    // Confirm the actual native exit as well as the immutable HTTP response.
+    await waitFor(() => {
+      expect(store.getLiveRun(body.orchestrator_start.run_id ?? '')).toMatchObject({
+        status: 'error',
+        exitCode: 127,
+      })
+    }, 10_000)
     expect(body.orchestrator_start.ok).toBe(false)
     // Exact-equality assertion so the translation cannot regress to a generic
     // message like `bash failed to start (exit 127)`.
@@ -760,9 +782,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
 
     const store = createRuntimeStore({ agentManager })
     const app = createApp({ store })
-    await new Promise<void>((resolve) => {
-      app.server.listen(0, '127.0.0.1', () => resolve())
-    })
+    await listenOnFetchSafePort(app.server)
     servers.push({
       async close() {
         await store.close()
@@ -856,6 +876,7 @@ describe('POST /api/workspaces autostart_orchestrator', () => {
     expect(store.peekAgentLaunchConfig(workspace.id, orchestratorId)?.command).toBe(
       process.execPath
     )
+    await waitForNativeFile(portFile)
     await waitFor(() => {
       expect(existsSync(portFile)).toBe(true)
       expect(readFileSync(portFile, 'utf8')).toBe(port)

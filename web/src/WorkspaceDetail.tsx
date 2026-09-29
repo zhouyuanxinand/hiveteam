@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
-
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
+import type { AgentInspection } from './activity/activity-attention-api.js'
 import { WorkspaceDeliveryPanel } from './activity/WorkspaceDeliveryPanel.js'
 import type { OrchestratorStartFailure } from './agent-start-error.js'
 import {
@@ -52,6 +52,7 @@ const WorkspacePlanPanel = lazy(() =>
 
 type WorkspaceDetailProps = {
   onOpenSkills?: (() => void) | undefined
+  agentInspection?: AgentInspection | null | undefined
   onCreateWorker: WorkerActions['createWorker']
   onDeleteWorker: (workerId: string) => Promise<void>
   onDeleteWorkspace: (workspace: WorkspaceSummary) => Promise<void>
@@ -73,6 +74,7 @@ type WorkspaceDetailProps = {
 
 export const WorkspaceDetail = ({
   onOpenSkills,
+  agentInspection,
   onCreateWorker,
   onDeleteWorker,
   onDeleteWorkspace,
@@ -135,6 +137,29 @@ export const WorkspaceDetail = ({
   useEffect(() => {
     if (activeWorkerId && !activeWorker) setActiveWorkerId(null)
   }, [activeWorkerId, activeWorker])
+  const inspectedSequence = useRef<AgentInspection | null>(null)
+  useEffect(() => {
+    if (
+      !workspace ||
+      !agentInspection ||
+      agentInspection.workspaceId !== workspace.id ||
+      inspectedSequence.current === agentInspection
+    )
+      return
+    if (agentInspection.agentId === `${workspace.id}:orchestrator`) {
+      const frame = requestAnimationFrame(() => {
+        const terminal = document.getElementById(`terminal-${workspace.id}`)
+        terminal?.scrollIntoView({ block: 'nearest' })
+        terminal?.focus()
+        inspectedSequence.current = agentInspection
+      })
+      return () => cancelAnimationFrame(frame)
+    }
+    if (workers.some((worker) => worker.id === agentInspection.agentId)) {
+      inspectedSequence.current = agentInspection
+      setActiveWorkerId(agentInspection.agentId)
+    }
+  }, [workspace, workers, agentInspection])
   const panelTabs = useTerminalPanelTabs({
     workspaceId: workspace?.id ?? '',
     workers,
@@ -424,6 +449,7 @@ export const WorkspaceDetail = ({
           className="workers-pane-shell relative flex min-w-0 flex-1 flex-col"
         >
           <WorkersPane
+            workspaceId={workspace.id}
             autoResumeBusy={autoResumeBusy}
             autoResumeOnRestart={autoResumeOnRestart}
             onAddWorkerClick={() => setComposerOpen(true)}

@@ -48,6 +48,7 @@ type AppOverlaysProps = {
   onCloseGit: () => void
   onCloseActivity: () => void
   onSelectWorkspace?: (id: string) => void
+  onInspectAgent?: ((workspaceId: string, agentId: string) => void) | undefined
   onCloseSkills: () => void
   onCreateWorkspace: (input: WorkspaceCreateInput) => Promise<unknown> | undefined
   onTryDemo: () => void
@@ -78,6 +79,7 @@ export const AppOverlays = ({
   onCloseGit,
   onCloseActivity,
   onSelectWorkspace,
+  onInspectAgent,
   onCloseSkills,
   onCreateWorkspace,
   onTryDemo,
@@ -127,6 +129,7 @@ export const AppOverlays = ({
     {activityOpen ? (
       <Suspense fallback={null}>
         <ActivityCenterDrawer
+          onInspectAgent={onInspectAgent}
           onClose={onCloseActivity}
           open
           workspaceId={workspaceId ?? ''}

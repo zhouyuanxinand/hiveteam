@@ -519,7 +519,7 @@ export const createTeamSkillRuntime = ({
     if (isClarificationSkill(input.skillName)) {
       throw new TeamSkillRuntimeError(
         'skill_not_allowed',
-        'Delegate the interview with team send "<idle-worker>" "<brief>" --skill "<pack/grill-skill>". The Orchestrator receives only the final report.'
+        'Delegate the interview with team grill "<brief>" --skill "<pack/grill-skill>". Hive reuses a suitable idle member or creates an interviewer using the Orchestrator preset/model; member limits and execution authorization still apply. The Orchestrator receives only the final report.'
       )
     }
     return loadReleaseSkill(input.workspaceId, input.agentId, input.skillName)

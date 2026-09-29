@@ -5,6 +5,27 @@ import { requireUiTokenFromRequest } from './ui-auth-helpers.js'
 export const memoryContextRoutes: RouteDefinition[] = [
   route(
     'GET',
+    '/api/ui/workspaces/:workspaceId/memory/:memoryId/sources',
+    ({ request, response, store, params }) => {
+      requireUiTokenFromRequest(request, store.validateUiToken)
+      const workspaceId = params.workspaceId ?? ''
+      const memoryId = params.memoryId ?? ''
+      response.setHeader('Cache-Control', 'no-store')
+      if (
+        !store.listWorkspaces().some((workspace) => workspace.id === workspaceId) ||
+        !store.memory.get(workspaceId, memoryId)
+      ) {
+        sendJson(response, 404, { error: 'Memory entry not found' })
+        return
+      }
+      sendJson(response, 200, {
+        memory_id: memoryId,
+        sources: store.memory.sources(workspaceId, memoryId),
+      })
+    }
+  ),
+  route(
+    'GET',
     '/api/ui/workspaces/:workspaceId/memory/contexts',
     ({ request, response, store, params }) => {
       requireUiTokenFromRequest(request, store.validateUiToken)

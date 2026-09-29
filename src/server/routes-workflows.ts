@@ -51,6 +51,8 @@ const serializeRun = (run: WorkflowRun) => ({
   name: run.name,
   started_at: run.startedAt,
   status: run.status,
+  recovery_issues: run.recoveryIssues ?? [],
+  needs_attention: run.status === 'interrupted' || !!run.recoveryIssues?.length,
   steps: run.steps.map(serializeStep),
   updated_at: run.updatedAt,
   workflow_id: run.workflowId,

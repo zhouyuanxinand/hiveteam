@@ -67,9 +67,10 @@ test('inherited launcher IPC authenticates HTTP without exposing bootstrap in lo
     expect(output).not.toContain(cookie)
   } finally {
     if (child.exitCode === null) {
-      const exited = once(child, 'exit')
-      child.kill('SIGTERM')
-      await exited
+      const closed = once(child, 'close')
+      child.send({ type: 'hive:shutdown' })
+      const [code, signal] = await closed
+      expect({ code, signal }).toEqual({ code: 0, signal: null })
     }
     rmSync(dataDir, { recursive: true, force: true })
   }

@@ -108,8 +108,9 @@ describe('hive static smoke', () => {
       expect(assetResponse.stdout).toContain('HTTP/1.1 200 OK')
       expect(assetResponse.stdout.toLowerCase()).toContain('content-type: text/javascript')
     } finally {
-      processHandle.kill('SIGTERM')
-      await new Promise<void>((resolve) => processHandle.once('exit', () => resolve()))
+      const closed = new Promise<number | null>((resolve) => processHandle.once('exit', resolve))
+      processHandle.send({ type: 'hive:shutdown' })
+      expect(await closed).toBe(0)
     }
   })
 })

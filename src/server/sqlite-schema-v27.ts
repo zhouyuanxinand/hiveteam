@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Adds persisted workspace language and the explicit manual-stop marker. */
 export const applySchemaVersion27 = (db: Database) => {

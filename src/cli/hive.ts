@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { once } from 'node:events'
-import { realpathSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { existsSync, realpathSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { createAgentManager } from '../server/agent-manager.js'
 import { createApp } from '../server/app.js'
@@ -181,6 +182,7 @@ export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResu
 
           resolve()
         })
+        app.closeConnections()
       })
       await app.store.close()
       app.store.remote.setTunnel(null)
@@ -217,11 +219,35 @@ export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResu
 
 export type { RunHiveCommandResult }
 
+const runSupervisedHive = async (argv: string[]) => {
+  const port = parseHivePort(argv)
+  let root = dirname(fileURLToPath(import.meta.url))
+  while (!existsSync(resolve(root, 'scripts/platform-console.mjs'))) {
+    const parent = dirname(root)
+    if (parent === root) throw new Error('HiveTeam platform launcher was not found')
+    root = parent
+  }
+  const { runPlatformConsole } = await import(
+    pathToFileURL(resolve(root, 'scripts/platform-console.mjs')).href
+  )
+  try {
+    await runPlatformConsole({
+      projectRoot: root,
+      dataDir: resolveDataDir(),
+      runtimePort: port,
+      runtimeEntry: fileURLToPath(import.meta.url),
+    })
+  } catch (error) {
+    throw formatListenError(error, port)
+  }
+}
+
 const isMainModule = process.argv[1]
   ? fileURLToPath(import.meta.url) === realpathSync(process.argv[1])
   : false
 
 if (isMainModule) {
+  const managedRuntime = process.env.HIVE_MANAGED_RUNTIME === '1' && process.connected
   const argv = process.argv.slice(2)
   if (argv[0] === 'data') {
     runHiveDataCommand(argv.slice(1)).catch((error) => {
@@ -246,9 +272,17 @@ if (isMainModule) {
       })
   } else if (handleHiveInfoCommand(argv)) {
     process.exit(0)
+  } else if (!managedRuntime) {
+    runSupervisedHive(argv).catch((error) => {
+      console.error(error instanceof Error ? error.message : error)
+      process.exitCode = 1
+    })
   } else {
     runHiveCommand(argv)
-      .then(({ store, port }) => installUiLauncher(store, port))
+      .then(({ store, port }) => {
+        installUiLauncher(store, port)
+        if (managedRuntime) process.send?.({ type: 'hive:runtime-ready', port })
+      })
       .catch((error) => {
         console.error(error instanceof Error ? error.message : error)
         process.exit(1)

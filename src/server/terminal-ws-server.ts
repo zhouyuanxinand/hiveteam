@@ -1,4 +1,5 @@
-import type { Server } from 'node:http'
+import type { IncomingMessage, Server } from 'node:http'
+import type { Duplex } from 'node:stream'
 
 import { WebSocketServer } from 'ws'
 import { getLocalRequestRejection } from './local-request-guard.js'
@@ -55,7 +56,12 @@ export const createTerminalWebSocketServer = (
     tasksWss.publish(workspaceId, content)
   })
 
-  server.on('upgrade', (request, socket, head) => {
+  let closed = false
+  const handleUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (closed) {
+      rejectUpgrade(socket, '503 Service Unavailable')
+      return
+    }
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     const pathname = url.pathname
     const match = matchTerminalPath(pathname)
@@ -106,18 +112,33 @@ export const createTerminalWebSocketServer = (
       // resize messages need a separately approved capability.
       const initialSize = principal.kind === 'remote_device' ? undefined : getInitialSize(url)
       const coordinated = url.searchParams.get('snapshot') === '1'
-      if (match.channel === 'io') hub.attachIo(match.runId, clientId, ws, initialSize, coordinated)
+      if (match.channel === 'io')
+        hub.attachIo(
+          match.runId,
+          clientId,
+          ws,
+          initialSize,
+          coordinated,
+          String(request.socket.localPort ?? '')
+        )
       else hub.attachControl(match.runId, clientId, ws, initialSize, coordinated)
     })
-  })
+  }
+  server.on('upgrade', handleUpgrade)
 
-  server.on('close', () => {
+  const close = () => {
+    if (closed) return
+    closed = true
+    server.off('upgrade', handleUpgrade)
     disposeTasksListener()
     hub.close()
+    for (const socket of ioWss.clients) socket.terminate()
+    for (const socket of controlWss.clients) socket.terminate()
     ioWss.close()
     controlWss.close()
     tasksWss.close()
-  })
+  }
+  server.once('close', close)
 
-  return { close: () => hub.close(), metrics: () => hub.metrics() }
+  return { close, metrics: () => hub.metrics() }
 }

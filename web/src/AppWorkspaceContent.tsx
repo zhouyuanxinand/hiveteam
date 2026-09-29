@@ -1,4 +1,5 @@
 import type { TeamListItem, WorkspaceSummary } from '../../src/shared/types.js'
+import type { AgentInspection } from './activity/activity-attention-api.js'
 import type { OrchestratorStartFailure } from './agent-start-error.js'
 import type { OrchestratorStartResult, TerminalRunSummary } from './api.js'
 import { DemoWorkspaceView } from './demo/DemoWorkspaceView.js'
@@ -11,6 +12,7 @@ import type { WorkerActions } from './worker/useWorkerActions.js'
 
 type AppWorkspaceContentProps = {
   onOpenSkills?: (() => void) | undefined
+  agentInspection?: AgentInspection | null | undefined
   activeId: string | undefined
   activeWorkspace: WorkspaceSummary | undefined
   bootstrapError: string | null
@@ -34,6 +36,7 @@ type AppWorkspaceContentProps = {
 
 export const AppWorkspaceContent = ({
   onOpenSkills,
+  agentInspection,
   activeId,
   activeWorkspace,
   bootstrapError,
@@ -77,6 +80,7 @@ export const AppWorkspaceContent = ({
         />
       ) : null}
       <WorkspaceDetail
+        agentInspection={agentInspection}
         onOpenSkills={onOpenSkills}
         onCreateWorker={workerActions.createWorker}
         onDeleteWorker={workerActions.deleteWorker}

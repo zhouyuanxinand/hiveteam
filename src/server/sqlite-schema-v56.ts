@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 export const applySchemaVersion56 = (db: Database) => {
   db.exec(`CREATE TABLE IF NOT EXISTS integration_candidates (
     id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,dispatch_id TEXT NOT NULL REFERENCES dispatches(id) ON DELETE CASCADE,

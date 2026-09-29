@@ -114,6 +114,7 @@ export const WorkerModal = ({
                 workspaceId={workspaceId}
                 agentId={worker.id}
                 running={ptyRunning}
+                {...(!ptyRunning && !starting ? { onAuthorized: () => onStart(worker) } : {})}
               />
               <NativeSessionButton
                 workspaceId={workspaceId}

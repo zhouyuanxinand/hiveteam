@@ -1,5 +1,6 @@
 import type { AgentStatus, AgentSummary, WorkerRole, WorkspaceLanguage } from '../shared/types.js'
 import { getDefaultRoleDescription } from './role-templates.js'
+import type { WorkerLifecycleRow } from './worker-lifecycle-store.js'
 
 export interface MessageKindRecord {
   type: 'send' | 'report'
@@ -15,7 +16,7 @@ export interface WorkspaceRow {
   path: string
 }
 
-export interface WorkerRow {
+export interface WorkerRow extends WorkerLifecycleRow {
   avatar: string | null
   id: string
   workspace_id: string

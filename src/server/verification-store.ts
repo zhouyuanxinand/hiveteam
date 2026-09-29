@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { DispatchVerification } from '../shared/verification.js'
+import type { Database } from './sqlite.js'
 
 type VerificationRow = {
   profile_json: string | null

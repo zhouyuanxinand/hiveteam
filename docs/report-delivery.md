@@ -6,6 +6,29 @@ and human acceptance are separate states. An immediate response of
 `delivery_state: "delivering"` with `forwarded: false` is asynchronous, not a
 claim that the model has received the result.
 
+## Runtime scheduling
+
+Committed reports are delivered by the runtime, including after an Orchestrator
+starts again. Opening the browser or running `team list` is not required;
+listing members and delivery status does not send terminal input. New work and
+completed attempts wake the scheduler without waiting for its next periodic
+check. Persisted retry deadlines still apply.
+
+Messages stay ordered per recipient. An active attempt, uncertain receipt, or
+request for manual review blocks further automatic input to that recipient.
+Blocked messages are excluded before the scheduler limits each batch, so a
+large queue in one workspace does not prevent another workspace from making
+progress.
+
+A failure before any input was written can retry with bounded backoff. After
+five unsuccessful attempts, it requires manual recovery. An uncertain write
+is only checked for a receipt; it is not automatically pasted again. Runtime
+shutdown stops scheduling and waits for active attempts to persist their final
+state before closing SQLite. Reopening preserves those states and receipt IDs.
+
+Report delivery does not reopen completed worker responsibilities, change the
+report outcome, or replace human acceptance.
+
 ## Codex acknowledgement
 
 For a Codex Orchestrator, the durable outbox attaches a unique receipt marker.
@@ -50,4 +73,9 @@ duplicate work. Other CLI adapters keep their existing submission behavior.
 slow pastes, ignored Enter, expanded multi-line input, simultaneous reports,
 user edits, interrupted acknowledgement, and permanently unconfirmed input.
 `tests/server/codex-report-journal.test.ts` covers receipt parsing and migration.
+`tests/integration/message-delivery-scheduling.test.ts` checks recipient ordering,
+backoff and blocked queues across real SQLite files.
+`tests/integration/report-delivery-lifecycle.test.ts` covers cross-workspace
+delivery beyond a batch limit, full runtime reopen, and read-only team queries
+with real HTTP and PTYs.
 No real model account or network is required by these tests.

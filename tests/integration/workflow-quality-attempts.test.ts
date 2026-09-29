@@ -49,12 +49,35 @@ const setup = async (steps: unknown[]) => {
   expect(response.status).toBe(201)
   const started = (await response.json()) as { id: string }
   const run = () => f.server.store.workflows.get(f.workspace.id, started.id) as WorkflowRun
+  for (let pass = 0; pass < steps.length; pass += 1) {
+    for (const step of run().steps) {
+      if (!step.dispatchId || step.status !== 'running') continue
+      const dispatch = required(f.server.store.getDispatch(f.workspace.id, step.dispatchId))
+      const accepted = await fetch(`${f.server.baseUrl}/api/team/status`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          project_id: f.workspace.id,
+          from_agent_id: dispatch.toAgentId,
+          token: f.server.store.peekAgentToken(dispatch.toAgentId),
+          dispatch_id: dispatch.id,
+          progress_state: 'accepted',
+          result: 'Accepted for quality coverage',
+        }),
+      })
+      expect(accepted.status).toBe(202)
+    }
+    await f.server.store.workflows.refresh(f.workspace.id, started.id)
+  }
   const report = (id: string) => {
     const step = required(run().steps.find((item) => item.id === id))
     return f.server.store.reportTask(
       f.workspace.id,
-      f.server.store.getWorkspaceSnapshot(f.workspace.id).agents.find((a) => a.name === step.worker)
-        ?.id,
+      required(
+        f.server.store
+          .getWorkspaceSnapshot(f.workspace.id)
+          .agents.find((a) => a.name === step.worker)
+      ).id,
       {
         dispatchId: required(step.dispatchId),
         text: `Done ${id} attempt ${step.attempt}`,
@@ -198,7 +221,7 @@ test('rerun invalidates only A/B, waits for cancellation across restart and reje
   await f.restart()
   f.server.store.workflows.resume(String(new URL(f.server.baseUrl).port))
   expect(run().steps[0]?.rerunPending).toBe(true)
-  const bWorker = f.server.store.getDispatch(f.workspace.id, oldB)?.toAgentId
+  const bWorker = required(f.server.store.getDispatch(f.workspace.id, oldB)).toAgentId
   f.server.store.statusTask(f.workspace.id, bWorker, {
     dispatchId: oldB,
     progressState: 'cancelled',

@@ -1,11 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
-
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
+import Database from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 
 const tempDirs: string[] = []

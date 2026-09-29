@@ -16,6 +16,7 @@ export const sanitizePromptData = (value: string, maxLength = 8_000) =>
 export const wrapUntrustedPromptData = (
   kind:
     | 'dispatch-task'
+    | 'dispatch-message'
     | 'external-goal'
     | 'memory'
     | 'report'

@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { Dices, Store } from 'lucide-react'
+import { RotateCcw, Store } from 'lucide-react'
 import { type FormEvent, useMemo, useState } from 'react'
 
 import type { WorkerRole } from '../../../src/shared/types.js'
@@ -178,7 +178,7 @@ export const AddWorkerDialog = ({
                         onClick={onRandomName}
                         data-testid="random-worker-name"
                       >
-                        <Dices size={12} aria-hidden />
+                        <RotateCcw size={12} aria-hidden />
                         {t('addWorker.random')}
                       </button>
                     </Tooltip>

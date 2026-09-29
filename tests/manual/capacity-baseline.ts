@@ -9,9 +9,13 @@ import { dirname, join, resolve } from 'node:path'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
-import Database from 'better-sqlite3'
 import WebSocket from 'ws'
+import Database from '../../src/server/sqlite.js'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
+
+type CapacityBrowserWindow = typeof window & {
+  perf: { bytes: number; latency: number[]; heap: number | null }
+}
 
 const output = resolve(process.argv[2] ?? '.validation/capacity.json')
 mkdirSync(dirname(output), { recursive: true })
@@ -19,11 +23,9 @@ const duration = Number(process.env.HIVE_PERF_DURATION_MS ?? 2400)
 if (!process.env.HIVE_PLAYWRIGHT_MODULE)
   throw new Error('Set HIVE_PLAYWRIGHT_MODULE to playwright/index.mjs')
 const { chromium } = await import(pathToFileURL(process.env.HIVE_PLAYWRIGHT_MODULE).href)
-if (process.platform === 'win32' && !process.env.HIVE_TEST_PTY_BACKEND)
-  process.env.HIVE_TEST_PTY_BACKEND = 'winpty'
 const browser = await chromium.launch({ headless: true })
 const percentile = (values: number[], p: number) => {
-  const sorted = values.toSorted((a, b) => a - b)
+  const sorted = [...values].sort((a, b) => a - b)
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? null
 }
 const results: unknown[] = []
@@ -36,12 +38,7 @@ const environment = {
   free_memory: freemem(),
   node: process.version,
   fixture: 'capacity-cli-v1',
-  pty_backend:
-    process.platform === 'win32'
-      ? process.env.HIVE_TEST_PTY_BACKEND === 'winpty'
-        ? 'winpty'
-        : 'ConPTY'
-      : 'POSIX',
+  pty_backend: process.platform === 'win32' ? 'ConPTY DLL' : 'POSIX',
   browser: browser.version(),
   commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
   dirty: true,
@@ -98,7 +95,7 @@ try {
         })
         assert.equal(response.status, 201)
         const workspace = (await response.json()) as { id: string }
-        const workers = []
+        const workers: Array<ReturnType<typeof server.store.addWorker>> = []
         for (let i = 0; i < count; i++)
           workers.push(
             server.store.addWorker(workspace.id, {
@@ -156,7 +153,7 @@ try {
           healthyLast = '',
           slowClosed = false
         const viewer = async (id: string, ack: boolean) => {
-          const base = server.baseUrl.replace('http:', 'ws:') + `/ws/terminal/${first.runId}`
+          const base = `${server.baseUrl.replace('http:', 'ws:')}/ws/terminal/${first.runId}`
           const control = new WebSocket(`${base}/control?clientId=${id}`, { headers: { cookie } }),
             io = new WebSocket(`${base}/io?clientId=${id}`, { headers: { cookie } })
           sockets.push(control, io)
@@ -189,16 +186,17 @@ try {
         ])
         await page.goto(server.baseUrl)
         await page.evaluate(
-          ({ base, runId }) => {
+          ({ base, runId }: { base: string; runId: string }) => {
             const id = crypto.randomUUID(),
               control = new WebSocket(`${base}/ws/terminal/${runId}/control?clientId=${id}`),
               io = new WebSocket(`${base}/ws/terminal/${runId}/io?clientId=${id}`)
-            ;(window as any).perf = { bytes: 0, latency: [], heap: 0 }
+            const benchmarkWindow = window as CapacityBrowserWindow
+            benchmarkWindow.perf = { bytes: 0, latency: [], heap: 0 }
             io.onmessage = (event) => {
               const text = String(event.data)
-              ;(window as any).perf.bytes += new TextEncoder().encode(text).length
+              benchmarkWindow.perf.bytes += new TextEncoder().encode(text).length
               for (const match of text.matchAll(/\[perf:(\d+):\d+\]/g))
-                (window as any).perf.latency.push(Date.now() - Number(match[1]))
+                benchmarkWindow.perf.latency.push(Date.now() - Number(match[1]))
               if (control.readyState === 1)
                 control.send(
                   JSON.stringify({
@@ -206,7 +204,7 @@ try {
                     bytes: new TextEncoder().encode(text).length,
                   })
                 )
-              document.title = `Fixture ${(window as any).perf.bytes}`
+              document.title = `Fixture ${benchmarkWindow.perf.bytes}`
             }
           },
           { base: server.baseUrl.replace('http:', 'ws:'), runId: first.runId }
@@ -231,7 +229,7 @@ try {
         const seen = new Set<string>()
         while (performance.now() - start < duration) {
           const t = performance.now()
-          const request = await fetch(
+          const request: Response = await fetch(
             `${server.baseUrl}/api/ui/workspaces/${workspace.id}/delivery`,
             { headers: { cookie } }
           )
@@ -266,8 +264,13 @@ try {
         })
         const recoveryMs = performance.now() - recoveryStart
         const browserMetrics = await page.evaluate(() => ({
-          ...(window as any).perf,
-          heap: (performance as any).memory?.usedJSHeapSize ?? null,
+          ...(window as CapacityBrowserWindow).perf,
+          heap:
+            (
+              window.performance as typeof window.performance & {
+                memory?: { usedJSHeapSize: number }
+              }
+            ).memory?.usedJSHeapSize ?? null,
         }))
         const cpuUsed = process.cpuUsage(cpu)
         lag.disable()
@@ -334,6 +337,3 @@ try {
 } finally {
   await browser.close()
 }
-// All owned PTYs, sockets, runtime and browser have been closed above. node-pty's
-// Windows backend retains native handles in this standalone measurement process.
-process.exit(0)

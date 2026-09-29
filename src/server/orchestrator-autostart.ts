@@ -21,8 +21,10 @@ interface AutostartPort {
 // SETTLE_WAIT_MS: how long we wait before declaring autostart "ok". Must be
 // long enough to observe an early exit when the child shell prints
 // "command not found" then dies with exit 127 (typically <100ms in practice).
-// 800ms balances reliability vs the perceived workspace-create latency cost.
-const SETTLE_WAIT_MS = 800
+// Headless ConPTY can spend about 3.1s negotiating terminal capabilities before
+// the CLI runs. Include that native startup plus the existing 800ms early-exit
+// window on Windows; Unix keeps its original budget. Terminal states exit early.
+const SETTLE_WAIT_MS = process.platform === 'win32' ? 4000 : 800
 const POLL_INTERVAL_MS = 25
 
 // Shells emit exit code 127 when the requested command is not on PATH (POSIX).

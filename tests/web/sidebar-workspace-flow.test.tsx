@@ -252,6 +252,7 @@ describe('Sidebar EmptyState CTA', () => {
 })
 
 describe('workspace sidebar flow', () => {
+  // Two real workspace creations and a PTY start precede the UI assertions.
   test('switching workspace does not mount detached terminal sockets', async () => {
     const alpha = await createWorkspace('Alpha')
     const beta = await createWorkspace('Beta')
@@ -299,7 +300,7 @@ describe('workspace sidebar flow', () => {
     expect(screen.queryByLabelText(/Terminal Alice/)).toBeNull()
     expect(openTerminalSockets()).toHaveLength(0)
     staleAlphaSlot.remove()
-  })
+  }, 15_000)
 
   test('deleting the active workspace shows Confirm, removes it, selects next', async () => {
     const alpha = await createWorkspace('Alpha')

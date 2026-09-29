@@ -57,9 +57,9 @@ const terminateProcessTree = (pid: number) => {
   }
 }
 
-const runPackSmoke = () =>
+const runPackSmoke = (args: string[]) =>
   new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/pack-smoke.mjs'], {
+    const child = spawn(process.execPath, ['scripts/pack-smoke.mjs', ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -145,7 +145,6 @@ describe('npm package tarball', () => {
       expect(paths).toContain('dist/bin/team.cmd')
       expect(paths).toContain('web/dist/index.html')
       expect(paths).toContain('scripts/dev-start.mjs')
-      expect(paths).toContain('scripts/fix-runtime-artifacts.mjs')
       expect(paths).toContain('CHANGELOG.md')
       expect(paths).toContain('LICENSE')
       expect(paths).toContain('README.md')
@@ -164,10 +163,13 @@ describe('npm package tarball', () => {
     PACK_DRY_RUN_TIMEOUT_MS
   )
 
-  test(
-    'published tarball installs and starts the packaged runtime',
-    async () => {
-      await runPackSmoke()
+  test.each([
+    { mode: 'default', args: [] },
+    { mode: 'ignore-scripts', args: ['--ignore-scripts'] },
+  ])(
+    'published tarball installs and starts the packaged runtime ($mode)',
+    async ({ args }) => {
+      await runPackSmoke(args)
     },
     PACK_SMOKE_TIMEOUT_MS + 5_000
   )

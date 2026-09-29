@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import { ConflictError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 export type RoleTemplateType = 'orchestrator' | 'coder' | 'reviewer' | 'tester' | 'custom'
 

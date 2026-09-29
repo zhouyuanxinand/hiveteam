@@ -1,8 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 
 import { getOrchestratorId } from '../../src/server/workspace-store-support.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
