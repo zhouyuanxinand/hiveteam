@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { resolveCodexNativeExecutable } from '../../src/server/codex-native-executable.js'
 import { readExecutionCliIdentity } from '../../src/server/execution-cli-identity.js'
@@ -27,6 +27,7 @@ test('launcher and native upgrades each invalidate the CLI fingerprint even with
       'bin'
     )
     await mkdir(nativeRoot, { recursive: true })
+    await writeFile(join(dirname(dirname(dirname(nativeRoot))), 'package.json'), '{}')
     const native = join(nativeRoot, windows ? 'codex.exe' : 'codex')
     await writeFile(native, 'synthetic immutable native bytes', { mode: 0o700 })
     await writeFile(launcher, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
@@ -88,6 +89,7 @@ test.each(
     )
     await mkdir(join(root, 'bin'), { recursive: true })
     await mkdir(nativeRoot, { recursive: true })
+    await writeFile(join(dirname(dirname(dirname(nativeRoot))), 'package.json'), '{}')
     const native = join(nativeRoot, windows ? 'codex.exe' : 'codex')
     await writeFile(launcher, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
     await writeFile(native, 'synthetic native artifact', { mode: 0o700 })
