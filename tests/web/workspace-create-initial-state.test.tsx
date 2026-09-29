@@ -7,12 +7,17 @@ import { join } from 'node:path'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
+import { readWorkspaceSkillFiles } from '../../src/server/skill-pack-config.js'
 import { App } from '../../web/src/app.js'
+import { seedDefaultSkillPackCache } from '../helpers/default-skill-pack-fixture.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
+
+vi.unmock('../../src/server/default-workspace-skill-pack.js')
 
 let cleanupServer: (() => Promise<void>) | undefined
 let server: Awaited<ReturnType<typeof startTestServer>>
 let createdResponse: unknown
+let createdInput: unknown
 let sandboxRoot = ''
 const nativeFetch = globalThis.fetch
 const tempDirs: string[] = []
@@ -21,6 +26,7 @@ const WORKSPACE_CREATE_TIMEOUT_MS = 30_000
 
 beforeEach(async () => {
   createdResponse = undefined
+  createdInput = undefined
   window.localStorage.setItem('hive.first-run-seen', '1')
   sandboxRoot = mkdtempSync(join(tmpdir(), 'hive-fs-sandbox-'))
   mkdirSync(join(sandboxRoot, 'alpha-project'), { recursive: true })
@@ -31,6 +37,7 @@ beforeEach(async () => {
     pickFolderPath: join(sandboxRoot, 'alpha-project'),
   })
   cleanupServer = server.close
+  await seedDefaultSkillPackCache(server.dataDir, sandboxRoot)
   let cookie = ''
   await nativeFetch(`${server.baseUrl}/api/ui/session`, {
     method: 'POST',
@@ -46,8 +53,10 @@ beforeEach(async () => {
     const headers = new Headers(init?.headers)
     headers.set('cookie', cookie)
     const response = await nativeFetch(url, { ...init, headers })
-    if (new URL(url).pathname === '/api/workspaces' && init?.method === 'POST')
+    if (new URL(url).pathname === '/api/workspaces' && init?.method === 'POST') {
+      createdInput = JSON.parse(String(init.body))
       createdResponse = await response.clone().json()
+    }
     return response
   })
 })
@@ -62,30 +71,76 @@ afterEach(async () => {
 })
 
 describe('workspace create initial state', () => {
-  test('advanced folder browsing creates an offline basic workspace without attempting to launch an agent', async () => {
+  const openCreation = async (entry: string) => {
     render(<App />)
     await screen.findByText('No Workspaces')
     fireEvent.click(screen.getByRole('button', { name: 'New Workspace' }))
-    await screen.findByTestId('confirm-workspace-dialog')
-    fireEvent.click(screen.getByTestId('confirm-workspace-browse-toggle'))
-    fireEvent.click(await screen.findByTestId('fs-entry-alpha-project'))
-    await waitFor(() =>
-      expect(screen.getByTestId('fs-preview-path')).toHaveTextContent('alpha-project')
+    await screen.findByTestId('confirm-workspace-dialog', undefined, {
+      timeout: WORKSPACE_PICKER_TIMEOUT_MS,
+    })
+    if (entry === 'advanced') {
+      fireEvent.click(screen.getByTestId('confirm-workspace-browse-toggle'))
+      fireEvent.click(await screen.findByTestId('fs-entry-alpha-project'))
+      await waitFor(() =>
+        expect(screen.getByTestId('fs-preview-path')).toHaveTextContent('alpha-project')
+      )
+    }
+    return screen.getByTestId(
+      entry === 'advanced' ? 'add-workspace-create' : 'confirm-workspace-create'
     )
-    const create = screen.getByTestId('add-workspace-create')
-    expect(create).toBeEnabled()
+  }
+
+  test.each([
+    'native',
+    'advanced',
+  ])('%s creation binds both default Skill Packs without launching an agent', async (entry) => {
+    const create = await openCreation(entry)
+    await waitFor(() => expect(create).toBeEnabled())
     fireEvent.click(create)
     await waitFor(() =>
       expect(createdResponse).toMatchObject({
         orchestrator_start: { ok: false, error: null, run_id: null },
       })
     )
+    expect(createdInput).toMatchObject({
+      initialization_mode: 'packs',
+      autostart_orchestrator: false,
+    })
     const workspace = server.store.listWorkspaces()[0]
-    expect(workspace).toBeDefined()
     if (!workspace) throw new Error('Workspace was not persisted')
     expect(server.store.listTerminalRuns(workspace.id)).toEqual([])
+    expect(server.store.onboarding.view(workspace.id)?.mode).toBe('packs')
+    const files = await readWorkspaceSkillFiles(workspace.path)
+    expect(files.configuration.packs.map((pack) => pack.name)).toEqual(['code-janitor', 'matt'])
+    const skills = await server.store.skills.listForAgent(
+      workspace.id,
+      `${workspace.id}:orchestrator`
+    )
+    expect(skills.map((skill) => skill.qualifiedName)).toEqual(
+      expect.arrayContaining(['matt/grilling', 'code-janitor/code-janitor'])
+    )
+  }, 45_000)
+
+  test.each([
+    'native',
+    'advanced',
+  ])('%s creation can explicitly skip default packs in basic mode', async (entry) => {
+    const create = await openCreation(entry)
+    const mode = screen.getByRole('combobox', { name: /^Workspace initialization/ })
+    expect(mode).toHaveValue('packs')
+    fireEvent.change(mode, { target: { value: 'basic' } })
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
+    await waitFor(() => expect(createdInput).toMatchObject({ initialization_mode: 'basic' }))
+    await waitFor(() =>
+      expect(createdResponse).toMatchObject({ orchestrator_start: { ok: false } })
+    )
+    const workspace = server.store.listWorkspaces()[0]
+    if (!workspace) throw new Error('Workspace was not persisted')
     expect(server.store.onboarding.view(workspace.id)?.mode).toBe('basic')
-  })
+    expect((await readWorkspaceSkillFiles(workspace.path)).configuration.packs).toEqual([])
+    expect(server.store.listTerminalRuns(workspace.id)).toEqual([])
+  }, 45_000)
 
   test('newly created workspace immediately shows the Linear workspace view with empty drawer', async () => {
     render(<App />)

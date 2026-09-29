@@ -9,6 +9,7 @@ import type {
 import { useI18n } from '../i18n.js'
 import { isRemoteMode } from '../remote/remote-permissions-api.js'
 import { acceptCodeReview, readCodeReview, submitCodeReview } from './code-review-api.js'
+import { TeamReviewRequests } from './TeamReviewRequests.js'
 import './code-review.css'
 
 const staleText = (reason: CodeReviewStaleReason, zh: boolean) =>
@@ -154,6 +155,16 @@ export const CodeReviewPanel = ({
           ? '审查意见与本机接受分别记录。审查通过后，仍需完成验证与集成。'
           : 'Review conclusions and desktop acceptance are recorded separately. Verification and integration remain separate steps.'}
       </p>
+      <TeamReviewRequests
+        key={`${workspaceId}:${dispatchId}`}
+        workspaceId={workspaceId}
+        dispatchId={dispatchId}
+        refreshKey={JSON.stringify([
+          context?.version,
+          context?.is_dirty,
+          context?.unavailable_reason,
+        ])}
+      />
       {error ? (
         <p role="alert" className="dispatch-report-error">
           {error}

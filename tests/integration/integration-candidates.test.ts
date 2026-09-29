@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
 import { runGit } from '../../src/server/git-command.js'
+import Database from '../../src/server/sqlite.js'
 import { commitReviewFixture, createCodeReviewFixture } from '../helpers/code-review-fixture.js'
 
 const required = <T>(value: T | null | undefined): T => {
@@ -187,6 +187,41 @@ test('two workers from one baseline integrate sequentially; the second candidate
       })
     ).status
   ).toBe(200)
+  const integrated = required(
+    f.server.store.candidates.list(f.workspace.id, dispatch.id).find((entry) => entry.id === c.id)
+  )
+  const db = new Database(join(f.dataDir, 'runtime.sqlite'))
+  try {
+    // Candidate completion also writes the source-verification integration marker.
+    // These two durable records represent one integration action, not two durations.
+    expect(
+      db
+        .prepare('SELECT target_sha FROM dispatch_integrations WHERE verification_id=?')
+        .get(integrated.source_verification_id)
+    ).toEqual({ target_sha: integrated.target_sha })
+    const direct = required(
+      db
+        .prepare(`SELECT i.integrated_at-v.accepted_at AS duration
+        FROM dispatch_integrations i JOIN dispatch_verifications v ON v.id=i.verification_id
+        WHERE v.dispatch_id=?`)
+        .get(f.dispatch.id) as { duration: number } | undefined
+    )
+    const candidateDuration = required(integrated.integrated_at) - required(integrated.accepted_at)
+    const statistics = await fetch(
+      `${f.server.baseUrl}/api/ui/workspaces/${f.workspace.id}/collaboration-stats?period=all`,
+      { headers: { cookie: f.cookie } }
+    )
+    expect(statistics.status).toBe(200)
+    expect((await statistics.json()).durations.acceptance_to_integration).toEqual({
+      sample_count: 2,
+      missing_count: 0,
+      mean_ms: (direct.duration + candidateDuration) / 2,
+      p50_ms: Math.min(direct.duration, candidateDuration),
+      p95_ms: Math.max(direct.duration, candidateDuration),
+    })
+  } finally {
+    db.close()
+  }
 }, 150000)
 
 test('an interrupted SQLite completion preserves the installed Git SHA and reconciles after restart', async () => {

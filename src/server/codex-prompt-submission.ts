@@ -23,6 +23,12 @@ const blockingDialog = (screen: string) =>
     screen
   )
 
+export const completeCodexPasteVisible = (content: string, text: string) => {
+  const label = content.split('\n')[0]?.match(/^\s*›\s*\[Pasted Content ([\d,]+) chars\]\s*$/u)
+  if (label) return Number(label[1]?.replaceAll(',', '')) === Array.from(text).length
+  return content.replace(/\s+/gu, '').includes(text.replace(/\s+/gu, ''))
+}
+
 /** Own one paste until its composer clears. A PTY write only queues bytes:
  * Codex can consume the first Enter while still processing a Windows paste.
  * Retry only Enter, only over our visible paste, and stop on any other input.
@@ -33,6 +39,7 @@ export const submitCodexPrompt = async (
   text: string,
   handleBootstrapScreen?: (screen: string) => boolean
 ) => {
+  const pasteText = text.replace(/\r\n?/gu, '\n')
   let inputSequence = manager.getInputSequence(runId)
   let pasted = false
   let submits = 0
@@ -40,10 +47,9 @@ export const submitCodexPrompt = async (
   let lastComposer = ''
   let stableSince = 0
   let flushedAt: number | null = null
-  const prefix = text.trim().slice(0, 80).replace(/\s+/gu, '')
   const deadline = Date.now() + TIMEOUT_MS
   while (Date.now() < deadline) {
-    checkPendingRemoteInput(runId, pasted ? 1 : Buffer.byteLength(text))
+    checkPendingRemoteInput(runId, pasted ? 1 : Buffer.byteLength(pasteText))
     const run = manager.getRun(runId)
     if (run.status !== 'starting' && run.status !== 'running')
       throw new Error('Codex stopped before the startup input was submitted.')
@@ -74,16 +80,16 @@ export const submitCodexPrompt = async (
       if (input.line) {
         if (!emptyComposer(input.line))
           throw new Error('Codex has an existing draft; startup input was not pasted over it.')
-        manager.writeInput(runId, `\u001b[200~${text}\u001b[201~`)
+        manager.writeInput(runId, `\u001b[200~${pasteText}\u001b[201~`)
         inputSequence = manager.getInputSequence(runId)
         pasted = true
       }
     } else if (submits > 0 && emptyComposer(input.line)) {
       return
     } else {
-      const ownsPaste =
-        input.content.replace(/\s+/gu, '').includes(prefix) ||
-        /\[Pasted Content [\d,]+ chars\]/u.test(input.content)
+      // A stable prefix is not receipt of the complete paste: ConPTY can
+      // pause between bursts while only the opening role lines are visible.
+      const ownsPaste = completeCodexPasteVisible(input.content, pasteText)
       if (!ownsPaste) stableSince = 0
       else {
         if (input.content !== lastComposer || stableSince === 0) {
@@ -117,7 +123,9 @@ export const submitCodexPrompt = async (
   }
   throw new Error(
     pasted
-      ? `Codex has not cleared its pasted input after ${submits} Enter attempts; check the terminal before retrying.`
+      ? submits === 0
+        ? 'Codex has not confirmed the complete pasted input; automatic submission stopped.'
+        : `Codex has not cleared its pasted input after ${submits} Enter attempts; check the terminal before retrying.`
       : 'Codex has not displayed an input prompt; check the terminal before retrying.'
   )
 }

@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
 import { createDispatchHealthStore } from '../../src/server/dispatch-health-store.js'
 import { createDispatchLedgerStore } from '../../src/server/dispatch-ledger-store.js'
 import { createMessageDeliveryStore } from '../../src/server/message-delivery-store.js'
 import { createReportOutboxStore } from '../../src/server/report-outbox-store.js'
+import Database from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 
 const databases: Database.Database[] = []

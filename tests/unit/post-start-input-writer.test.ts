@@ -26,6 +26,18 @@ describe('post-start input writer', () => {
     expect(hasInteractivePromptReady('booting only')).toBe(false)
   })
 
+  test('recognizes prompts around DEC cursor controls without removing visible text', () => {
+    expect(hasInteractivePromptReady('\u001b7 \u001b8\u001b7 \u001b8❯ ', 'claude')).toBe(true)
+    expect(hasInteractivePromptReady('\u001b7Ask anything...\u001b8', 'opencode')).toBe(true)
+    expect(hasInteractivePromptReady('\u001b7▣ assistant · model · 123ms\u001b8', 'opencode')).toBe(
+      true
+    )
+    expect(hasInteractivePromptReady('\u001b7\u001b8', 'claude')).toBe(false)
+    expect(
+      hasInteractivePromptReady('\u001b7Access request: press ❯ to continue\u001b8', 'claude')
+    ).toBe(false)
+  })
+
   test('waits for a stable OpenCode completion footer before writing startup input', () => {
     vi.useFakeTimers()
     const manager = {

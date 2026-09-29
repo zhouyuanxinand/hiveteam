@@ -86,27 +86,47 @@ export const codeReviewRoutes: RouteDefinition[] = [
       })
       requireCommandForRole(agent, 'review')
       if (action === 'context')
-        sendJson(response, 200, await store.codeReviews.context(workspaceId, dispatchId))
+        sendJson(
+          response,
+          200,
+          (await store.teamReviews.context(workspaceId, agent.id, dispatchId)) ??
+            (await store.codeReviews.context(workspaceId, dispatchId))
+        )
       else if (action === 'file') {
         if (body.side !== 'source' && body.side !== 'base')
           throw new BadRequestError('side must be source or base')
         sendJson(
           response,
           200,
-          await store.codeReviews.file(
+          (await store.teamReviews.file(
             workspaceId,
+            agent.id,
             dispatchId,
             validateCodeReviewVersion(body.version),
             text(body, 'path'),
             body.side
-          )
+          )) ??
+            (await store.codeReviews.file(
+              workspaceId,
+              dispatchId,
+              validateCodeReviewVersion(body.version),
+              text(body, 'path'),
+              body.side
+            ))
         )
-      } else
+      } else {
+        await store.teamReviews.assertSubmission(
+          workspaceId,
+          agent.id,
+          dispatchId,
+          validateCodeReviewVersion(body.version)
+        )
         sendJson(
           response,
           201,
           await store.codeReviews.submit(workspaceId, dispatchId, agent.id, submission(body))
         )
+      }
     })
   ),
 ]

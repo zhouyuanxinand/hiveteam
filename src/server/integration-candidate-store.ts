@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { IntegrationCandidate } from '../shared/integration-candidate.js'
+import type { Database } from './sqlite.js'
 export const createIntegrationCandidateStore = (db: Database) => {
   const decode = (rows: unknown[]) =>
     (rows as Array<{ snapshot: string }>).map(

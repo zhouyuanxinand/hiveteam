@@ -1,15 +1,15 @@
-import type { Database as SqliteDatabase } from 'better-sqlite3'
-import Database from 'better-sqlite3'
 import { BadRequestError } from './http-errors.js'
+import type { Database as SqliteDatabase } from './sqlite.js'
+import Database from './sqlite.js'
 import { CURRENT_SCHEMA_VERSION, initializeRuntimeDatabase } from './sqlite-schema.js'
 
 // Explicit record catalogue: unknown future tables never enter an export by default.
 const TABLES = new Set(
   `schema_version workspaces workers messages agent_runs agent_sessions agent_session_contexts command_presets role_templates app_state
- dispatches report_outbox dispatch_delivery_failures dispatch_health dispatch_health_events dispatch_timeout_settings dispatch_timeout_events message_deliveries message_delivery_events
+ clarification_requests dispatches dispatch_messages report_outbox dispatch_delivery_failures dispatch_health dispatch_health_events dispatch_timeout_settings dispatch_timeout_events message_deliveries message_delivery_events
  dispatch_code_reviews dispatch_verifications dispatch_integrations dispatch_pull_requests integration_candidates integration_candidate_events dispatch_skill_activations
  execution_policy_events execution_policy_snapshots external_goal_sessions external_goal_events git_snapshots git_workspace_settings
- memory_entries memory_sources memory_injections memory_revisions memory_context_snapshots memory_dream_runs memory_dream_reviews
+ memory_entries memory_sources memory_injections memory_revisions memory_context_snapshots memory_dream_runs memory_dream_reviews memory_dream_generations memory_dream_cursors memory_dream_deleted_sources
  native_session_generations native_session_attempts native_session_context_events remote_audit resource_limits resource_limit_audit
  skill_pack_releases skill_snapshots skill_change_plans skill_change_attempts skill_placements verification_profiles worker_branch_updates worker_worktrees worktree_resources
  workflow_runs workflow_step_attempts workspace_creation_attempts workspace_review_confirmations workspace_review_drafts workspace_review_submissions dispatch_archives data_archive_operations`.split(

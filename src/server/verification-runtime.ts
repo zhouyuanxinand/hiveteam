@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { ResourceReservation } from '../shared/resource-budget.js'
 import type { DispatchVerification, DispatchVerificationView } from '../shared/verification.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
@@ -12,6 +11,7 @@ import {
   ResourceReservationError,
 } from './resource-budget-store.js'
 import { ResourceQueueWaitError, type ResourceStartQueue } from './resource-start-queue.js'
+import type { Database } from './sqlite.js'
 import { createVerificationExecutor } from './verification-executor.js'
 import { createVerificationLogs } from './verification-logs.js'
 import { createVerificationProfiles, legacyVerificationProfile } from './verification-profiles.js'

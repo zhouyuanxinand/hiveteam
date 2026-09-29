@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createApp } from '../../src/server/app.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
+import { listenOnFetchSafePort } from '../helpers/test-server.js'
 
 const tempDirs: string[] = []
 const servers: Array<{ close: () => Promise<void> }> = []
@@ -89,9 +90,7 @@ describe('team runtime flow (unit)', () => {
     })
 
     const app = createApp({ store })
-    await new Promise<void>((resolve) => {
-      app.server.listen(0, '127.0.0.1', () => resolve())
-    })
+    await listenOnFetchSafePort(app.server)
     servers.push({
       close: async () => {
         await store.close()
@@ -184,9 +183,7 @@ describe('team runtime flow (unit)', () => {
     await store.dispatchTask(workspace.id, worker.id, 'Report this task')
 
     const app = createApp({ store })
-    await new Promise<void>((resolve) => {
-      app.server.listen(0, '127.0.0.1', () => resolve())
-    })
+    await listenOnFetchSafePort(app.server)
     servers.push({
       close: async () => {
         await store.close()

@@ -1,7 +1,4 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import type {
   SkillChangeAttemptState,
   SkillChangeOperation,
@@ -10,6 +7,7 @@ import type {
 } from '../shared/skill-packs.js'
 import type { InternalSkillChangePlan, SkillChangeJournal } from './skill-pack-change-types.js'
 import { SkillPackChangeError } from './skill-pack-operation-errors.js'
+import type { Database } from './sqlite.js'
 
 interface PlanRow {
   action: InternalSkillChangePlan['action']

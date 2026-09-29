@@ -9,7 +9,8 @@ export interface CliReadinessProfile {
 export const getCliReadinessProfile = (
   identity: ExecutionCliIdentity
 ): CliReadinessProfile | null =>
-  identity.id === 'codex' && identity.version === 'codex-cli 0.155.1'
+  identity.id === 'codex' &&
+  (identity.version === 'codex-cli 0.155.1' || identity.version === 'codex-cli 0.158.0')
     ? { args: ['login', 'status'], protocol: 'codex-login-status-v1' }
     : null
 

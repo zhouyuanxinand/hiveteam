@@ -9,6 +9,7 @@ import type { LiveAgentRun } from './agent-runtime-types.js'
 import { workerClarificationGuidance } from './clarification-guidance.js'
 import { deliverCodexReport } from './codex-report-delivery.js'
 import { guardDeliveryInput, requireEmptyDeliveryComposer } from './delivery-input-guard.js'
+import { dispatchMessageGuidance } from './dispatch-message-runtime.js'
 import {
   buildWorkerReminderTail,
   getOrchestratorReminderTail,
@@ -107,9 +108,11 @@ export const buildWorkerDispatchPayload = (
   memoryDigest?: string,
   sessionBindingMarker?: string,
   language?: WorkspaceLanguage,
-  skillActivation?: ResolvedSkillActivation
+  skillActivation?: ResolvedSkillActivation,
+  messageProtocolVersion: 0 | 1 = 0
 ): string => {
   const english = language === 'en'
+  const seenFlag = messageProtocolVersion === 1 ? ' --seen-seq <required_seen_seq>' : ''
   const lines: string[] = [
     english
       ? `[Hive system message: dispatch from @${fromAgentName}]`
@@ -122,8 +125,8 @@ export const buildWorkerDispatchPayload = (
     '',
     english ? 'You must follow:' : '你必须遵守：',
     english
-      ? `- After completing, failing, blocking, or partially completing the task, run \`team report "<result>" --dispatch ${dispatchId}\``
-      : `- 完成、失败、阻塞或部分完成后，执行 \`team report "<result>" --dispatch ${dispatchId}\``,
+      ? `- After completing, failing, blocking, or partially completing the task, run \`team report "<result>" --dispatch ${dispatchId}${seenFlag}\``
+      : `- 完成、失败、阻塞或部分完成后，执行 \`team report "<result>" --dispatch ${dispatchId}${seenFlag}\``,
     english
       ? '- Add --outcome success|failed|blocked|partial to declare the result. Include checks performed and remaining risks; success does not imply independent verification.'
       : '- 使用 --outcome success|failed|blocked|partial 声明结果；正文写明已执行的验证和剩余风险。成功汇报不代表已独立验收。',
@@ -131,6 +134,7 @@ export const buildWorkerDispatchPayload = (
     '',
     `dispatch_id: ${dispatchId}`,
   ]
+  if (messageProtocolVersion === 1) lines.push('', dispatchMessageGuidance(dispatchId))
   if (skillActivation) {
     if (isClarificationSkill(skillActivation.skillName))
       lines.push('', workerClarificationGuidance(dispatchId, language ?? 'zh'))
@@ -154,7 +158,7 @@ export const buildWorkerDispatchPayload = (
   // Keep the legacy payload's English reminder when callers omit language;
   // workspace-aware callers pass an explicit language for a fully localized
   // dispatch.
-  lines.push('', buildWorkerReminderTail(dispatchId, language ?? 'en'), '')
+  lines.push('', buildWorkerReminderTail(dispatchId, language ?? 'en', messageProtocolVersion), '')
   if (skillActivation && isClarificationSkill(skillActivation.skillName))
     lines.push(workerClarificationGuidance(dispatchId, language ?? 'zh'))
   return lines.join('\n')
@@ -288,10 +292,13 @@ export const createAgentStdinDispatcher = ({
             runId: run.runId,
             text,
             receipt: input.receipt,
+            ...(input.delivery?.prepared ? { onPrepared: input.delivery.prepared } : {}),
             sessions: sessionStore,
+            allowUnboundSession: input.allowUnboundCodexSession === true,
             ...(input.delivery ? { waitMs: input.delivery.timeoutMs } : {}),
           }).then(() => input.delivery?.nativeReceipt())
         }
+        input.delivery?.prepared?.(text)
         if (input.delivery) {
           const guarded = guardDeliveryInput(agentManager, run.runId, input.delivery)
           return requireEmptyDeliveryComposer(
@@ -315,6 +322,7 @@ export const createAgentStdinDispatcher = ({
       if (!agentManager) {
         return Promise.reject(new PtyInactiveError(`Agent manager is unavailable for: ${agentId}`))
       }
+      input.delivery?.prepared?.(text)
       agentManager.writeInput(run.runId, text)
       return Promise.resolve()
     } catch (error) {
@@ -373,7 +381,8 @@ export const createAgentStdinDispatcher = ({
       text: string,
       language?: WorkspaceLanguage,
       skillActivation?: ResolvedSkillActivation,
-      deliveryOptions?: SystemMessageDeliveryOptions
+      deliveryOptions?: SystemMessageDeliveryOptions,
+      messageProtocolVersion: 0 | 1 = 0
     ) {
       return deliverToActiveAgentRun(
         workspaceId,
@@ -386,9 +395,10 @@ export const createAgentStdinDispatcher = ({
           getDispatchMemoryDigest?.(workspaceId, workerId, text, dispatchId),
           `Hive session binding: workspace_id=${workspaceId}; agent_id=${workerId}`,
           language ?? getWorkspaceLanguage?.(workspaceId),
-          skillActivation
+          skillActivation,
+          messageProtocolVersion
         ),
-        { ...deliveryOptions, requireActiveRun: true }
+        { ...deliveryOptions, requireActiveRun: true, allowUnboundCodexSession: true }
       )
     },
     writeCancelPrompt(

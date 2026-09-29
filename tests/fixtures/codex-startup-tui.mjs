@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { renameSync, writeFileSync } from 'node:fs'
 
 const [journal, mode = 'collapsed'] = process.argv.slice(2)
 const state = {
@@ -12,11 +12,18 @@ const state = {
   replies: [],
   prematurePastes: 0,
 }
-const save = () => writeFileSync(journal, JSON.stringify(state))
+const save = () => {
+  writeFileSync(`${journal}.tmp`, JSON.stringify(state))
+  renameSync(`${journal}.tmp`, journal)
+}
+const pasteLabel = (text) =>
+  `[Pasted Content ${Array.from(text).length.toLocaleString('en-US')} chars]`
 let composerVisible = false
 const prompt = (text = 'Ask Codex to do anything') => {
   composerVisible = true
-  if (mode === 'resized') {
+  if (mode.startsWith('cursor-addressed')) {
+    process.stdout.write(`\x1b[2J\x1b[1;1HOpenAI Codex\x1b[4;1H› ${text}\x1b[6;1H? for shortcuts`)
+  } else if (mode === 'resized') {
     process.stdout.write(
       `\x1b[?1049h\x1b[2J\x1b[H› ${text}\r\n${'\r\n'.repeat(Math.max(0, process.stdout.rows - 4))}`
     )
@@ -30,14 +37,19 @@ let ready = false
 let ignored = false
 let onboarding = mode === 'trust' ? 'directory' : 'done'
 process.stdout.on('resize', () => {
-  if (mode === 'resized' && ready) prompt(`[Pasted Content ${pending.length} chars]`)
+  if (mode === 'resized' && ready) prompt(pasteLabel(pending))
 })
 save()
 if (onboarding === 'directory')
   process.stdout.write(
     'Do you trust the contents of this directory?\r\nPress enter to continue\r\n'
   )
-else prompt(mode === 'existing-draft' ? 'Unsubmitted user draft' : undefined)
+else
+  prompt(
+    mode === 'existing-draft' || mode === 'cursor-addressed-draft'
+      ? 'Unsubmitted user draft'
+      : undefined
+  )
 if (mode === 'delayed-composer') {
   // Native Codex can briefly draw a prompt, switch to onboarding/loading,
   // then paint its actual composer after Hive has seen that first prompt.
@@ -87,20 +99,32 @@ process.stdin.on('data', (chunk) => {
     input = input.slice(end + 6)
     state.pastes += 1
     save()
+    const completePaste = pending
     // A real interactive process whose composer accepts a paste asynchronously.
     // Its first Enter can still be consumed by paste-burst handling.
     setTimeout(() => {
       ready = true
+      if (mode === 'partial-expanded' || mode === 'partial-count')
+        pending = completePaste.slice(0, 200)
+      if (mode === 'near-complete')
+        pending = Array.from(completePaste)
+          .slice(0, -(completePaste.split('\n').length - 1))
+          .join('')
       prompt(
-        mode === 'expanded'
-          ? pending.slice(0, 200).replaceAll('\n', '\r\n')
-          : `[Pasted Content ${pending.length} chars]`
+        mode === 'expanded' || mode === 'partial-expanded'
+          ? pending.replaceAll('\n', '\r\n')
+          : pasteLabel(pending)
       )
       if (mode === 'blocked')
         process.stdout.write('\r\nPress enter to confirm or esc to cancel\r\n')
       state.ready = true
       save()
     }, 1800)
+    if (['partial-expanded', 'partial-count', 'near-complete'].includes(mode))
+      setTimeout(() => {
+        pending = completePaste
+        prompt(pasteLabel(pending))
+      }, 4500)
   }
   if (input.includes('USER_DRAFT')) {
     state.draft += 'USER_DRAFT'

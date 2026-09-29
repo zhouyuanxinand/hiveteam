@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { CreateWorkspaceResponse } from '../../web/src/api.js'
 import { I18nProvider } from '../../web/src/i18n.js'
 import { executionCapabilityMessage } from '../../web/src/security/execution-policy-labels.js'
+import { useTerminalRuns } from '../../web/src/terminal/useTerminalRuns.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
 import { useWorkspaceCreate } from '../../web/src/useWorkspaceCreate.js'
 import { OrchestratorPane } from '../../web/src/worker/OrchestratorPane.js'
@@ -32,9 +33,10 @@ const Harness = ({
   const creation = useWorkspaceCreate({
     onWorkspaceCreated: (workspace) => setWorkspaceId(workspace.id),
   })
+  const terminalRuns = useTerminalRuns(workspaceId || null)
   const orchestrator = useOrchestratorPaneState({
     workspaceId,
-    terminalRuns: [],
+    terminalRuns,
     autostartError: creation.orchestratorAutostartErrors[workspaceId] ?? null,
     onClearAutostartError: () =>
       creation.recordOrchestratorResult(workspaceId, { ok: true, error: null, run_id: null }),
@@ -112,7 +114,7 @@ test('a real policy-denied orchestrator launch presents missing capabilities and
       (await server.store.executionPolicies.preview(workspace.id, agentId)).unsafe_grant
     ).toBeNull()
     expect(server.store.listAgentRuns(agentId)).toEqual([])
-    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /I trust this CLI/ }))
     fireEvent.click(authorize)
     await waitFor(() => expect(server.store.listAgentRuns(agentId)).toHaveLength(1), {
       timeout: 8000,
@@ -123,8 +125,10 @@ test('a real policy-denied orchestrator launch presents missing capabilities and
       () => expect(server.store.getLiveRun(run.runId).output).toContain('POLICY_RECOVERY_READY'),
       { timeout: 8000 }
     )
+    await waitFor(() =>
+      expect(document.getElementById(`orch-pty-${run.runId}`)).toBeInTheDocument()
+    )
     expect(screen.queryByTestId('orchestrator-failed-body')).toBeNull()
-    expect(document.getElementById(`orch-pty-${run.runId}`)).toBeInTheDocument()
     expect(
       (await server.store.executionPolicies.preview(workspace.id, agentId)).active_policy
         ?.enforcement

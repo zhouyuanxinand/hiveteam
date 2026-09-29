@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test, vi } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

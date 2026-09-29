@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import Database from 'better-sqlite3'
+import { pathToFileURL } from 'node:url'
 import { afterEach, expect, test } from 'vitest'
 import { createAgentManager } from '../../src/server/agent-manager.js'
 import { createAgentSessionStore } from '../../src/server/agent-session-store.js'
+import { codexMessageHash } from '../../src/server/codex-message-wire.js'
 import { deliverCodexReport } from '../../src/server/codex-report-delivery.js'
 import { createReportOutboxStore } from '../../src/server/report-outbox-store.js'
+import Database from '../../src/server/sqlite.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
+import { writeCodexCli } from '../helpers/codex-cli.js'
 
 const cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -28,6 +31,8 @@ const setup = async (ignoredEnters = 1, display = 'collapsed', workerTarget = fa
   const workspacePath = join(dir, 'workspace')
   const sessions = join(dir, 'codex', 'sessions')
   mkdirSync(workspacePath)
+  const binDir = join(dir, 'bin')
+  mkdirSync(binDir)
   mkdirSync(sessions, { recursive: true })
   const sessionId = randomUUID()
   const journal = join(sessions, `rollout-test-${sessionId}.jsonl`)
@@ -44,23 +49,20 @@ const setup = async (ignoredEnters = 1, display = 'collapsed', workerTarget = fa
   const worker = store.addWorker(workspace.id, { name: 'Reviewer', role: 'reviewer' })
   const target = workerTarget ? worker.id : orchestratorId
   store.configureAgentLaunch(workspace.id, target, {
-    command: process.execPath,
-    args: [
-      resolve('tests/fixtures/codex-report-tui.mjs'),
-      journal,
-      sessionId,
-      '1600',
-      String(ignoredEnters),
-      display,
-    ],
+    command: writeCodexCli(
+      binDir,
+      `await import(${JSON.stringify(pathToFileURL(resolve('tests/fixtures/codex-report-tui.mjs')).href)})`
+    ),
+    args: [journal, sessionId, '1600', String(ignoredEnters), display],
     interactiveCommand: 'codex',
     sessionIdCapture: { source: 'codex_session_jsonl_dir', pattern: `${sessions}/**/*.jsonl` },
   })
   const runId = (await store.startAgent(workspace.id, target, { hivePort: '4010' })).runId
   const currentRunId = runId
-  await waitFor(() =>
-    Boolean(db.prepare('SELECT 1 FROM agent_sessions WHERE agent_id = ?').get(target))
-  )
+  if (display !== 'delayed-session')
+    await waitFor(() =>
+      Boolean(db.prepare('SELECT 1 FROM agent_sessions WHERE agent_id = ?').get(target))
+    )
   await waitFor(() =>
     manager
       .getRun(currentRunId)
@@ -70,6 +72,7 @@ const setup = async (ignoredEnters = 1, display = 'collapsed', workerTarget = fa
     db,
     dir,
     journal,
+    sessionId,
     manager,
     orchestratorId,
     runId: currentRunId,
@@ -79,9 +82,125 @@ const setup = async (ignoredEnters = 1, display = 'collapsed', workerTarget = fa
   }
 }
 
+test('the first worker dispatch creates and binds a session only after native acceptance', async () => {
+  const f = await setup(1, 'delayed-session', true)
+  expect(existsSync(f.journal)).toBe(false)
+  const dispatch = await f.store.dispatchTask(f.workspace.id, f.worker.id, 'FIRST_SESSION_DISPATCH')
+  await waitFor(
+    () => f.store.dispatchDelivery.records.get(dispatch.id)?.state === 'confirmed',
+    9000
+  )
+  expect(
+    f.db.prepare('SELECT last_session_id FROM agent_sessions WHERE agent_id=?').get(f.worker.id)
+  ).toEqual({ last_session_id: f.sessionId })
+  expect(f.store.dispatchDelivery.records.get(dispatch.id)).toMatchObject({
+    state: 'confirmed',
+    evidence: 'native_receipt',
+    session_id: f.sessionId,
+    attempt: 1,
+  })
+  const journal = readFileSync(f.journal, 'utf8')
+  expect(journal).toContain('FIRST_SESSION_DISPATCH')
+  expect(journal).toContain(
+    `Hive session binding: workspace_id=${f.workspace.id}; agent_id=${f.worker.id}`
+  )
+  expect(journal).toContain(`[Hive report receipt: ${dispatch.id}]`)
+  expect(f.manager.getRun(f.runId).output).not.toContain('PASTES=2')
+  const events = f.store.dispatchDelivery.records.events(dispatch.id) as Array<{ event: string }>
+  expect(events.findIndex((event) => event.event === 'checkpoint')).toBeLessThan(
+    events.findIndex((event) => event.event === 'write_started')
+  )
+}, 25_000)
+
+test('an unbound first dispatch preserves a user edit and never pastes the uncertain task again', async () => {
+  const f = await setup(100, 'delayed-session', true)
+  const dispatch = await f.store.dispatchTask(f.workspace.id, f.worker.id, 'PRESERVE_FIRST_DRAFT')
+  await waitFor(() => f.manager.getRun(f.runId).output.includes('PASTES=1'))
+  const checkpoint = JSON.parse(
+    f.store.dispatchDelivery.records.get(dispatch.id)?.checkpoint ?? '{}'
+  )
+  expect(checkpoint).toMatchObject({ sessionId: null, sessionFile: null, submitAttempts: 0 })
+  f.manager.writeInput(f.runId, 'user draft')
+  const sequence = f.manager.getInputSequence(f.runId)
+  await waitFor(() => f.store.dispatchDelivery.records.get(dispatch.id)?.state === 'unknown')
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+  expect(f.manager.getInputSequence(f.runId)).toBe(sequence)
+  expect(existsSync(f.journal)).toBe(false)
+  expect(f.manager.getRun(f.runId).output).not.toContain('PASTES=2')
+  expect(f.store.getDispatch(f.workspace.id, dispatch.id)?.status).not.toBe('submitted')
+}, 20_000)
+
+test('an unbound checkpoint recovers its receipt after reopen without accepting another member session', async () => {
+  const f = await setup(1, 'delayed-session', true)
+  const dispatch = await f.store.dispatchTask(f.workspace.id, f.worker.id, 'RECOVER_FIRST_RECEIPT')
+  await waitFor(() => f.store.dispatchDelivery.records.get(dispatch.id)?.state === 'confirmed')
+  const record = f.store.dispatchDelivery.records.get(dispatch.id)
+  const checkpoint = JSON.parse(record?.checkpoint ?? '{}')
+  await f.store.close()
+  f.db
+    .prepare(
+      "UPDATE message_deliveries SET state='attempting', evidence='none',confirmed_at=NULL,session_id=NULL,checkpoint=? WHERE id=?"
+    )
+    .run(
+      JSON.stringify({ ...checkpoint, sessionId: null, sessionFile: null, offset: 0 }),
+      dispatch.id
+    )
+  const otherSession = randomUUID()
+  const otherFile = join(f.dir, 'codex', 'sessions', `rollout-other-${otherSession}.jsonl`)
+  const unrelatedJournal =
+    [
+      { type: 'session_meta', payload: { id: otherSession, cwd: f.workspace.path } },
+      {
+        type: 'response_item',
+        payload: {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: `Hive session binding: workspace_id=${f.workspace.id}; agent_id=another-member\n[Hive report receipt: ${dispatch.id}]`,
+            },
+          ],
+        },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n') + '\n'
+  writeFileSync(otherFile, unrelatedJournal)
+  f.db
+    .prepare('UPDATE agent_sessions SET last_session_id=? WHERE agent_id=?')
+    .run(otherSession, f.worker.id)
+  const journalBefore = readFileSync(f.journal, 'utf8')
+  const recovered = createRuntimeStore({ agentManager: createAgentManager(), dataDir: f.dir })
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(recovered.dispatchDelivery.records.get(dispatch.id)?.state).toBe('unknown')
+    // A captured conversation carrying the right binding but no receipt must
+    // not poison the reader cache when capture later resolves another ID.
+    const bindingOnlyJournal = unrelatedJournal
+      .replace('agent_id=another-member', `agent_id=${f.worker.id}`)
+      .replace(`[Hive report receipt: ${dispatch.id}]`, 'No delivery receipt in this session')
+    writeFileSync(otherFile, bindingOnlyJournal)
+    expect(recovered.dispatchDelivery.recheck(dispatch.id)).toBe(false)
+    f.db
+      .prepare('UPDATE agent_sessions SET last_session_id=? WHERE agent_id=?')
+      .run(f.sessionId, f.worker.id)
+    await waitFor(() => recovered.dispatchDelivery.records.get(dispatch.id)?.state === 'confirmed')
+    expect(recovered.dispatchDelivery.records.get(dispatch.id)).toMatchObject({
+      evidence: 'native_receipt',
+      session_id: f.sessionId,
+      attempt: 1,
+    })
+    expect(readFileSync(f.journal, 'utf8')).toBe(journalBefore)
+    expect(readFileSync(otherFile, 'utf8')).toBe(bindingOnlyJournal)
+  } finally {
+    await recovered.close()
+  }
+}, 30_000)
+
 test.each([
   'collapsed',
-  'expanded',
+  'mixed',
+  'mixed-multiline',
 ])('a slow %s Codex paste and an ignored Enter cannot falsely acknowledge a worker report', async (display) => {
   const { db, journal, manager, runId, store, worker, workspace } = await setup(1, display)
   await store.dispatchTask(workspace.id, worker.id, 'Review the document')
@@ -95,7 +214,58 @@ test.each([
   expect(readFileSync(journal, 'utf8')).toContain('Document reviewed.')
   expect(manager.getRun(runId).output).toContain('APPLICATION_ACCEPTED')
   expect(manager.getRun(runId).output).not.toContain('PASTES=2')
+  const report = readFileSync(journal, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
+    .find((record) => record.payload?.content?.[0]?.text?.includes('Document reviewed.'))
+  const text = report.payload.content[0].text as string
+  expect(text).toContain('[Hive report receipt:')
+  expect(
+    db
+      .prepare(`SELECT utf8_bytes FROM delivery_payload_measurements p
+    JOIN message_deliveries m ON m.id=p.delivery_id WHERE m.kind='report'`)
+      .all()
+  ).toEqual([{ utf8_bytes: Buffer.byteLength(text, 'utf8') }])
 }, 20_000)
+
+test.skipIf(process.platform !== 'win32')(
+  'the complete Windows wire is preserved and its matching marker cannot hide corrupted text',
+  async () => {
+    const f = await setup(0, 'corrupt-receipt', true)
+    const dispatch = await f.store.dispatchTask(
+      f.workspace.id,
+      f.worker.id,
+      'UNCHANGED 中文\n  second line 🐝'
+    )
+    await waitFor(() => f.manager.getRun(f.runId).output.includes('APPLICATION_ACCEPTED'))
+    await waitFor(
+      () => f.store.dispatchDelivery.records.get(dispatch.id)?.state === 'unknown',
+      18_000
+    )
+    const record = f.store.dispatchDelivery.records.get(dispatch.id)
+    const checkpoint = JSON.parse(record?.checkpoint ?? '{}')
+    expect(checkpoint).toMatchObject({
+      wireFormat: 'json-string-v1',
+      wireSha256: expect.stringMatching(/^[a-f\d]{64}$/u),
+    })
+    const messages = readFileSync(f.journal, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .filter((item) => item.type === 'response_item' && item.payload?.role === 'user')
+      .map((item) => item.payload.content[0].text as string)
+    const received = messages.find((text) => text.includes(`[Hive report receipt: ${dispatch.id}]`))
+    expect(received).toContain('CHANGED 中文\\n  second line 🐝')
+    expect(received).not.toContain('\n')
+    expect(codexMessageHash(received ?? '')).not.toBe(checkpoint.wireSha256)
+    expect(f.store.dispatchDelivery.recheck(dispatch.id)).toBe(false)
+    expect(record?.evidence).toBe('none')
+    expect(f.store.getDispatch(f.workspace.id, dispatch.id)?.status).toBe('failed')
+    expect(f.manager.getRun(f.runId).output).not.toContain('PASTES=2')
+  },
+  25_000
+)
 
 test('simultaneous worker reports reach distinct user messages exactly once', async () => {
   const { db, journal, manager, runId, store, worker, workspace } = await setup()
@@ -207,7 +377,7 @@ test('a persisted acceptance receipt repairs an interrupted acknowledgement with
 }, 20_000)
 
 test('a terminal with no acceptance keeps its report and diagnostic durable instead of reporting success', async () => {
-  const { db, manager, orchestratorId, runId, store, worker, workspace } = await setup(100)
+  const { db, journal, manager, orchestratorId, runId, store, worker, workspace } = await setup(100)
   await store.dispatchTask(workspace.id, worker.id, 'Review the document')
   store.reportTask(workspace.id, worker.id, { requireActiveRun: true, text: 'Document reviewed.' })
   const outbox = createReportOutboxStore(db)
@@ -220,7 +390,12 @@ test('a terminal with no acceptance keeps its report and diagnostic durable inst
     deliveredAt: null,
     checkpoint: { pasteConfirmed: true, submitAttempts: 3 },
   })
-  expect(entry?.lastDeliveryError).toContain('not confirmed')
+  // Both the input guard and the Codex receipt loop have a 15-second deadline.
+  // Either may expire first; neither is evidence of application acceptance.
+  expect(entry?.lastDeliveryError).toMatch(
+    /not confirmed receipt of the message|^Delivery confirmation deadline reached$/u
+  )
+  expect(readFileSync(journal, 'utf8')).not.toContain('Document reviewed.')
   const before = manager.getInputSequence(runId)
   if (!entry?.checkpoint) throw new Error('Expected a durable paste checkpoint')
   await expect(

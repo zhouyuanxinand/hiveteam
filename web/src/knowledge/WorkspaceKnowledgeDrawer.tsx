@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import type { MemorySourceReference } from '../../../src/shared/memory-provenance.js'
 import type { TeamMemoryProcedureRefType } from '../../../src/shared/team-memory.js'
 import {
   createTeamMemory,
@@ -35,8 +36,10 @@ import {
 import { type TranslationKey, useI18n } from '../i18n.js'
 import { DataRecoveryPanel } from './DataRecoveryPanel.js'
 import { MemoryContextPanel } from './MemoryContextPanel.js'
+import { MemorySourceFields } from './MemorySourceFields.js'
+import { MemorySources } from './MemorySources.js'
 import { TeamMemoryDreamPanel } from './TeamMemoryDreamPanel.js'
-import { WorkflowRunSteps } from './WorkflowRunSteps.js'
+import { WorkflowRunSummary } from './WorkflowRunSummary.js'
 
 export type KnowledgeTab = 'memory' | 'workflows'
 
@@ -82,7 +85,7 @@ export const WorkspaceKnowledgeDrawer = ({
 }: WorkspaceKnowledgeDrawerProps) => {
   const { language, t } = useI18n()
   const [tab, setTab] = useState<KnowledgeTab>(initialTab)
-  const [memoryStatus, setMemoryStatus] = useState<'active' | 'archived'>('active')
+  const [memoryStatus, setMemoryStatus] = useState<'active' | 'candidate' | 'archived'>('active')
   const [memories, setMemories] = useState<TeamMemoryEntry[]>([])
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([])
   const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[]>([])
@@ -102,6 +105,7 @@ export const WorkspaceKnowledgeDrawer = ({
     useState<TeamMemoryProcedureRefType>('workflow')
   const [newScope, setNewScope] = useState<TeamMemoryScope>('workspace')
   const [newTags, setNewTags] = useState('')
+  const [newSourceRef, setNewSourceRef] = useState<MemorySourceReference>()
   const [createBusy, setCreateBusy] = useState(false)
   const [dreamOpen, setDreamOpen] = useState(false)
   const [memoryRefresh, setMemoryRefresh] = useState(0)
@@ -150,7 +154,9 @@ export const WorkspaceKnowledgeDrawer = ({
     }
   }, [memoryRefresh, memoryStatus, open, tab, workspaceId])
 
-  const hasRunningWorkflow = workflowRuns.some((run) => run.status === 'running')
+  const hasRunningWorkflow = workflowRuns.some(
+    (run) => run.status === 'running' || run.status === 'interrupted'
+  )
 
   useEffect(() => {
     if (!open || tab !== 'workflows' || !hasRunningWorkflow) return
@@ -234,6 +240,7 @@ export const WorkspaceKnowledgeDrawer = ({
     try {
       const created = await createTeamMemory(workspaceId, {
         body: newBody,
+        ...(newSourceRef ? { sourceRef: newSourceRef } : {}),
         kind: newKind,
         procedureRef:
           newKind === 'procedure_ref'
@@ -249,7 +256,9 @@ export const WorkspaceKnowledgeDrawer = ({
           .map((tag) => tag.trim())
           .filter(Boolean),
       })
-      if (memoryStatus === 'active') setMemories((current) => [created, ...current])
+      if (memoryStatus === created.status) setMemories((current) => [created, ...current])
+      if (created.status === 'candidate') setMemoryStatus('candidate')
+      setNewSourceRef(undefined)
       setNewBody('')
       setNewProcedureRefId('')
       setNewProcedureRefTitle('')
@@ -400,6 +409,15 @@ export const WorkspaceKnowledgeDrawer = ({
                 <button
                   type="button"
                   role="tab"
+                  aria-selected={memoryStatus === 'candidate'}
+                  data-active={memoryStatus === 'candidate' ? 'true' : undefined}
+                  onClick={() => setMemoryStatus('candidate')}
+                >
+                  {language === 'zh' ? '候选' : 'Candidates'}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
                   aria-selected={memoryStatus === 'archived'}
                   data-active={memoryStatus === 'archived' ? 'true' : undefined}
                   onClick={() => setMemoryStatus('archived')}
@@ -447,6 +465,7 @@ export const WorkspaceKnowledgeDrawer = ({
                 <MemoryContextPanel key={`context:${workspaceId}`} workspaceId={workspaceId} />
                 <DataRecoveryPanel key={`recovery:${workspaceId}`} workspaceId={workspaceId} />
                 <TeamMemoryDreamPanel
+                  key={workspaceId}
                   dreamEnabled={dreamEnabled}
                   onDreamEnabledChange={handleDreamEnabledChange}
                   onMemoryChanged={() => setMemoryRefresh((value) => value + 1)}
@@ -489,6 +508,7 @@ export const WorkspaceKnowledgeDrawer = ({
                         aria-label={t('memory.tagsAria')}
                       />
                     </div>
+                    <MemorySourceFields value={newSourceRef} onChange={setNewSourceRef} />
                     {newKind === 'procedure_ref' ? (
                       <fieldset className="workspace-memory-procedure-ref">
                         <legend>{t('memory.procedureRef.title')}</legend>
@@ -548,11 +568,22 @@ export const WorkspaceKnowledgeDrawer = ({
                         disabled={
                           createBusy ||
                           !newBody.trim() ||
+                          (newSourceRef !== undefined &&
+                            (!newSourceRef.source_id.trim() ||
+                              (newSourceRef.type === 'dispatch_message' &&
+                                (!Number.isSafeInteger(newSourceRef.source_sequence) ||
+                                  newSourceRef.source_sequence < 1)))) ||
                           (newKind === 'procedure_ref' && !newProcedureRefId.trim())
                         }
                         onClick={() => void handleCreate()}
                       >
-                        {createBusy ? t('common.saving') : t('common.save')}
+                        {createBusy
+                          ? t('common.saving')
+                          : newSourceRef
+                            ? language === 'zh'
+                              ? '保存为候选'
+                              : 'Save candidate'
+                            : t('common.save')}
                       </button>
                     </div>
                   </section>
@@ -598,12 +629,40 @@ export const WorkspaceKnowledgeDrawer = ({
                             ))}
                           </div>
                         ) : null}
+                        <MemorySources
+                          key={`${workspaceId}:${entry.id}:${entry.updatedAt}`}
+                          workspaceId={workspaceId}
+                          memoryId={entry.id}
+                        />
                         <div className="workspace-memory-card__footer">
                           <time dateTime={new Date(entry.updatedAt).toISOString()}>
                             {dateFormatter.format(entry.updatedAt)}
                           </time>
                           <div className="workspace-memory-card__actions">
-                            {memoryStatus === 'active' ? (
+                            {memoryStatus === 'candidate' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="icon-btn icon-btn--primary"
+                                  disabled={editingId === entry.id}
+                                  onClick={() =>
+                                    void handleMemoryUpdate(entry, { status: 'active' })
+                                  }
+                                >
+                                  {language === 'zh' ? '审核启用' : 'Approve'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  disabled={editingId === entry.id}
+                                  onClick={() =>
+                                    void handleMemoryUpdate(entry, { status: 'rejected' })
+                                  }
+                                >
+                                  {language === 'zh' ? '拒绝' : 'Reject'}
+                                </button>
+                              </>
+                            ) : memoryStatus === 'active' ? (
                               <>
                                 <MemoryAction
                                   label={entry.pinned ? t('memory.unpin') : t('memory.pin')}
@@ -672,58 +731,6 @@ export const WorkspaceKnowledgeDrawer = ({
                             : t('workflows.invalid', { message: workflow.validationError })}
                         </p>
                       ) : null}
-                      {(() => {
-                        const latestRun = latestRunForWorkflow(workflow.id)
-                        if (!latestRun) return null
-                        const completedSteps = latestRun.steps.filter(
-                          (step) => step.status === 'completed'
-                        ).length
-                        return (
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ter">
-                            <span>{t(`workflows.${latestRun.status}` as TranslationKey)}</span>
-                            <span>
-                              {t('workflows.steps', {
-                                completed: completedSteps,
-                                total: latestRun.steps.length,
-                              })}
-                            </span>
-                            {latestRun.error ? <span>{latestRun.error}</span> : null}
-                            <WorkflowRunSteps
-                              run={latestRun}
-                              onChanged={(updated) =>
-                                setWorkflowRuns((runs) =>
-                                  runs.map((run) => (run.id === updated.id ? updated : run))
-                                )
-                              }
-                            />
-                            {latestRun.steps
-                              .filter(
-                                (step) =>
-                                  step.status === 'blocked' || step.status === 'awaiting_review'
-                              )
-                              .map((step) => (
-                                <span key={step.id}>
-                                  {step.worker}:{' '}
-                                  {t(
-                                    step.status === 'blocked'
-                                      ? 'delivery.step.blocked'
-                                      : 'delivery.step.awaiting_review'
-                                  )}
-                                </span>
-                              ))}
-                            {latestRun.status === 'running' ? (
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                disabled={workflowBusyId === workflow.id}
-                                onClick={() => void handleStopWorkflow(latestRun)}
-                              >
-                                {t('workflows.stop')}
-                              </button>
-                            ) : null}
-                          </div>
-                        )
-                      })()}
                     </div>
                     <div className="workspace-workflow-card__actions">
                       <time dateTime={new Date(workflow.updatedAt).toISOString()}>
@@ -738,6 +745,23 @@ export const WorkspaceKnowledgeDrawer = ({
                         {t('workflows.run')}
                       </button>
                     </div>
+                    {(() => {
+                      const latestRun = latestRunForWorkflow(workflow.id)
+                      if (!latestRun) return null
+                      return (
+                        <WorkflowRunSummary
+                          key={`${workspaceId}:${latestRun.id}`}
+                          run={latestRun}
+                          busy={workflowBusyId === workflow.id}
+                          onChanged={(updated) =>
+                            setWorkflowRuns((runs) =>
+                              runs.map((run) => (run.id === updated.id ? updated : run))
+                            )
+                          }
+                          onStop={(run) => void handleStopWorkflow(run)}
+                        />
+                      )
+                    })()}
                   </li>
                 ))}
               </ul>

@@ -12,7 +12,11 @@ export const agentConversationRoutes: RouteDefinition[] = [
       sendJson(
         response,
         200,
-        await store.readAgentConversation(params.workspaceId ?? '', params.agentId ?? '')
+        await store.readAgentConversation(
+          params.workspaceId ?? '',
+          params.agentId ?? '',
+          new URL(request.url ?? '/', 'http://localhost').searchParams.get('run_id') ?? undefined
+        )
       )
     }
   ),

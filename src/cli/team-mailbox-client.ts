@@ -5,6 +5,7 @@ import {
   TEAM_MAILBOX_MAX_BYTES,
   type TeamMailboxRequest,
   type TeamMailboxResponse,
+  teamMailboxResponseTimeout,
 } from '../shared/team-mailbox.js'
 import type { LocalHttpRequestInit, LocalHttpResponse } from './local-http.js'
 
@@ -31,7 +32,7 @@ export const fetchTeamMailbox = async (
   const pending = join(root, 'requests', `${id}.pending`)
   await writeFile(pending, payload, { flag: 'wx', mode: 0o600 })
   await rename(pending, join(root, 'requests', `${id}.json`))
-  const deadline = Date.now() + 15_000
+  const deadline = Date.now() + teamMailboxResponseTimeout(path)
   while (Date.now() < deadline) {
     let response: TeamMailboxResponse | undefined
     try {

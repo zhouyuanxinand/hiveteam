@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { MemoryContextSnapshot } from '../../../src/shared/memory-context.js'
 import { apiFetch } from '../api.js'
 import { useI18n } from '../i18n.js'
+import { MemorySourceList } from './MemorySources.js'
 
 export const MemoryContextPanel = ({ workspaceId }: { workspaceId: string }) => {
   const { language } = useI18n(),
@@ -91,6 +92,10 @@ export const MemoryContextPanel = ({ workspaceId }: { workspaceId: string }) => 
                     {candidate.memory_changed ? ' · memory_changed' : ''}
                     {candidate.sources.some((source) => source.stale) ? ' · stale_source' : ''}
                   </p>
+                  <details>
+                    <summary>{zh ? '准备时的来源' : 'Sources at preparation'}</summary>
+                    <MemorySourceList sources={candidate.sources} />
+                  </details>
                   <small>
                     {candidate.hits.map((hit) => `${hit.field}:${hit.token}`).join(', ')}
                   </small>

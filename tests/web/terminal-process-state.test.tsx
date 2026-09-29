@@ -24,13 +24,13 @@ test('isolates completion records by member and ignores late responses from the 
   })
   view.rerender({ member: 'second' })
   await act(async () => {
-    pending.get('/api/ui/workspaces/process-state/agents/second/conversation')?.(
+    pending.get('/api/ui/workspaces/process-state/agents/second/conversation?run_id=run')?.(
       Response.json(state('second'))
     )
   })
   await waitFor(() => expect(view.result.current.data?.session_id).toBe('second'))
   await act(async () => {
-    pending.get('/api/ui/workspaces/process-state/agents/first/conversation')?.(
+    pending.get('/api/ui/workspaces/process-state/agents/first/conversation?run_id=run')?.(
       Response.json(state('first'))
     )
   })
@@ -57,4 +57,24 @@ test('reports transport failure and recovers through a real retry', async () => 
   act(() => view.result.current.retry())
   await waitFor(() => expect(view.result.current.data?.session_id).toBe('recovered'))
   expect(view.result.current.failed).toBe(false)
+})
+
+test('only visible agent terminals poll and every request names its current run', async () => {
+  const requested: string[] = []
+  vi.stubGlobal('fetch', (url: string) => {
+    requested.push(url)
+    return Promise.resolve(Response.json(state('owned')))
+  })
+  const view = renderHook(
+    ({ enabled }) => useAgentConversation('owned-workspace', 'owned-agent', 'new run', enabled),
+    {
+      initialProps: { enabled: false },
+    }
+  )
+  expect(requested).toEqual([])
+  view.rerender({ enabled: true })
+  await waitFor(() => expect(view.result.current.data?.session_id).toBe('owned'))
+  expect(requested).toEqual([
+    '/api/ui/workspaces/owned-workspace/agents/owned-agent/conversation?run_id=new%20run',
+  ])
 })

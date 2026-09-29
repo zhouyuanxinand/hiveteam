@@ -1,9 +1,8 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
@@ -224,6 +223,10 @@ describe('Layer A native resume integration', () => {
       })
 
       const firstRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, alice.id)
+      await waitFor(async () => {
+        const state = await getRunViaHttp(server.baseUrl, cookie, firstRun.runId)
+        expect(state.output).toContain('ARGS:')
+      }, 10_000)
       await waitFor(() => {
         expect(readLastSessionId(server.dataDir, workspace.id, alice.id)).toBe(sessionId)
       })
@@ -240,6 +243,10 @@ describe('Layer A native resume integration', () => {
       const secondRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, alice.id)
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
+        expect(state.output).toContain('ARGS:')
+      }, 10_000)
+      await waitFor(async () => {
+        const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(state.status).toBe('running')
         expect(state.output).toContain(`--resume ${sessionId}`)
         expect(state.output).not.toContain('STDIN:')
@@ -251,5 +258,5 @@ describe('Layer A native resume integration', () => {
     } finally {
       await server.close()
     }
-  }, 10_000)
+  })
 })

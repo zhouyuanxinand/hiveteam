@@ -129,8 +129,8 @@ export const FirstRunWizard = ({
                   <p className="text-sm text-sec">{t('firstRun.optionDesc')}</p>
                   <p className="text-xs text-sec">
                     {language === 'zh'
-                      ? '推荐先创建基础工作区：不下载技能包，创建后检查 CLI，再启动第一个真实任务。'
-                      : 'Start with a basic workspace: no skill-pack download. Check the CLI after creation, then start your first real task.'}
+                      ? '新工作区默认安装 matt 和 code-janitor 技能包；如需跳过下载，可明确选择基础模式。创建后检查 CLI，再启动第一个真实任务。'
+                      : 'New workspaces install matt and code-janitor by default. Choose basic mode to skip downloads. Check the CLI after creation, then start your first real task.'}
                   </p>
                   <div className="mt-2 flex flex-col gap-2">
                     <button

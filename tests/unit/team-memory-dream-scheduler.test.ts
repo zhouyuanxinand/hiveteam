@@ -10,7 +10,6 @@ const workspace = { id: 'workspace-1', name: 'Alpha', path: '/tmp/alpha' }
 
 const eligibleState = (): MemoryDreamScheduleState => ({
   hasReviewDraft: false,
-  hasSourceMemory: true,
   hasUnreviewedActivity: true,
   lastScheduledAt: null,
 })
@@ -18,6 +17,7 @@ const eligibleState = (): MemoryDreamScheduleState => ({
 const createScheduler = (
   input: {
     enabled?: boolean
+    retryPending?: (workspaceId: string) => Promise<void>
     runScheduled?: (workspaceId: string) => Promise<unknown>
     snapshot?: { agents: Array<{ status: string }> }
     state?: MemoryDreamScheduleState
@@ -31,6 +31,7 @@ const createScheduler = (
     listWorkspaces: () => [workspace],
     logError: vi.fn(),
     markScheduled,
+    retryPending: input.retryPending ?? (async () => {}),
     runScheduled: input.runScheduled ?? vi.fn(async () => undefined),
   })
   return { markScheduled, scheduler }
@@ -90,6 +91,43 @@ describe('team memory Dream scheduler', () => {
 
     await scheduler.tick(60_000 + DREAM_SCHEDULER_FLOOR_MS * 2)
     expect(runScheduled).toHaveBeenCalledTimes(2)
+    await scheduler.close()
+  })
+  test('retries unfinished generation while a review blocks preparing another window', async () => {
+    const events: string[] = []
+    const { scheduler } = createScheduler({
+      state: { ...eligibleState(), hasReviewDraft: true },
+      retryPending: async () => {
+        events.push('retry existing window')
+      },
+      runScheduled: async () => {
+        events.push('prepare another window')
+      },
+    })
+    await scheduler.tick(0)
+    expect(events).toEqual([])
+    await scheduler.tick(60_000)
+    await scheduler.tick(90_000)
+    expect(events).toEqual(['retry existing window', 'retry existing window'])
+    await scheduler.close()
+  })
+
+  test('new evidence schedules without existing memory, while an empty window does not', async () => {
+    const prepared: string[] = []
+    const state = eligibleState()
+    const { scheduler } = createScheduler({
+      state,
+      runScheduled: async (workspaceId) => {
+        prepared.push(workspaceId)
+      },
+    })
+    state.hasUnreviewedActivity = false
+    await scheduler.tick(0)
+    await scheduler.tick(60_000)
+    expect(prepared).toEqual([])
+    state.hasUnreviewedActivity = true
+    await scheduler.tick(90_000)
+    expect(prepared).toEqual([workspace.id])
     await scheduler.close()
   })
 })

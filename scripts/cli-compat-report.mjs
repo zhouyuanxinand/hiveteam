@@ -45,10 +45,18 @@ const inspectCli = (name) => {
   return { name, path: resolvedPath, status: 'ok' }
 }
 
-const inspectNativeModule = (name) => {
+const inspectRuntimeModule = (name) => {
   try {
     const entry = require.resolve(name)
-    require(name)
+    const module = require(name)
+    if (name === 'node:sqlite') {
+      const database = new module.DatabaseSync(':memory:')
+      try {
+        database.prepare('SELECT sqlite_version()').get()
+      } finally {
+        database.close()
+      }
+    }
     return {
       name,
       entry,
@@ -73,7 +81,7 @@ const report = {
     executable: process.execPath,
     version: process.version,
   },
-  nativeModules: ['better-sqlite3', 'node-pty'].map(inspectNativeModule),
+  nativeModules: ['node:sqlite', '@lydell/node-pty'].map(inspectRuntimeModule),
   clis: [...tierOneClis, ...additionalClis].map((name) => ({
     tier: tierOneClis.includes(name) ? 1 : 2,
     ...inspectCli(name),
@@ -94,7 +102,7 @@ if (jsonOutput) {
 } else {
   console.log(`Hive CLI compatibility report (Node ${report.node.version}, ABI ${report.node.abi})`)
   console.log('')
-  console.log('Native modules:')
+  console.log('Runtime modules:')
   for (const item of report.nativeModules) {
     console.log(
       `  ${item.status.toUpperCase().padEnd(15)} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`
@@ -109,7 +117,7 @@ if (jsonOutput) {
     )
   }
   console.log('')
-  console.log(`Summary: ${errors.length} native error(s), ${warnings.length} CLI warning(s)`)
+  console.log(`Summary: ${errors.length} runtime error(s), ${warnings.length} CLI warning(s)`)
 }
 
 if (strict && errors.length > 0) process.exitCode = 1

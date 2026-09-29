@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import {
   DEFAULT_DISPATCH_TIMEOUTS,
   type DispatchHealth,
@@ -7,6 +6,7 @@ import {
   type DispatchTimeouts,
 } from '../shared/message-delivery.js'
 import { BadRequestError, ConflictError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 type HealthRow = Omit<DispatchHealth, 'reasons' | 'timeouts' | 'notification_id'> & {
   reasons: string

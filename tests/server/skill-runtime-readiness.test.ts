@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import * as resolvers from '../../src/server/skill-pack-resolver.js'
 import type { TeamSkillRuntimeError } from '../../src/server/team-skill-runtime.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
+import { writeCodexCli } from '../helpers/codex-cli.js'
 import { createRecordingAgentManager } from '../helpers/recording-agent-manager.js'
 
 const tempDirs: string[] = []
@@ -103,7 +104,7 @@ describe('Skill runtime readiness', () => {
       const workspace = store.createWorkspace(workspacePath, 'Scope')
       const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
       store.configureAgentLaunch(workspace.id, worker.id, {
-        command: 'fixture-agent',
+        command: writeCodexCli(dataDir, 'process.stdin.resume()'),
         commandPresetId: 'codex',
         sessionIdCapture: { source: 'stdout_regex', pattern: 'SESSION=(.+)' },
       })
@@ -185,7 +186,7 @@ describe('Skill runtime readiness', () => {
       const workspace = store.createWorkspace(workspacePath, 'Native fallback')
       const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
       store.configureAgentLaunch(workspace.id, worker.id, {
-        command: 'codex',
+        command: writeCodexCli(dataDir, 'process.stdin.resume()'),
         commandPresetId: 'codex',
       })
       await bindPack(store, workspace.id, sourcePath, ['tdd'])

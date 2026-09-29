@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 const getDispatchColumns = (db: Database) =>
   new Set(

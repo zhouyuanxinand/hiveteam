@@ -1,9 +1,10 @@
 import agentNamesBank from './agent-names.json' with { type: 'json' }
+import type { WorkerRole } from './types.js'
 
 /**
  * The vendored 2.1.19 name snapshot is intentionally shared by the browser
- * and runtime. This keeps manual Add Member and scenario teams in one
- * namespace, regardless of role or display language.
+ * and runtime for callers that explicitly need a random catalog name.
+ * Default member names use their role or template through generateRoleWorkerName.
  */
 export const WORKER_NAME_POOL: readonly string[] = agentNamesBank.names.map((entry) => entry.name)
 
@@ -30,7 +31,40 @@ export const generateWorkerName = ({
       : WORKER_NAME_POOL
   // A fully occupied 1,111-name pool is rare. Return a deterministic pool
   // member here; callers that require a guaranteed unique name append a
-  // short suffix (see scenario-worker-name.ts).
+  // suffix, or use generateRoleWorkerName for a unique role-based suggestion.
   const draw = available.length > 0 ? available : WORKER_NAME_POOL
   return draw[nextUint32() % draw.length] ?? 'Hive member'
+}
+
+const roleNames: Record<WorkerRole, string> = {
+  coder: 'Coder',
+  reviewer: 'Reviewer',
+  tester: 'Tester',
+  custom: 'Custom',
+}
+
+/** Role and template names remain stable across UI languages and list refreshes. */
+export const generateRoleWorkerName = ({
+  role,
+  baseName,
+  usedNames = new Set<string>(),
+}: {
+  role: WorkerRole
+  baseName?: string | undefined
+  usedNames?: ReadonlySet<string> | undefined
+}): string => {
+  const base = baseName?.trim() || roleNames[role]
+  // The API limit counts UTF-16 code units; do not leave half an emoji at the boundary.
+  const shortened = (length: number) =>
+    base
+      .slice(0, length)
+      .replace(/[\uD800-\uDBFF]$/, '')
+      .trimEnd()
+  const candidate = shortened(64)
+  if (!usedNames.has(candidate)) return candidate
+  for (let index = 2; ; index += 1) {
+    const suffix = ` ${index}`
+    const name = `${shortened(64 - suffix.length)}${suffix}`
+    if (!usedNames.has(name)) return name
+  }
 }

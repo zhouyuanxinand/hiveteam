@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
+import type { MemoryDreamOperation } from '../../src/shared/memory-dream-plan.js'
 
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
@@ -46,6 +47,10 @@ describe('team memory Dream routes', () => {
     expect(createMemory.status).toBe(201)
     const source = (await createMemory.json()) as { id: string }
 
+    const second = server.store.memory.create(workspace.id, {
+      kind: 'decision',
+      body: 'Keep integration tests isolated.',
+    })
     const createDream = await fetch(dreamUrl, {
       headers: { 'content-type': 'application/json', cookie },
       method: 'POST',
@@ -54,10 +59,13 @@ describe('team memory Dream routes', () => {
     const dream = (await createDream.json()) as {
       id: string
       status: string
-      suggestions: Array<{ source_memory_ids: string[] }>
+      plan_revision: number
+      operations: MemoryDreamOperation[]
     }
     expect(dream.status).toBe('review')
-    expect(dream.suggestions[0]?.source_memory_ids).toContain(source.id)
+    expect(dream.operations[0]?.sources.map((ref) => ref.memory_id)).toEqual(
+      expect.arrayContaining([source.id, second.id])
+    )
 
     const worker = server.store.addWorker(workspace.id, {
       name: 'Reviewer',
@@ -71,7 +79,10 @@ describe('team memory Dream routes', () => {
     expect(unauthorizedSubmit.status).toBe(403)
 
     const submitted = await fetch(`${dreamUrl}/${dream.id}/submit`, {
-      body: JSON.stringify({ orchestrator_id: `${workspace.id}:orchestrator` }),
+      body: JSON.stringify({
+        orchestrator_id: `${workspace.id}:orchestrator`,
+        expected_revision: dream.plan_revision,
+      }),
       headers: { 'content-type': 'application/json', cookie },
       method: 'POST',
     })
@@ -178,16 +189,12 @@ describe('team memory Dream routes', () => {
     expect(dreamResponse.status).toBe(201)
     const dream = (await dreamResponse.json()) as {
       id: string
-      suggestions: Array<{
-        body: string
-        kind: string
-        procedure_ref: { id: string; title: string | null; type: string } | null
-        scope: string
-        source_memory_ids: string[]
-        tags: string[]
-      }>
+      plan_revision: number
+      operations: MemoryDreamOperation[]
     }
-    const suggestion = dream.suggestions[0]
+    const operation = dream.operations[0]
+    if (!operation) throw new Error('Expected a procedure rewrite')
+    const suggestion = operation.result
     expect(suggestion).toMatchObject({
       kind: 'procedure_ref',
       procedure_ref: {
@@ -199,12 +206,8 @@ describe('team memory Dream routes', () => {
 
     const invalidUpdate = await fetch(`${dreamUrl}/${dream.id}`, {
       body: JSON.stringify({
-        suggestions: [
-          {
-            ...suggestion,
-            procedure_ref: null,
-          },
-        ],
+        expected_revision: dream.plan_revision,
+        operations: [{ ...operation, result: { ...suggestion, procedure_ref: null } }],
       }),
       headers: { 'content-type': 'application/json', cookie },
       method: 'PATCH',
@@ -212,13 +215,17 @@ describe('team memory Dream routes', () => {
     expect(invalidUpdate.status).toBe(400)
 
     const submitted = await fetch(`${dreamUrl}/${dream.id}/submit`, {
-      body: JSON.stringify({ orchestrator_id: `${workspace.id}:orchestrator` }),
+      body: JSON.stringify({
+        orchestrator_id: `${workspace.id}:orchestrator`,
+        expected_revision: dream.plan_revision,
+      }),
       headers: { 'content-type': 'application/json', cookie },
       method: 'POST',
     })
     expect(submitted.status).toBe(200)
     const submittedBody = (await submitted.json()) as { created_memory_ids: string[] }
-    const createdId = submittedBody.created_memory_ids[0]
+    expect(submittedBody.created_memory_ids).toEqual([])
+    const createdId = operation.sources[0]?.memory_id
     expect(createdId).toBeTruthy()
     expect(server.store.memory.get(workspace.id, createdId ?? '')).toMatchObject({
       kind: 'procedure_ref',

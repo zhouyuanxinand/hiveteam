@@ -53,6 +53,7 @@ describe('team protocol end to end', () => {
         "process.stdin.on('data', (chunk) => {",
         "  process.stdout.write('WORKER:' + chunk)",
         '})',
+        "process.stdout.write('FIXTURE_READY\\n')",
       ].join('\n')
     )
 
@@ -64,6 +65,7 @@ describe('team protocol end to end', () => {
         "process.stdin.on('data', (chunk) => {",
         "  process.stdout.write('ORCH:' + chunk)",
         '})',
+        "process.stdout.write('FIXTURE_READY\\n')",
       ].join('\n')
     )
 
@@ -125,6 +127,7 @@ describe('team protocol end to end', () => {
         }
       )
       expect(orchStart.status).toBe(201)
+      const orchStartBody = (await orchStart.json()) as { run_id: string }
 
       const workerStart = await fetch(
         `${baseUrl}/api/workspaces/${workspace.id}/agents/${worker.id}/start`,
@@ -136,6 +139,18 @@ describe('team protocol end to end', () => {
       )
       expect(workerStart.status).toBe(201)
       const workerStartBody = (await workerStart.json()) as { run_id: string }
+
+      // Native terminal startup has its own budget; delivery must still finish
+      // within the shorter protocol deadline once both real CLIs are ready.
+      await waitFor(async () => {
+        for (const runId of [orchStartBody.run_id, workerStartBody.run_id]) {
+          const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, {
+            headers: { cookie },
+          })
+          const body = (await response.json()) as { output: string }
+          expect(normalizePtyText(body.output)).toContain('FIXTURE_READY')
+        }
+      }, 10_000)
 
       const sendResponse = await fetch(`${baseUrl}/api/team/send`, {
         method: 'POST',

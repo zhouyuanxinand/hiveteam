@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import Database from 'better-sqlite3'
 import { exportBackupDatabase, validateBackupDatabase } from './backup-database.js'
 import {
   backupHash,
@@ -12,6 +11,7 @@ import {
 } from './backup-files.js'
 import { inspectDataBackup } from './data-backup.js'
 import { BadRequestError, ConflictError } from './http-errors.js'
+import Database from './sqlite.js'
 
 export const restoreDataBackup = async (input: {
   directory: string
@@ -79,7 +79,7 @@ export const restoreDataBackup = async (input: {
           db.prepare('UPDATE workspaces SET path=?,auto_resume=0 WHERE id=?').run(path, id)
         db.exec(`UPDATE workers SET manual_stop=1;
       UPDATE agent_runs SET status='exited',pid=NULL,resume_on_restart=0,ended_at=COALESCE(ended_at,${Date.now()});
-      UPDATE workflow_runs SET status='failed',error='Restored: manual reconciliation required',ended_at=COALESCE(ended_at,${Date.now()}) WHERE status IN ('running','pending','queued');
+      UPDATE workflow_runs SET status='failed',error='Restored: manual reconciliation required',ended_at=COALESCE(ended_at,${Date.now()}) WHERE status IN ('running','interrupted','pending','queued');
       UPDATE memory_dream_runs SET execution_status='failed',execution_error='Restored: manual reconciliation required' WHERE execution_status IN ('queued','requested');
       UPDATE native_session_attempts SET state='uncertain',error_code='restore_requires_rebind' WHERE state IN ('prepared','allocating','starting','active');
       UPDATE message_deliveries SET state='manual',next_attempt_at=NULL,reason='Restored: reconcile original receipt before continuing' WHERE state IN ('pending','attempting','unknown');

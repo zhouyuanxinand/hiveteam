@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
+import { createMessageDeliveryStore } from './message-delivery-store.js'
 import type { ReportDeliveryCheckpoint } from './report-delivery-receipt.js'
+import type { Database } from './sqlite.js'
 
 /**
  * Durable delivery queue for reports that could not be written into a live
@@ -23,6 +24,7 @@ export interface ReportOutboxEntry {
 }
 
 interface EnqueueInput {
+  replacePrevious?: boolean
   dispatchId: string
   payload: string
   targetAgentId: string
@@ -60,8 +62,8 @@ const toEntry = (row: ReportOutboxRow): ReportOutboxEntry => ({
 })
 
 export const createReportOutboxStore = (db: Database) => {
-  // The team-list poll drains the outbox twice per second per workspace, so
-  // every statement here is prepared once instead of on each call.
+  // Runtime delivery and receipt reconciliation revisit these statements;
+  // prepare them once rather than for every attempt.
   const enqueueStmt = db.prepare(
     `INSERT OR IGNORE INTO report_outbox
       (workspace_id, target_agent_id, dispatch_id, payload, created_at, receipt_id)
@@ -114,7 +116,39 @@ export const createReportOutboxStore = (db: Database) => {
        WHERE workspace_id = ? AND target_agent_id = ? AND delivered_at IS NULL`
   )
 
-  const enqueue = (input: EnqueueInput) => {
+  const enqueue = db.transaction((input: EnqueueInput) => {
+    if (input.replacePrevious) {
+      const previous = db
+        .prepare('SELECT * FROM report_outbox WHERE dispatch_id=?')
+        .get(input.dispatchId) as ReportOutboxRow | undefined
+      if (previous) {
+        const receiptId = randomUUID()
+        const now = Date.now()
+        // A new report revision gets its own receipt. Preserve uncertain writes
+        // and their checkpoint so they still fence the recipient until reviewed.
+        const deliveries = createMessageDeliveryStore(db)
+        deliveries.event(
+          previous.receipt_id,
+          'superseded',
+          'runtime',
+          'A new report revision replaced the outbox payload',
+          {
+            next_receipt_id: receiptId,
+            payload: previous.payload,
+          }
+        )
+        db.prepare(
+          "UPDATE message_deliveries SET state='resolved',next_attempt_at=NULL,reason='Superseded before terminal input' WHERE id=? AND write_started=0 AND state IN ('pending','attempting')"
+        ).run(previous.receipt_id)
+        db.prepare(
+          'UPDATE report_outbox SET payload=?,created_at=?,receipt_id=?,delivered_at=NULL,delivery_attempts=0,last_delivery_attempt_at=NULL,last_delivery_error=NULL,delivery_checkpoint=NULL WHERE id=?'
+        ).run(input.payload, now, receiptId, previous.id)
+        db.prepare(
+          "INSERT INTO message_deliveries(id,workspace_id,dispatch_id,recipient_id,kind,state,created_at,next_attempt_at) VALUES(?,?,?,?,'report','pending',?,?)"
+        ).run(receiptId, input.workspaceId, input.dispatchId, input.targetAgentId, now, now)
+        return
+      }
+    }
     // A completed dispatch may be retried by a client after a transient
     // transport failure. Keep one durable report per dispatch, not duplicates.
     enqueueStmt.run(
@@ -125,7 +159,7 @@ export const createReportOutboxStore = (db: Database) => {
       Date.now(),
       randomUUID()
     )
-  }
+  })
 
   const listPending = (workspaceId: string, targetAgentId: string) =>
     (listPendingStmt.all(workspaceId, targetAgentId) as ReportOutboxRow[]).map(toEntry)

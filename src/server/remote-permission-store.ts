@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import type { Database } from 'better-sqlite3'
 import {
   REMOTE_ACTIONS,
   REMOTE_GRANT_DURATION_MS,
@@ -11,6 +10,7 @@ import {
 } from '../shared/remote-permissions.js'
 import { HttpError } from './http-errors.js'
 import type { RemoteAuditStore } from './remote-audit-store.js'
+import type { Database } from './sqlite.js'
 
 export class RemotePermissionError extends HttpError {
   constructor(

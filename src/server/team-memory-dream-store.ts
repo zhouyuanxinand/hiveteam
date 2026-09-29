@@ -1,13 +1,9 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import type {
   TeamMemoryDreamReview,
   TeamMemoryDreamRun,
   TeamMemoryDreamStatus,
   TeamMemoryDreamSuggestion,
-  TeamMemoryEntry,
   TeamMemoryKind,
   TeamMemoryProcedureRef,
   TeamMemoryScope,
@@ -17,22 +13,18 @@ import {
   isTeamMemoryScope,
   normalizeTeamMemoryProcedureRef,
 } from '../shared/team-memory.js'
+import { createMemoryDreamApply } from './memory-dream-apply.js'
+import { readDreamGeneration } from './memory-dream-generation-reader.js'
+import { type DreamHistoryOptions, readDreamHistory } from './memory-dream-history.js'
 import { sanitizePromptData } from './prompt-safety.js'
-import type { TeamMemoryStore, UpdateTeamMemoryInput } from './team-memory-store.js'
+import type { Database } from './sqlite.js'
+import type { TeamMemoryStore } from './team-memory-store.js'
 
-interface DreamSourceSnapshot {
-  body: string
-  disabled: boolean
-  id: string
-  kind: TeamMemoryKind
-  pinned: boolean
-  procedureRef: TeamMemoryProcedureRef | null
-  scope: TeamMemoryScope
-  status: TeamMemoryEntry['status']
-  tags: string[]
-}
-
-interface DreamRow {
+export interface DreamRow {
+  plan_version: number
+  plan_revision: number
+  operations_json: string
+  change_receipt_json: string | null
   created_at: number
   created_memory_ids_json: string
   execution_error: string | null
@@ -91,23 +83,13 @@ const normalizeSuggestion = (suggestion: TeamMemoryDreamSuggestion): TeamMemoryD
     .map((tag) => tag.slice(0, 64)),
 })
 
-const normalizeSnapshot = (snapshot: DreamSourceSnapshot): DreamSourceSnapshot => ({
-  ...snapshot,
-  procedureRef: normalizeStoredProcedureRef(snapshot.procedureRef),
-})
-
-const requireProcedureReferences = (suggestions: TeamMemoryDreamSuggestion[]) => {
-  if (
-    suggestions.some(
-      (suggestion) => suggestion.kind === 'procedure_ref' && !suggestion.procedureRef
-    )
-  ) {
-    throw new Error('procedure_ref Dream suggestions require a procedure_ref')
-  }
-}
-
-const fromRow = (row: DreamRow): TeamMemoryDreamRun => ({
+const fromRow = (row: DreamRow): Omit<TeamMemoryDreamRun, 'generation'> => ({
   createdAt: row.created_at,
+  planVersion: row.plan_version,
+  planRevision: row.plan_revision,
+  operations: JSON.parse(row.operations_json),
+  sourceSnapshots: row.plan_version === 1 ? JSON.parse(row.source_snapshots_json) : [],
+  receipt: row.change_receipt_json ? JSON.parse(row.change_receipt_json) : null,
   createdMemoryIds: parseJson<string[]>(row.created_memory_ids_json, []),
   executionError: row.execution_error,
   executionStatus: row.execution_status,
@@ -191,40 +173,16 @@ const parseReviewSuggestions = (text: string): TeamMemoryDreamSuggestion[] => {
   }
 }
 
-const createSuggestions = (entries: TeamMemoryEntry[]): TeamMemoryDreamSuggestion[] => {
-  const groups = new Map<string, TeamMemoryEntry[]>()
-  for (const entry of entries) {
-    if (entry.disabled || entry.status !== 'active') continue
-    if (entry.kind === 'procedure_ref' && !entry.procedureRef) continue
-    const key =
-      entry.kind === 'procedure_ref'
-        ? `${entry.kind}\u0000${entry.procedureRef?.type ?? ''}\u0000${entry.procedureRef?.id ?? ''}`
-        : entry.kind
-    const group = groups.get(key) ?? []
-    group.push(entry)
-    groups.set(key, group)
-  }
-  return [...groups.entries()]
-    .map(([, group]) => ({
-      body:
-        group.length === 1
-          ? (group[0]?.body ?? '')
-          : group.map((entry) => `- ${entry.body}`).join('\n'),
-      kind: group[0]?.kind ?? 'fact',
-      procedureRef: group[0]?.procedureRef ?? null,
-      scope: 'workspace' as const,
-      sourceMemoryIds: group.map((entry) => entry.id),
-      tags: [...new Set(group.flatMap((entry) => entry.tags))].slice(0, 20),
-    }))
-    .filter((suggestion) => suggestion.body.trim())
-}
-
 export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore) => {
+  const hydrate = (row: DreamRow): TeamMemoryDreamRun => ({
+    ...fromRow(row),
+    generation: readDreamGeneration(db, row.workspace_id, row.id),
+  })
   const get = (workspaceId: string, dreamId: string) => {
     const row = db
       .prepare('SELECT * FROM memory_dream_runs WHERE workspace_id = ? AND id = ?')
       .get(workspaceId, dreamId) as DreamRow | undefined
-    return row ? fromRow(row) : undefined
+    return row ? hydrate(row) : undefined
   }
 
   const list = (workspaceId: string, limit = 20) =>
@@ -233,66 +191,42 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
         .prepare(
           `SELECT * FROM memory_dream_runs
          WHERE workspace_id = ?
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, id DESC
          LIMIT ?`
         )
         .all(workspaceId, Math.max(1, Math.min(50, Math.floor(limit)))) as DreamRow[]
-    ).map(fromRow)
+    ).map(hydrate)
 
-  const getSnapshots = (workspaceId: string, dreamId: string) => {
-    const row = db
-      .prepare(
-        'SELECT source_snapshots_json FROM memory_dream_runs WHERE workspace_id = ? AND id = ?'
-      )
-      .get(workspaceId, dreamId) as { source_snapshots_json: string } | undefined
-    return row
-      ? parseJson<DreamSourceSnapshot[]>(row.source_snapshots_json, []).map(normalizeSnapshot)
-      : []
-  }
+  const apply = createMemoryDreamApply(db, memory, get)
 
   return {
-    create(workspaceId: string) {
-      const entries = memory.list(workspaceId, { limit: 50, status: 'active' })
-      const suggestions = createSuggestions(entries)
-      const snapshots: DreamSourceSnapshot[] = entries
-        .filter((entry) =>
-          suggestions.some((suggestion) => suggestion.sourceMemoryIds.includes(entry.id))
-        )
-        .map((entry) => ({
-          body: entry.body,
-          disabled: entry.disabled,
-          id: entry.id,
-          kind: entry.kind,
-          pinned: entry.pinned,
-          procedureRef: entry.procedureRef,
-          scope: entry.scope,
-          status: entry.status,
-          tags: entry.tags,
-        }))
-      const now = Date.now()
-      const id = randomUUID()
-      db.prepare(
-        `INSERT INTO memory_dream_runs (
-           id, workspace_id, status, suggestions_json, source_snapshots_json,
-           created_memory_ids_json, created_at, submitted_at, rolled_back_at, updated_at,
-           execution_status, orchestrator_run_id, execution_error
-         ) VALUES (?, ?, 'review', ?, ?, '[]', ?, NULL, NULL, ?, 'queued', NULL, NULL)`
-      ).run(id, workspaceId, JSON.stringify(suggestions), JSON.stringify(snapshots), now, now)
-      return get(workspaceId, id) as TeamMemoryDreamRun
+    ...apply,
+    hasReviewDraft(workspaceId: string) {
+      return Boolean(
+        db
+          .prepare(
+            "SELECT 1 FROM memory_dream_runs WHERE workspace_id=? AND status='review' AND plan_version=1 LIMIT 1"
+          )
+          .get(workspaceId)
+      )
     },
     get,
     list,
+    history: db.transaction((workspaceId: string, options: DreamHistoryOptions = {}) => {
+      const page = readDreamHistory(db, workspaceId, options)
+      return { ...page, runs: page.runs.map(hydrate) }
+    }),
     listPendingExecution(workspaceId: string) {
       return (
         db
           .prepare(
             `SELECT * FROM memory_dream_runs
-             WHERE workspace_id = ? AND status = 'review'
-               AND execution_status IN ('queued', 'failed')
+             WHERE workspace_id = ? AND status = 'review' AND plan_version = 1
+               AND execution_status IN ('queued', 'failed', 'requested')
              ORDER BY created_at ASC`
           )
           .all(workspaceId) as DreamRow[]
-      ).map(fromRow)
+      ).map(hydrate)
     },
     markExecutionRequested(workspaceId: string, dreamId: string, orchestratorRunId: string) {
       db.prepare(
@@ -393,96 +327,10 @@ export const createTeamMemoryDreamStore = (db: Database, memory: TeamMemoryStore
           .get(workspaceId, dispatchId) as DreamReviewRow
       )
     },
-    updateSuggestions(
-      workspaceId: string,
-      dreamId: string,
-      suggestions: TeamMemoryDreamSuggestion[]
-    ) {
-      const current = get(workspaceId, dreamId)
-      if (!current) return undefined
-      if (current.status !== 'review') throw new Error('Only a Dream in review can be edited')
-      const normalized = suggestions
-        .map(normalizeSuggestion)
-        .filter((suggestion) => suggestion.body)
-      requireProcedureReferences(normalized)
-      db.prepare(
-        'UPDATE memory_dream_runs SET suggestions_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?'
-      ).run(JSON.stringify(normalized), Date.now(), workspaceId, dreamId)
-      return get(workspaceId, dreamId)
-    },
-    submit(workspaceId: string, dreamId: string, actor: { id: string; name: string }) {
-      const current = get(workspaceId, dreamId)
-      if (!current) return undefined
-      if (current.status !== 'review') throw new Error('This Dream has already been submitted')
-      requireProcedureReferences(current.suggestions)
-      const snapshots = getSnapshots(workspaceId, dreamId)
-      const createdIds: string[] = []
-      const now = Date.now()
-      db.transaction(() => {
-        for (const snapshot of snapshots) {
-          memory.update(workspaceId, snapshot.id, {
-            status: 'archived',
-          })
-        }
-        for (const suggestion of current.suggestions) {
-          const created = memory.create(workspaceId, {
-            body: suggestion.body,
-            createdByAgentId: actor.id,
-            createdByAgentName: actor.name,
-            kind: suggestion.kind,
-            procedureRef: suggestion.procedureRef,
-            scope: suggestion.scope,
-            source: 'dream',
-            status: 'active',
-            tags: suggestion.tags,
-          })
-          createdIds.push(created.id)
-        }
-        db.prepare(
-          `UPDATE memory_dream_runs
-           SET status = 'submitted', created_memory_ids_json = ?, submitted_at = ?, updated_at = ?
-           WHERE workspace_id = ? AND id = ?`
-        ).run(JSON.stringify(createdIds), now, now, workspaceId, dreamId)
-        db.prepare(
-          `UPDATE memory_dream_runs
-           SET execution_status = 'completed', execution_error = NULL, updated_at = ?
-           WHERE workspace_id = ? AND id = ?`
-        ).run(now, workspaceId, dreamId)
-      })()
-      return get(workspaceId, dreamId)
-    },
-    rollback(workspaceId: string, dreamId: string) {
-      const current = get(workspaceId, dreamId)
-      if (!current) return undefined
-      if (current.status === 'rolled_back') return current
-      if (current.status !== 'submitted')
-        throw new Error('Only a submitted Dream can be rolled back')
-      const snapshots = getSnapshots(workspaceId, dreamId)
-      const restore = (snapshot: DreamSourceSnapshot): UpdateTeamMemoryInput => ({
-        body: snapshot.body,
-        disabled: snapshot.disabled,
-        kind: snapshot.kind,
-        pinned: snapshot.pinned,
-        procedureRef: snapshot.procedureRef,
-        scope: snapshot.scope,
-        status: snapshot.status,
-        tags: snapshot.tags,
-      })
-      const now = Date.now()
-      db.transaction(() => {
-        for (const snapshot of snapshots) memory.update(workspaceId, snapshot.id, restore(snapshot))
-        for (const memoryId of current.createdMemoryIds) {
-          memory.update(workspaceId, memoryId, { status: 'archived', disabled: true })
-        }
-        db.prepare(
-          `UPDATE memory_dream_runs
-           SET status = 'rolled_back', rolled_back_at = ?, updated_at = ?
-           WHERE workspace_id = ? AND id = ?`
-        ).run(now, now, workspaceId, dreamId)
-      })()
-      return get(workspaceId, dreamId)
-    },
     deleteWorkspace(workspaceId: string) {
+      db.prepare('DELETE FROM memory_dream_deleted_sources WHERE workspace_id = ?').run(workspaceId)
+      db.prepare('DELETE FROM memory_dream_generations WHERE workspace_id = ?').run(workspaceId)
+      db.prepare('DELETE FROM memory_dream_cursors WHERE workspace_id = ?').run(workspaceId)
       db.prepare('DELETE FROM memory_dream_reviews WHERE workspace_id = ?').run(workspaceId)
       db.prepare('DELETE FROM memory_dream_runs WHERE workspace_id = ?').run(workspaceId)
     },

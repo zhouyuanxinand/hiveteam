@@ -252,6 +252,35 @@ const binaryInput = (chunk: string) =>
   Uint8Array.from(chunk, (character) => character.charCodeAt(0) & 0xff)
 
 describe('TerminalView', () => {
+  test('shows grill handoff progress and distinguishes queued work from delivery', async () => {
+    vi.stubGlobal('WebSocket', MockWebSocket as never)
+    addPortalSlot('run-grill')
+    render(<TerminalView runId="run-grill" title="Orchestrator" />)
+    await waitFor(() => expect(MockWebSocket.instances[1]?.readyState).toBe(1))
+    const control = MockWebSocket.instances[1]
+    const handoff = {
+      type: 'grill_handoff',
+      request_id: 'interview-request',
+      worker_id: 'interviewer',
+      worker_name: 'Requirements interviewer',
+      created: true,
+      message: '',
+    }
+    const publish = (status: string, message = '') =>
+      act(() => control?.onmessage?.({ data: JSON.stringify({ ...handoff, status, message }) }))
+    publish('pending')
+    expect(await screen.findByText('Arranging an interview member…')).toBeTruthy()
+    publish('queued')
+    expect(await screen.findByText(/The interview is waiting for startup or delivery/)).toBeTruthy()
+    expect(screen.queryByText(/Interview delivered to/)).toBeNull()
+    publish('submitted')
+    expect(await screen.findByText(/Interview delivered to Requirements interviewer/)).toBeTruthy()
+    publish('failed', 'The interview Skill is not enabled')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The interview Skill is not enabled')
+    expect(screen.getByRole('alert')).toHaveTextContent('interview-request')
+    expect(MockWebSocket.instances[0]?.sent).toEqual([])
+  })
+
   test('offers session recovery without keyboard focus and shows an unsuccessful retry', async () => {
     vi.stubGlobal('WebSocket', MockWebSocket as never)
     addPortalSlot('run-recovery')

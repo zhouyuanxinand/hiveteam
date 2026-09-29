@@ -9,8 +9,6 @@ export const DREAM_SCHEDULER_BACKOFF_CAP = 5
 export interface MemoryDreamScheduleState {
   /** A visible draft already exists and must be reviewed before another can be prepared. */
   hasReviewDraft: boolean
-  /** Dream only consolidates existing, active memory; never create empty drafts. */
-  hasSourceMemory: boolean
   /** New user/team activity has occurred after the prior scheduled review. */
   hasUnreviewedActivity: boolean
   lastScheduledAt: number | null
@@ -28,6 +26,7 @@ export interface TeamMemoryDreamSchedulerDeps {
   logError?: (workspaceId: string, error: unknown) => void
   markScheduled: (workspaceId: string, timestamp: number) => void
   now?: () => number
+  retryPending: (workspaceId: string) => Promise<void>
   runScheduled: (workspaceId: string) => Promise<unknown>
 }
 
@@ -109,8 +108,9 @@ export const createTeamMemoryDreamScheduler = (
             idleSinceByWorkspace.set(workspace.id, idleSince)
             if (timestamp - idleSince < DREAM_SCHEDULER_IDLE_DEBOUNCE_MS) continue
 
+            await deps.retryPending(workspace.id)
             const state = deps.getScheduleState(workspace.id)
-            if (!state.hasSourceMemory || state.hasReviewDraft || !state.hasUnreviewedActivity) {
+            if (state.hasReviewDraft || !state.hasUnreviewedActivity) {
               continue
             }
             const mostRecentAttemptAt = Math.max(

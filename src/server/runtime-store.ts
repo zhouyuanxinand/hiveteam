@@ -7,12 +7,21 @@ import type {
   WorkspaceLanguage,
   WorkspaceSummary,
 } from '../shared/types.js'
+import {
+  type ActivityAttentionQuery,
+  createActivityAttentionQuery,
+} from './activity-attention-query.js'
 import { createAgentConversationReader } from './agent-conversation-reader.js'
 import type { AgentManager } from './agent-manager.js'
 import type { AgentLaunchConfigInput, PersistedAgentRun } from './agent-run-store.js'
 import type { LiveAgentRun } from './agent-runtime-types.js'
+import { type ClarificationRuntime, createClarificationRuntime } from './clarification-runtime.js'
 import { type CliReadinessRuntime, createCliReadiness } from './cli-readiness.js'
 import { type CodeReviewRuntime, createCodeReviewRuntime } from './code-review-runtime.js'
+import {
+  type CollaborationStatsQuery,
+  createCollaborationStatsQuery,
+} from './collaboration-stats-query.js'
 import { createDataBackup } from './data-backup.js'
 import { createDataRetention, type DataRetention } from './data-retention.js'
 import { createDeliveryQueueStore, type DeliveryQueueStore } from './delivery-queue-store.js'
@@ -23,14 +32,13 @@ import {
 import type { DispatchRecord, ListDispatchesOptions } from './dispatch-ledger-store.js'
 import type { GitWorkspaceService } from './git-workspace-service.js'
 import type { GitHubClient } from './github-pull-requests.js'
-import { ConflictError, ForbiddenError, HttpError } from './http-errors.js'
+import { ConflictError, HttpError } from './http-errors.js'
 import {
   createIntegrationCandidateRuntime,
   type IntegrationCandidateRuntime,
 } from './integration-candidate-runtime.js'
 import type { RecoveryMessage } from './message-log-store.js'
 import { createNativeSessionControl, type NativeSessionControl } from './native-session-control.js'
-import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
 import type { PtyOutputBus } from './pty-output-bus.js'
 import { createPullRequestRuntime, type PullRequestRuntime } from './pull-request-runtime.js'
 import { createRecoveryIndex, type RecoveryIndex } from './recovery-index.js'
@@ -50,17 +58,8 @@ import {
 } from './runtime-store-helpers.js'
 import { getCodexHome } from './session-capture-codex.js'
 import type { SettingsStore } from './settings-store.js'
-import {
-  createTeamMemoryDreamScheduler,
-  type TeamMemoryDreamScheduler,
-} from './team-memory-dream-scheduler.js'
+import { createTeamMemoryDreamRuntime } from './team-memory-dream-runtime.js'
 import type { TeamMemoryDreamStore } from './team-memory-dream-store.js'
-import {
-  isWorkspaceMemoryDreamEnabled,
-  isWorkspaceMemoryEnabled,
-  readWorkspaceMemoryDreamLastScheduledAt,
-  setWorkspaceMemoryDreamLastScheduledAt,
-} from './team-memory-feature.js'
 import type { TeamMemoryStore } from './team-memory-store.js'
 import type {
   CancelTaskInput,
@@ -69,9 +68,15 @@ import type {
   ReportTaskResult,
   StatusTaskInput,
 } from './team-operations.js'
+import { createTeamReviewRuntime, type TeamReviewRuntime } from './team-review-runtime.js'
 import type { TerminalRunSummary } from './terminal-input-profile.js'
 import { createVerificationRuntime, type VerificationRuntime } from './verification-runtime.js'
 import { createWorkerBranchRuntime, type WorkerBranchRuntime } from './worker-branch-runtime.js'
+import {
+  createWorkerLifecycleRuntime,
+  type WorkerLifecycleRuntime,
+} from './worker-lifecycle-runtime.js'
+import { assertWorkerAvailable } from './worker-lifecycle-store.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'
 import { createWorkflowEvidenceReader } from './workflow-evidence.js'
 import type { WorkflowRuntime } from './workflow-runtime.js'
@@ -100,6 +105,11 @@ export interface LocalRetentionDiagnostics {
 }
 
 interface RuntimeStore {
+  collaborationStats: CollaborationStatsQuery
+  attention: ActivityAttentionQuery
+  clarifications: ClarificationRuntime
+  teamReviews: TeamReviewRuntime
+  workerLifecycle: WorkerLifecycleRuntime
   cliReadiness: CliReadinessRuntime
   onboarding: WorkspaceOnboarding
   deliveryHistory: WorkspaceDeliveryQuery
@@ -108,12 +118,14 @@ interface RuntimeStore {
   createBackup: (output: string, nativeIds?: string[]) => ReturnType<typeof createDataBackup>
   nativeSessions: NativeSessionControl
   dispatchDelivery: import('./team-delivery-runtime.js').TeamDeliveryRuntime
+  dispatchMessages: import('./dispatch-message-runtime.js').DispatchMessageRuntime
   resources: RuntimeStoreServices['resources']
   resourceQueue: RuntimeStoreServices['resourceQueue']
   cancelPendingAgentStart: (workspaceId: string, agentId: string) => void
   readAgentConversation: (
     workspaceId: string,
-    agentId: string
+    agentId: string,
+    runId?: string
   ) => Promise<import('../shared/agent-conversation.js').AgentConversation>
   verifications: VerificationRuntime
   codeReviews: CodeReviewRuntime
@@ -203,6 +215,7 @@ interface RuntimeStore {
   startWorkspaceWatch: (workspaceId: string) => Promise<void>
   setAutoResumeOnRestart: (workspaceId: string, enabled: boolean) => void
   getLiveRun: (runId: string) => LiveAgentRun
+  getRunInputSequence: (runId: string) => number
   getActiveRunByAgentId: (workspaceId: string, agentId: string) => LiveAgentRun | undefined
   registerTasksListener: (listener: (workspaceId: string, content: string) => void) => () => void
   listAgentRuns: (agentId: string) => PersistedAgentRun[]
@@ -214,9 +227,14 @@ interface RuntimeStore {
   settings: SettingsStore
   memory: TeamMemoryStore
   memoryDream: TeamMemoryDreamStore
+  memoryDreamGeneration: RuntimeStoreServices['memoryDreamGeneration']
   skills: WorkspaceSkillManager
   workflows: WorkflowRuntime
   requestMemoryDream: (workspaceId: string) => Promise<TeamMemoryDreamRun>
+  requestMemoryDreamGeneration: (
+    workspaceId: string,
+    retry?: boolean
+  ) => Promise<TeamMemoryDreamRun | null>
   requestMemoryDreamWorkerReview: (
     workspaceId: string,
     dreamId: string,
@@ -406,49 +424,19 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     teamSkillRuntime: services.teamSkillRuntime,
   })
   const externalGoals = createRuntimeStoreExternalGoalMethods(services)
-  const buildDreamPrompt = (run: TeamMemoryDreamRun) =>
-    [
-      '[Hive system message: Team memory Dream review]',
-      'Review the prepared memory consolidation below as the Workspace Orchestrator.',
-      'This is a visible review request. Do not submit or alter memory outside the Hive UI workflow.',
-      'Only the Workspace Orchestrator authority may submit the reviewed Dream.',
-      wrapUntrustedPromptData('memory', JSON.stringify(run.suggestions), 8_000),
-      'After reviewing, leave the Dream in review state until the user confirms submission.',
-    ].join('\n\n')
-  const deliverDream = async (run: TeamMemoryDreamRun) => {
-    const orchestratorId = `${run.workspaceId}:orchestrator`
-    const activeRun = services.agentRuntime.getActiveRunByAgentId(run.workspaceId, orchestratorId)
-    if (!activeRun || run.executionStatus === 'requested') return run
-    services.memoryDreamStore.markExecutionRequested(run.workspaceId, run.id, activeRun.runId)
-    try {
-      await services.agentRuntime.deliverSystemMessageToAgent(
-        run.workspaceId,
-        orchestratorId,
-        buildDreamPrompt(run),
-        { requireActiveRun: true }
-      )
-      return services.memoryDreamStore.get(run.workspaceId, run.id) ?? run
-    } catch (error) {
-      return (
-        services.memoryDreamStore.markExecutionFailed(
-          run.workspaceId,
-          run.id,
-          error instanceof Error ? error.message : String(error)
-        ) ?? run
-      )
-    }
-  }
-  const deliverPendingDreams = async (workspaceId: string, agentId: string) => {
-    if (agentId !== `${workspaceId}:orchestrator`) return
-    for (const run of services.memoryDreamStore.listPendingExecution(workspaceId)) {
-      await deliverDream(run)
-    }
-  }
+  const memoryDreamRuntime = createTeamMemoryDreamRuntime(services)
   const lifecycle = createRuntimeStoreLifecycle(
     options.agentManager
-      ? { agentManager: options.agentManager, onAgentStarted: deliverPendingDreams, services }
-      : { onAgentStarted: deliverPendingDreams, services }
+      ? {
+          agentManager: options.agentManager,
+          onAgentStarted: memoryDreamRuntime.onAgentStarted,
+          services,
+        }
+      : { onAgentStarted: memoryDreamRuntime.onAgentStarted, services }
   )
+  const workerLifecycle = createWorkerLifecycleRuntime(services, lifecycle)
+  const clarifications = createClarificationRuntime(services, workerLifecycle)
+  const teamReviews = createTeamReviewRuntime(services, workerLifecycle, codeReviews)
   const stopTerminalRun = (runId: string) => {
     if (!services.shellRuntime.hasRun(runId)) {
       let liveRun: LiveAgentRun | null = null
@@ -475,10 +463,14 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   }
   const pendingGitScans = new Set<Promise<void>>()
   let closePromise: Promise<void> | null = null
-  let memoryDreamScheduler: TeamMemoryDreamScheduler | null = null
   const close = () => {
     if (closePromise) return closePromise
     closePromise = (async () => {
+      const closeMemoryDream = memoryDreamRuntime.close()
+      const closeClarifications = clarifications.close()
+      const closeTeamReviews = teamReviews.close()
+      const closeWorkerLifecycle = workerLifecycle.close()
+      lifecycle.stopAutoResume()
       services.agentRuntime.cancelAllPendingStarts()
       const closeWorkflows = services.workflowRuntime.close()
       const closeResourceQueue = services.resourceQueue.close()
@@ -497,12 +489,15 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       while (pendingGitScans.size > 0) {
         await Promise.all(Array.from(pendingGitScans))
       }
+      await closeClarifications
+      await closeTeamReviews
+      await closeWorkerLifecycle
       await closeTeamOperations
       await closeWorkflows
       await closeResourceQueue
       await closeVerifications
       await closeWorktrees
-      await memoryDreamScheduler?.close()
+      await closeMemoryDream
       await lifecycle.close()
     })()
     return closePromise
@@ -556,86 +551,6 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       storage: 'local',
     }
   }
-  const requestMemoryDream = async (workspaceId: string) =>
-    deliverDream(services.memoryDreamStore.create(workspaceId))
-  memoryDreamScheduler = createTeamMemoryDreamScheduler({
-    getScheduleState: (workspaceId) => {
-      const lastScheduledAt = readWorkspaceMemoryDreamLastScheduledAt(
-        services.settings,
-        workspaceId
-      )
-      return {
-        hasReviewDraft: services.memoryDreamStore
-          .list(workspaceId, 50)
-          .some((run) => run.status === 'review'),
-        hasSourceMemory:
-          services.memoryStore.list(workspaceId, { limit: 1, status: 'active' }).length > 0,
-        hasUnreviewedActivity:
-          services.messageLogStore.listMessagesForRecovery(workspaceId, lastScheduledAt ?? 0)
-            .length > 0,
-        lastScheduledAt,
-      }
-    },
-    getWorkspaceSnapshot: (workspaceId) =>
-      services.workspaceStore.getWorkspaceSnapshot(workspaceId),
-    isEnabled: (workspaceId) =>
-      isWorkspaceMemoryEnabled(services.settings, workspaceId) &&
-      isWorkspaceMemoryDreamEnabled(services.settings, workspaceId),
-    listWorkspaces: () => services.workspaceStore.listWorkspaces(),
-    markScheduled: (workspaceId, timestamp) =>
-      setWorkspaceMemoryDreamLastScheduledAt(services.settings, workspaceId, timestamp),
-    runScheduled: requestMemoryDream,
-  })
-  memoryDreamScheduler.start()
-  const requestMemoryDreamWorkerReview = async (
-    workspaceId: string,
-    dreamId: string,
-    workerId: string,
-    hivePort: string
-  ) => {
-    const dream = services.memoryDreamStore.get(workspaceId, dreamId)
-    if (!dream) throw new ConflictError('Dream run not found')
-    if (dream.status !== 'review') throw new ConflictError('Only a Dream in review can be reviewed')
-    const worker = services.workspaceStore.getWorker(workspaceId, workerId)
-    if (worker.role === 'orchestrator') {
-      throw new ForbiddenError('The Orchestrator cannot be assigned a worker review')
-    }
-    const orchestratorId = `${workspaceId}:orchestrator`
-    const orchestrator = services.workspaceStore.getAgent(workspaceId, orchestratorId)
-    if (orchestrator.role !== 'orchestrator') {
-      throw new ForbiddenError('Only the Workspace Orchestrator can request a review')
-    }
-    const task = [
-      'Review this Team memory Dream as a supporting worker.',
-      `Dream id: ${sanitizePromptData(dream.id, 100)}`,
-      'Return findings in normal prose. If you recommend replacement suggestions, append a JSON object after DREAM_REVIEW_JSON.',
-      'The JSON shape is {"suggestions":[{"body":"...","kind":"decision|fact|preference|pitfall|procedure_ref","scope":"workspace|user","source_memory_ids":[],"tags":[]}]}.',
-      'Do not submit the Dream; only the Workspace Orchestrator can submit it.',
-      wrapUntrustedPromptData('memory', JSON.stringify(dream.suggestions), 8_000),
-    ].join('\n\n')
-    const dispatch = await services.teamOps.dispatchTask(workspaceId, workerId, task, {
-      fromAgentId: orchestratorId,
-      hivePort,
-    })
-    const review = services.memoryDreamStore.recordReviewRequest(
-      workspaceId,
-      dreamId,
-      workerId,
-      dispatch.id
-    )
-    if (dispatch.status === 'failed') {
-      return services.memoryDreamStore.markReviewFailed(workspaceId, dispatch.id) ?? review
-    }
-    if (dispatch.status === 'reported' && dispatch.reportText) {
-      services.memoryDreamStore.recordWorkerReview(
-        workspaceId,
-        dispatch.id,
-        dispatch.reportText,
-        dispatch.artifacts
-      )
-    }
-    return review
-  }
   const reportTask = (workspaceId: string, workerId: string, input?: ReportTaskInput) => {
     services.worktrees.assertIdle(workspaceId)
     const result = services.teamOps.reportTask(workspaceId, workerId, input)
@@ -659,6 +574,9 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
   }
   let remoteTunnel: RemoteTunnel | null = null
   return {
+    clarifications,
+    teamReviews,
+    workerLifecycle,
     cliReadiness: createCliReadiness({
       policies: services.executionPolicies,
       resources: services.resources,
@@ -691,6 +609,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       },
     }),
     dispatchDelivery: services.dispatchDelivery,
+    dispatchMessages: services.dispatchMessages,
     executionPolicies: services.executionPolicies,
     resources: services.resources,
     resourceQueue: services.resourceQueue,
@@ -710,9 +629,34 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     deliveryQueue,
     branches,
     worktreeResources,
-    async readAgentConversation(workspaceId, agentId) {
+    async readAgentConversation(workspaceId, agentId, runId) {
       if (!services.workspaceStore.hasAgent(workspaceId, agentId))
         throw new HttpError(404, 'Agent not found in workspace')
+      if (runId !== undefined) {
+        if (!services.agentRuntime.listAgentRuns(agentId).some((run) => run.runId === runId))
+          throw new HttpError(404, 'Run not found for agent')
+        const binding = services.agentRuntime.getRunSessionContext(workspaceId, agentId, runId)
+        if (!binding)
+          return { run_id: runId, status: 'pending', session_id: null, turns: [], truncated: false }
+        if (binding.capture.source !== 'codex_session_jsonl_dir')
+          return {
+            run_id: runId,
+            status: 'unsupported',
+            session_id: null,
+            turns: [],
+            truncated: false,
+          }
+        if (!binding.sessionId)
+          return { run_id: runId, status: 'pending', session_id: null, turns: [], truncated: false }
+        return {
+          ...(await readConversation(
+            getCodexHome(binding.capture.pattern),
+            binding.sessionId,
+            binding.cwd
+          )),
+          run_id: runId,
+        }
+      }
       const context = services.agentSessionStore.getCaptureContext(workspaceId, agentId)
       const config = services.agentRuntime.peekAgentLaunchConfig(workspaceId, agentId)
       const preset = config?.commandPresetId
@@ -808,6 +752,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       if (activeRun) services.agentRuntime.stopAgentRun(activeRun.runId)
       services.agentRuntime.deleteAgentLaunchConfig(workspaceId, workerId)
       runDataMutation(() => {
+        services.memoryDreamGeneration.recordWorkerMessageDeletion(workspaceId, workerId)
         services.reportOutbox.deleteWorkerEntries(workspaceId, workerId)
         services.dispatchSkillActivationStore.deleteWorker(workspaceId, workerId)
         services.dispatchLedgerStore.deleteWorkerDispatches(workspaceId, workerId)
@@ -824,6 +769,8 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     dispatchTaskByWorkerName: services.teamOps.dispatchTaskByWorkerName,
     reportTask,
     statusTask: services.teamOps.statusTask,
+    collaborationStats: createCollaborationStatsQuery(services.db),
+    attention: createActivityAttentionQuery(services.db),
     deliveryHistory: createWorkspaceDeliveryQuery(services.db, services.dispatchLedgerStore),
     recoveryIndex: createRecoveryIndex(services.db, services.tasksFileService.readTasks),
     dataRetention: createDataRetention(services.db),
@@ -846,6 +793,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     sendDispatchFeedback: (workspaceId, dispatchId, text) => {
       services.worktrees.assertIdle(workspaceId)
       const previous = services.dispatchLedgerStore.getDispatchById(workspaceId, dispatchId)
+      if (previous) assertWorkerAvailable(services.db, workspaceId, previous.toAgentId)
       if (
         previous?.status === 'reported' &&
         services.workflowRuntime.rerunForDispatch(workspaceId, dispatchId, text)
@@ -908,6 +856,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
       services.workspaceStore.setAutoResumeOnRestart(workspaceId, enabled),
     startWorkspaceShell: lifecycle.startWorkspaceShell,
     getLiveRun: lifecycle.getLiveRun,
+    getRunInputSequence: lifecycle.getRunInputSequence,
     getActiveRunByAgentId: (workspaceId, agentId) =>
       services.agentRuntime.getActiveRunByAgentId(workspaceId, agentId),
     registerTasksListener: lifecycle.registerTasksListener,
@@ -921,9 +870,11 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
     settings: services.settings,
     memory: services.memoryStore,
     memoryDream: services.memoryDreamStore,
+    memoryDreamGeneration: services.memoryDreamGeneration,
     skills,
-    requestMemoryDream,
-    requestMemoryDreamWorkerReview,
+    requestMemoryDream: memoryDreamRuntime.request,
+    requestMemoryDreamGeneration: memoryDreamRuntime.requestGeneration,
+    requestMemoryDreamWorkerReview: memoryDreamRuntime.requestWorkerReview,
     workflows: services.workflowRuntime,
     ...externalGoals,
     remote: {

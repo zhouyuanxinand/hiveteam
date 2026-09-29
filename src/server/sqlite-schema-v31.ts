@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Persists structured references for procedure-ref team memories. */
 export const applySchemaVersion31 = (db: Database) => {

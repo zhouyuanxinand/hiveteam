@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { createTeamMailboxBroker } from '../../src/server/team-mailbox-broker.js'
 import { startAuthorizedTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
@@ -74,6 +74,24 @@ test('a stopped recipient resumes persisted report delivery without UI or team-l
     await f.server.store.dispatchDelivery.deliver(receipt?.id ?? '')
   }
   expect(readFileSync(f.marker, 'utf8').split(id)).toHaveLength(2)
+  const db = new Database(join(f.server.dataDir, 'runtime.sqlite'))
+  try {
+    const row = db
+      .prepare('SELECT payload FROM report_outbox WHERE receipt_id=?')
+      .get(receipt?.id ?? '') as { payload: string }
+    // The cooked echo fixture consumes line endings; byte measurements describe
+    // the prepared message, not terminal transport or its line discipline.
+    expect(readFileSync(f.marker, 'utf8').replace(/[\r\n]/g, '')).toContain(
+      row.payload.replace(/[\r\n]/g, '')
+    )
+    expect(
+      db
+        .prepare('SELECT attempt,utf8_bytes FROM delivery_payload_measurements WHERE delivery_id=?')
+        .all(receipt?.id ?? '')
+    ).toEqual([{ attempt: 1, utf8_bytes: Buffer.byteLength(row.payload, 'utf8') }])
+  } finally {
+    db.close()
+  }
   expect(f.server.store.dispatchDelivery.records.get(receipt?.id ?? '')).toMatchObject({
     id: receipt?.id,
     attempt: 1,
@@ -327,12 +345,16 @@ test('stop-impact HTTP lists all open dispatches and leaves cancellation scoped 
 
 test('an explicit HTTP resend retains its ID and audit and sends a second copy only after acknowledgement', async () => {
   const f = await setup()
-  await f.start(f.worker.id)
+  const run = await f.start(f.worker.id)
+  await expect
+    .poll(() => f.server.store.getLiveRun(run.runId).output, { timeout: 10_000 })
+    .toContain('READY')
   const text = `EXPLICIT_RESEND_${randomUUID()}`
   const task = await f.server.store.dispatchTask(f.workspace.id, f.worker.id, text)
   await expect
     .poll(() => f.server.store.dispatchDelivery.records.get(task.id)?.state)
     .toBe('unknown')
+  await expect.poll(() => readFileSync(f.marker, 'utf8').split(text).length).toBe(2)
   const path = `/api/ui/workspaces/${f.workspace.id}/message-deliveries/${task.id}/resolve`
   const request = {
     action: 'resend',
@@ -359,4 +381,28 @@ test('an explicit HTTP resend retains its ID and audit and sends a second copy o
       }),
     ])
   )
+})
+
+test('a failed prepared-payload database write prevents terminal submission', async () => {
+  const f = await setup()
+  const db = new Database(join(f.server.dataDir, 'runtime.sqlite'))
+  try {
+    db.exec(
+      "CREATE TRIGGER reject_payload BEFORE INSERT ON delivery_payload_measurements BEGIN SELECT RAISE(ABORT, 'payload persistence failed'); END"
+    )
+    await f.start(f.worker.id)
+    const marker = `NO_WRITE_${randomUUID()}`
+    const dispatch = await f.server.store.dispatchTask(f.workspace.id, f.worker.id, marker)
+    await expect
+      .poll(() => f.server.store.dispatchDelivery.records.get(dispatch.id)?.reason)
+      .toContain('payload persistence failed')
+    expect(f.server.store.dispatchDelivery.records.get(dispatch.id)).toMatchObject({
+      state: 'pending',
+      write_started: 0,
+    })
+    expect(readFileSync(f.marker, 'utf8')).not.toContain(marker)
+    expect(db.prepare('SELECT * FROM delivery_payload_measurements').all()).toEqual([])
+  } finally {
+    db.close()
+  }
 })

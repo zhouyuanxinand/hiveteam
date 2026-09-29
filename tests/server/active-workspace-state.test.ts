@@ -1,11 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
 import { createApp } from '../../src/server/app.js'
+import Database from '../../src/server/sqlite.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

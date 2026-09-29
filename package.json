@@ -5,9 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "allowScripts": {
-    "better-sqlite3": true,
-    "esbuild": true,
-    "node-pty": true
+    "esbuild": true
   },
   "license": "BUSL-1.1",
   "keywords": [
@@ -29,7 +27,7 @@
   },
   "homepage": "https://github.com/zhouyuanxinand/hiveteam#readme",
   "engines": {
-    "node": ">=22"
+    "node": "^22.18.0 || ^24.0.0"
   },
   "files": [
     "assets/",
@@ -58,7 +56,13 @@
     "scripts/dev-start.mjs",
     "scripts/ui-launcher.mjs",
     "web/dist/",
-    "scripts/fix-runtime-artifacts.mjs"
+    "scripts/platform-console.mjs",
+    "scripts/platform-environment.mjs",
+    "scripts/platform-launch.mjs",
+    "scripts/platform-owner.mjs",
+    "scripts/platform-start.mjs",
+    "scripts/platform-supervisor.mjs",
+    "scripts/managed-node.mjs"
   ],
   "publishConfig": {
     "access": "public"
@@ -81,18 +85,20 @@
     "build": "pnpm clean && tsc -p tsconfig.build.json && node scripts/prepare-build-artifacts.mjs && pnpm build:web",
     "build:web": "vite build --config web/vite.config.ts",
     "check": "pnpm exec biome check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p gateway/tsconfig.json",
     "format": "pnpm exec biome format --write .",
     "pack:check": "npm pack --dry-run --json",
+    "pack:artifact": "node scripts/create-release-artifact.mjs",
     "pack:smoke": "node scripts/pack-smoke.mjs",
-    "postinstall": "node scripts/fix-runtime-artifacts.mjs",
     "release:compat": "node scripts/cli-compat-report.mjs",
-    "release:dry": "pnpm check && pnpm release:compat && pnpm build && pnpm test && pnpm pack:check && pnpm pack:smoke",
+    "release:dry": "pnpm check && pnpm typecheck && pnpm release:compat && pnpm build && pnpm test && pnpm pack:check && pnpm pack:smoke",
     "sync:marketplace": "node scripts/sync-marketplace.mjs",
-    "test": "vitest run",
-    "test:windows": "vitest run tests/unit/agent-command-resolver.test.ts tests/unit/session-capture-multi-cli.test.ts tests/unit/claude-session-support.test.ts tests/unit/worker-name-generator.test.ts tests/unit/open-target-commands.test.ts tests/unit/sw-template-substitution.test.ts tests/unit/build-sw-plugin.test.ts tests/server/fs-pick-folder.test.ts tests/server/fs-browse.test.ts tests/server/schema-version.test.ts tests/server/runtime-rehydration.test.ts tests/server/open-workspace-route.test.ts tests/server/static-pwa.test.ts tests/web/workspace-picker.test.tsx tests/web/confirm-dialog.test.tsx tests/web/toast.test.tsx tests/web/open-workspace-button.test.tsx tests/web/register-service-worker.test.ts tests/web/use-shortcut-action.test.ts tests/web/update-available-toast.test.tsx tests/web/runtime-offline-page.test.tsx tests/web/use-terminal-panel-height.test.ts tests/web/use-terminal-panel-tabs.test.ts tests/web/terminal-tabs.test.tsx tests/web/terminal-bottom-panel.test.tsx --no-file-parallelism --maxWorkers=1 --testTimeout=60000 --hookTimeout=60000",
-    "test:watch": "vitest"
+    "test": "node scripts/run-tests.mjs run",
+    "test:windows": "node scripts/run-tests.mjs run",
+    "test:watch": "node scripts/run-tests.mjs watch"
   },
   "dependencies": {
+    "@lydell/node-pty": "1.2.0-beta.15",
     "@noble/ciphers": "^2.2.0",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
@@ -108,7 +114,6 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/headless": "^6.0.0",
     "@xterm/xterm": "^6.0.0",
-    "better-sqlite3": "^12.9.0",
     "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -117,7 +122,6 @@
     "isomorphic-dompurify": "^3.14.0",
     "lucide-react": "^1.8.0",
     "marked": "^18.0.4",
-    "node-pty": "^1.1.0",
     "qrcode": "1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -129,13 +133,13 @@
     "@biomejs/biome": "2.4.12",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.1.2",
     "jsdom": "^26.1.0",
+    "tar": "7.5.22",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.1.10",
@@ -143,9 +147,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "esbuild",
-      "node-pty"
+      "esbuild"
     ]
   }
 }

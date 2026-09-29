@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 import { applySchemaVersion12 } from './sqlite-schema-v12.js'
 

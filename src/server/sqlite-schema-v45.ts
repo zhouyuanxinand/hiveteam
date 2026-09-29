@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion45 = (db: Database) => {
   const columns = db.pragma('table_info(agent_runs)') as { name: string }[]

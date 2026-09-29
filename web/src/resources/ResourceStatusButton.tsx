@@ -6,6 +6,7 @@ import type { ResourceStatus } from '../../../src/shared/resource-status.js'
 import { useRunStopConfirmation } from '../activity/useRunStopConfirmation.js'
 import { useI18n } from '../i18n.js'
 import { isRemoteMode } from '../remote/remote-permissions-api.js'
+import { PlatformRecoveryPanel } from './PlatformRecoveryPanel.js'
 import { ResourceLimitsForm } from './ResourceLimitsForm.js'
 import { ResourceOccupants } from './ResourceOccupants.js'
 import {
@@ -166,6 +167,7 @@ export const ResourceStatusButton = () => {
                 {zh ? '正在读取资源占用…' : 'Loading resource usage…'}
               </p>
             ) : null}
+            <PlatformRecoveryPanel />
           </Dialog.Content>
         </div>
       </Dialog.Portal>

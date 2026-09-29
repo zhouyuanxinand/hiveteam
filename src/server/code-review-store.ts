@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import type { CodeReviewRecord } from '../shared/code-review.js'
+import type { Database } from './sqlite.js'
 
 export const createCodeReviewStore = (db: Database) => ({
   list(workspaceId: string, dispatchId: string): CodeReviewRecord[] {

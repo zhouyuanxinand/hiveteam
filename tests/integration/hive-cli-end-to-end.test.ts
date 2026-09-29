@@ -30,7 +30,10 @@ const trackChild = (child: ChildProcess) => {
 
 afterEach(async () => {
   for (const { child, closed } of childProcesses.splice(0)) {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    if (child.exitCode === null && child.signalCode === null) {
+      if (child.connected) child.send({ type: 'hive:shutdown' })
+      else child.kill('SIGTERM')
+    }
     await closed
   }
   for (const dir of tempDirs.splice(0)) {
@@ -289,18 +292,46 @@ describe('hive cli end to end', () => {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     const closed = trackChild(processHandle)
-    let stdout = ''
-    processHandle.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString()
+    // The source launcher and its child both load TypeScript. Wait for actual
+    // readiness within the test's deadline, without a second startup deadline.
+    const ready = new Promise<string>((resolveReady, rejectReady) => {
+      const output = processHandle.stdout
+      const errorOutput = processHandle.stderr
+      if (!output || !errorOutput) throw new Error('Expected piped CLI output')
+      let stdout = ''
+      let stderr = ''
+      const cleanup = () => {
+        output.off('data', onStdout)
+        errorOutput.off('data', onStderr)
+        processHandle.off('error', onError)
+        processHandle.off('close', onClose)
+      }
+      const onStdout = (chunk: Buffer) => {
+        stdout += chunk.toString()
+        const match = stdout.match(/Hive running at (http:\/\/127\.0\.0\.1:\d+)\r?\n/)
+        if (!match?.[1]) return
+        cleanup()
+        resolveReady(match[1])
+      }
+      const onStderr = (chunk: Buffer) => {
+        stderr += chunk.toString()
+      }
+      const onError = (error: Error) => {
+        cleanup()
+        rejectReady(new Error(`Hive CLI failed before readiness: ${error.message}\n${stderr}`))
+      }
+      const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
+        cleanup()
+        rejectReady(new Error(`Hive CLI closed before readiness (${code ?? signal}):\n${stderr}`))
+      }
+      output.on('data', onStdout)
+      errorOutput.on('data', onStderr)
+      processHandle.once('error', onError)
+      processHandle.once('close', onClose)
     })
 
     try {
-      await waitFor(() => {
-        expect(stdout).toContain('Hive running at http://127.0.0.1:')
-      })
-      const match = stdout.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)
-      expect(match?.[1]).toBeTruthy()
-      const baseUrl = `http://127.0.0.1:${Number(match?.[1])}`
+      const baseUrl = await ready
       const sessionResponse = await fetch(`${baseUrl}/api/ui/session`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -359,8 +390,11 @@ describe('hive cli end to end', () => {
         ],
       })
     } finally {
-      processHandle.kill('SIGTERM')
+      if (processHandle.connected) processHandle.send({ type: 'hive:shutdown' })
+      else if (processHandle.exitCode === null && processHandle.signalCode === null)
+        processHandle.kill('SIGTERM')
       await closed
     }
+    expect(await closed).toBe(0)
   })
 })

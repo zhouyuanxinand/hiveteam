@@ -1,6 +1,7 @@
-import type { Database } from 'better-sqlite3'
 import type { AgentSummary, WorkspaceLanguage } from '../shared/types.js'
 import { getDefaultRoleDescription, getLocalizedAgentDescription } from './role-templates.js'
+import type { Database } from './sqlite.js'
+import { workerLifecycleFields } from './worker-lifecycle-store.js'
 import type { WorkspaceRecord } from './workspace-store-contract.js'
 import {
   applyPendingTaskCount,
@@ -14,9 +15,10 @@ import {
 
 const createWorkerSummary = (
   workspaceId: string,
-  row: Pick<WorkerRow, 'avatar' | 'description' | 'id' | 'name' | 'role'>,
+  row: WorkerRow,
   language: WorkspaceLanguage
 ): AgentSummary => ({
+  ...workerLifecycleFields(row),
   ...(row.avatar ? { avatar: row.avatar } : {}),
   id: row.id,
   workspaceId,
@@ -80,9 +82,7 @@ export const hydrateWorkspaceFromDb = (
   })
 
   for (const workerRow of db
-    .prepare(
-      'SELECT id, workspace_id, name, avatar, description, manual_stop, role FROM workers WHERE workspace_id = ? ORDER BY created_at ASC'
-    )
+    .prepare('SELECT * FROM workers WHERE workspace_id = ? ORDER BY created_at ASC')
     .all(workspaceId) as WorkerRow[]) {
     workspaces
       .get(workspaceId)
@@ -117,9 +117,7 @@ export const seedWorkspacesFromDb = (
   }
 
   for (const row of db
-    .prepare(
-      'SELECT id, workspace_id, name, avatar, description, manual_stop, role FROM workers ORDER BY created_at ASC'
-    )
+    .prepare('SELECT * FROM workers ORDER BY created_at ASC')
     .all() as WorkerRow[]) {
     const language = workspaces.get(row.workspace_id)?.summary.language ?? 'zh'
     workspaces

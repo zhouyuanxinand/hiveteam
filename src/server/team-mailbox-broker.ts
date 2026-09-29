@@ -7,12 +7,18 @@ import {
   TEAM_MAILBOX_REQUEST_TTL_MS,
   type TeamMailboxRequest,
   type TeamMailboxResponse,
+  teamMailboxResponseTimeout,
 } from '../shared/team-mailbox.js'
 import { BadRequestError, ForbiddenError, HttpError } from './http-errors.js'
 
 const REQUEST_FILE =
   /^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.json$/iu
 const POST_ROUTES = new Set([
+  '/api/team/grill',
+  '/api/team/review/request',
+  '/api/team/spawn',
+  '/api/team/dismiss',
+  '/api/team/message',
   '/api/team/send',
   '/api/team/cancel',
   '/api/team/report',
@@ -91,6 +97,8 @@ export const createTeamMailboxBroker = async (input: {
         : packet.method === 'GET' &&
           (target.pathname === listPath ||
             target.pathname === '/api/team/skills' ||
+            target.pathname === '/api/team/staffing' ||
+            target.pathname === '/api/team/messages' ||
             target.pathname === '/api/team/deliveries')
     if (!permitted) throw new ForbiddenError('Team route is not allowed')
     let body: string | undefined
@@ -107,7 +115,12 @@ export const createTeamMailboxBroker = async (input: {
       const requestedWorkspace = target.searchParams.get('project_id')
       if (requestedWorkspace && requestedWorkspace !== input.workspaceId)
         throw new ForbiddenError('Workspace mismatch')
-      if (target.pathname === '/api/team/skills' || target.pathname === '/api/team/deliveries')
+      if (
+        target.pathname === '/api/team/skills' ||
+        target.pathname === '/api/team/deliveries' ||
+        target.pathname === '/api/team/staffing' ||
+        target.pathname === '/api/team/messages'
+      )
         target.searchParams.set('project_id', input.workspaceId)
     }
     const response = await fetch(
@@ -121,7 +134,7 @@ export const createTeamMailboxBroker = async (input: {
         },
         ...(body === undefined ? {} : { body }),
         redirect: 'error',
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(teamMailboxResponseTimeout(target.pathname) - 5_000),
       }
     )
     const text = await response.text()

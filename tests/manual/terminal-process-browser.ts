@@ -14,7 +14,6 @@ const { chromium } = await import(pathToFileURL(modulePath).href)
 const directory = mkdtempSync(join(tmpdir(), 'hive-terminal-disclosure-qa-'))
 const workspacePath = join(directory, 'workspace')
 mkdirSync(workspacePath)
-if (process.platform === 'win32') process.env.HIVE_TEST_PTY_BACKEND = 'winpty'
 const server = await startTestServer({ dataDir: join(directory, 'state') })
 const browser = await chromium.launch({ headless: true })
 const errors: string[] = []

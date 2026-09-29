@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { afterEach, beforeEach, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import type {
   ReviewDocumentState,
   ReviewDraft,
@@ -144,7 +144,7 @@ test('keeps stopped-agent submissions retryable and delivers free text and revis
   writeFileSync(received, '')
   writeFileSync(
     script,
-    `import { appendFileSync } from 'node:fs';process.stdin.setEncoding('utf8');process.stdin.on('data', text=>{appendFileSync(${JSON.stringify(received)},text);process.stdout.write('RECEIVED:'+text)});setInterval(()=>{},1000)`
+    `import { appendFileSync } from 'node:fs';process.stdin.setEncoding('utf8');process.stdin.on('data', text=>{appendFileSync(${JSON.stringify(received)},text);process.stdout.write('RECEIVED:'+text)});console.log('REVIEW_READY');setInterval(()=>{},1000)`
   )
   server.store.configureAgentLaunch(id, `${id}:orchestrator`, {
     command: process.execPath,
@@ -153,6 +153,9 @@ test('keeps stopped-agent submissions retryable and delivers free text and revis
   const run = await server.store.startAgent(id, `${id}:orchestrator`, {
     hivePort: new URL(server.baseUrl).port,
   })
+  await expect
+    .poll(() => server.store.getLiveRun(run.runId).output, { timeout: 10_000 })
+    .toContain('REVIEW_READY')
   expect((await request('/answer', 'POST', answer)).status).toBe(202)
   await expect
     .poll(async () => (await (await request(`/submissions/${answerId}`)).json()).status)
@@ -167,9 +170,9 @@ test('keeps stopped-agent submissions retryable and delivers free text and revis
     .poll(async () => (await (await request(`/submissions/${reviewId}`)).json()).status)
     .toBe('submitted')
   await expect.poll(() => server.store.getLiveRun(run.runId).output).toContain('不是开始实现')
-  const output = server.store.getLiveRun(run.runId).output
-  expect(output).toContain('base_revision')
-  expect(output).toContain('页面入口')
+  // The accepted submission and its first output chunk do not fence later PTY output.
+  await expect.poll(() => server.store.getLiveRun(run.runId).output).toContain('base_revision')
+  await expect.poll(() => server.store.getLiveRun(run.runId).output).toContain('页面入口')
   expect((await (await request('/send', 'POST', input)).json()).status).toBe('submitted')
   // A subsequent acknowledgement is a fence: all earlier input must have reached the real process.
   const fence = { ...answer, request_id: randomUUID(), text: 'delivery-fence' }

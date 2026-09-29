@@ -1,7 +1,6 @@
-import type { Database } from 'better-sqlite3'
-
 import type { SessionIdCaptureConfig } from './session-capture.js'
 import { parseSessionIdCapture } from './session-capture.js'
+import type { Database } from './sqlite.js'
 
 export interface AgentLaunchConfigInput {
   command: string
@@ -297,6 +296,7 @@ export const createAgentRunStore = (db: Database) => {
          FROM agent_runs r
          INNER JOIN agent_launch_configs c ON c.agent_id = r.agent_id
          WHERE (r.status IN ('starting', 'running') OR r.resume_on_restart = 1)
+           AND NOT EXISTS (SELECT 1 FROM workers w WHERE w.id=r.agent_id AND (w.retired_at IS NOT NULL OR w.preparation_state!='ready'))
            AND r.rowid = (
              SELECT latest.rowid FROM agent_runs latest
              WHERE latest.agent_id = r.agent_id

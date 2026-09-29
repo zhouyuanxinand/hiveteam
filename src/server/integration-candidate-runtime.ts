@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
-import type { Database } from 'better-sqlite3'
 import type { CodeReviewVersion } from '../shared/code-review.js'
 import { sameCodeReviewVersion } from '../shared/code-review.js'
 import type {
@@ -24,6 +23,7 @@ import {
 import { createIntegrationCandidateStore } from './integration-candidate-store.js'
 import type { ResourceBudgetStore } from './resource-budget-store.js'
 import { ResourceQueueWaitError, type ResourceStartQueue } from './resource-start-queue.js'
+import type { Database } from './sqlite.js'
 import type { VerificationRuntime } from './verification-runtime.js'
 import { readVerificationVersion } from './verification-worktree.js'
 import type { WorkerWorktreeRuntime } from './worker-worktree-runtime.js'

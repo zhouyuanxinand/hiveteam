@@ -1,7 +1,7 @@
 import type { IDecoration, IDecorationOptions, Terminal } from '@xterm/xterm'
 import { readTerminalAppearance } from './terminal-theme.js'
 
-const INPUT_LINE = /^\s*[›❯]\s+\S/
+const INPUT_LINE = /^\s*[›❯»]\s+\S/
 const SCAN_LINES = 2_000
 
 // Decorations are view state, never mutations to the CLI's ANSI stream.

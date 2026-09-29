@@ -170,7 +170,8 @@ export const createApp = ({
               versionService,
               params: match.params,
             }),
-          (runId, byteCount, write) => executeRemoteHttpInput(request, runId, byteCount, write),
+          (runId, byteCount, write, initialTarget) =>
+            executeRemoteHttpInput(request, runId, byteCount, write, initialTarget),
           remoteQueueGrantForRequest(request)
         )
         return
@@ -218,7 +219,12 @@ export const createApp = ({
   })
   const terminalServer = createTerminalWebSocketServer(server, store, tasksFileService)
 
-  return { server, store, terminalMetrics: terminalServer.metrics }
+  return {
+    server,
+    store,
+    closeConnections: terminalServer.close,
+    terminalMetrics: terminalServer.metrics,
+  }
 }
 
 export type { CreateAppOptions }

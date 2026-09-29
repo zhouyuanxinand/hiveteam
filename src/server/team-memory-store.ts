@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database, Statement } from 'better-sqlite3'
 import {
   type CreateTeamMemoryInput,
   isTeamMemoryProcedureRefType,
@@ -14,6 +13,8 @@ import {
 } from '../shared/team-memory.js'
 import { createMemoryContextStore } from './memory-context-store.js'
 import { rankMemory } from './memory-lexical.js'
+import { createMemoryProvenanceStore } from './memory-provenance-store.js'
+import type { Database, Statement } from './sqlite.js'
 
 interface TeamMemoryRow {
   revision: number
@@ -120,18 +121,19 @@ const requireProcedureRefForKind = (
 
 export const createTeamMemoryStore = (db: Database) => {
   const contextStore = createMemoryContextStore(db)
-  const staleSource = (id: string) =>
-    contextStore.sources(id).some((source) => source.state === 'stale')
+  const provenance = createMemoryProvenanceStore(db)
+  const staleSource = (workspaceId: string) => (id: string) =>
+    contextStore.sources(workspaceId, id).some((source) => source.state === 'stale')
   const selectEntries = `
     SELECT
       e.*,
       (
         SELECT actor_agent_id_snapshot FROM memory_sources s
-        WHERE s.memory_id = e.id ORDER BY s.created_at ASC LIMIT 1
+        WHERE s.memory_id = e.id AND (s.source_workspace_id IS NULL OR s.source_workspace_id=e.workspace_id) ORDER BY s.created_at ASC LIMIT 1
       ) AS created_by_agent_id,
       (
         SELECT actor_name_snapshot FROM memory_sources s
-        WHERE s.memory_id = e.id ORDER BY s.created_at ASC LIMIT 1
+        WHERE s.memory_id = e.id AND (s.source_workspace_id IS NULL OR s.source_workspace_id=e.workspace_id) ORDER BY s.created_at ASC LIMIT 1
       ) AS created_by_agent_name
     FROM memory_entries e`
 
@@ -166,12 +168,6 @@ export const createTeamMemoryStore = (db: Database) => {
        ref_type, ref_id, ref_title
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-  const insertSourceStmt = db.prepare(
-    `INSERT INTO memory_sources (
-       id, memory_id, source_type, actor_agent_id_snapshot,
-       actor_name_snapshot, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?)`
-  )
   const deleteInjectionsForWorkspaceStmt = db.prepare(
     'DELETE FROM memory_injections WHERE workspace_id = ?'
   )
@@ -180,16 +176,6 @@ export const createTeamMemoryStore = (db: Database) => {
   )
   const deleteEntriesForWorkspaceStmt = db.prepare(
     'DELETE FROM memory_entries WHERE workspace_id = ?'
-  )
-  const insertInjectionStmt = db.prepare(
-    `INSERT INTO memory_injections (
-       id, memory_id, workspace_id, target_agent_id_snapshot,
-       context_type, dispatch_id, injected_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-  )
-  const markInjectedStmt = db.prepare(
-    `UPDATE memory_entries SET last_injected_at = ?
-     WHERE (workspace_id = ? OR (workspace_id IS NULL AND scope = 'user')) AND id = ?`
   )
   const updateEntryStmt = db.prepare(
     `UPDATE memory_entries
@@ -221,7 +207,7 @@ export const createTeamMemoryStore = (db: Database) => {
           .prepare(`${selectEntries} WHERE ${clauses.join(' AND ')}`)
           .all(...params) as TeamMemoryRow[]
       ).map(fromRow)
-      return rankMemory(candidates, query, staleSource)
+      return rankMemory(candidates, query, staleSource(workspaceId))
         .filter((item) => item.matched_tokens > 0)
         .slice(0, clampLimit(options.limit))
         .map((item) => item.entry)
@@ -241,7 +227,7 @@ export const createTeamMemoryStore = (db: Database) => {
           )
           .all(workspaceId) as TeamMemoryRow[]
       ).map(fromRow)
-      return rankMemory(entries, query, staleSource)
+      return rankMemory(entries, query, staleSource(workspaceId))
     },
     create(workspaceId: string, input: CreateTeamMemoryInput) {
       const now = Date.now()
@@ -262,7 +248,7 @@ export const createTeamMemoryStore = (db: Database) => {
         procedureRef,
         scope: input.scope ?? 'workspace',
         source: input.source ?? 'manual',
-        status: input.status ?? 'active',
+        status: input.sourceRef ? 'candidate' : (input.status ?? 'active'),
         tags: normalizeTags(input.tags),
         updatedAt: now,
         workspaceId: input.scope === 'user' ? null : workspaceId,
@@ -290,14 +276,9 @@ export const createTeamMemoryStore = (db: Database) => {
           entry.procedureRef?.id ?? null,
           entry.procedureRef?.title ?? null
         )
-        insertSourceStmt.run(
-          randomUUID(),
-          entry.id,
-          entry.source,
-          entry.createdByAgentId,
-          entry.createdByAgentName,
-          now
-        )
+        const actor = provenance.capture(workspaceId, entry, input.sourceRef)
+        entry.createdByAgentId = actor.id
+        entry.createdByAgentName = actor.name
       })()
       return entry
     },
@@ -319,36 +300,13 @@ export const createTeamMemoryStore = (db: Database) => {
           )
           .all(workspaceId) as TeamMemoryRow[]
       ).map(fromRow)
-      const ranked = rankMemory(entries, query, staleSource).filter((item) => item.eligible)
+      const ranked = rankMemory(entries, query, staleSource(workspaceId)).filter(
+        (item) => item.eligible
+      )
       const matches = ranked.filter((item) => item.matched_tokens > 0 || item.entry.pinned)
       return (matches.length ? matches : ranked)
         .slice(0, clampLimit(limit))
         .map((item) => item.entry)
-    },
-    recordInjection(input: {
-      dispatchId?: string | null
-      agentId: string
-      context: 'dispatch' | 'startup'
-      memoryIds: string[]
-      query?: string
-      workspaceId: string
-    }) {
-      if (input.memoryIds.length === 0) return
-      const now = Date.now()
-      db.transaction(() => {
-        for (const memoryId of input.memoryIds) {
-          insertInjectionStmt.run(
-            randomUUID(),
-            memoryId,
-            input.workspaceId,
-            input.agentId,
-            input.context,
-            input.dispatchId ?? null,
-            now
-          )
-          markInjectedStmt.run(now, input.workspaceId, memoryId)
-        }
-      })()
     },
     update(workspaceId: string, memoryId: string, input: UpdateTeamMemoryInput) {
       const current = get(workspaceId, memoryId)

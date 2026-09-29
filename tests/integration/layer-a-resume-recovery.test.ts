@@ -1,11 +1,9 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
-
 import { getClaudeSessionFilePath } from '../../src/server/session-capture-claude.js'
+import Database from '../../src/server/sqlite.js'
 import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
@@ -128,6 +126,12 @@ const startWorkerViaHttp = async (
   })
   expect(response.status).toBe(201)
   const payload = (await response.json()) as { run_id: string }
+  // Headless ConPTY negotiation precedes CLI output and session capture.
+  // Start the existing capture/status deadline only after the real CLI runs.
+  await waitFor(async () => {
+    const run = await getRunOutputViaHttp(baseUrl, cookie, payload.run_id)
+    expect(compactPtyText(run.output)).toContain('ARGS:')
+  }, 10_000)
   return { runId: payload.run_id }
 }
 
@@ -179,8 +183,6 @@ describe('Layer A resume recovery integration', () => {
       })
 
       const firstRun = await startWorkerViaHttp(server.baseUrl, cookie, workspace.id, worker.id)
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
       await waitFor(() => {
         expect(readLastSessionId(server.dataDir, workspace.id, worker.id)).toBe(sessionId)
       })
@@ -282,6 +284,7 @@ describe('Layer A resume recovery integration', () => {
     }
   })
 
+  // Three real launches need the runtime project's full test budget.
   test('T3 resume failure: non-zero exit retains the original session and blocks a fresh start', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'hive-layer-a-home-'))
     const workspacePathRaw = join(homeDir, 'workspace')
@@ -361,5 +364,5 @@ describe('Layer A resume recovery integration', () => {
     } finally {
       await server.close()
     }
-  }, 10_000)
+  })
 })

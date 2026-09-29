@@ -5,12 +5,12 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Database } from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 import { createResourceBudgetStore } from '../../src/server/resource-budget-store.js'
 import { openRuntimeDatabase } from '../../src/server/runtime-database.js'
 import { acquireRuntimeOwner } from '../../src/server/runtime-owner-lock.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import type { Database } from '../../src/server/sqlite.js'
 import type { ResourceReservation } from '../../src/shared/resource-budget.js'
 
 const roots: string[] = []

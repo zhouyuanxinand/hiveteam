@@ -9,7 +9,18 @@ import {
 import { isReportOutcome, type ReportOutcome } from '../shared/dispatch-result.js'
 import { fetchLocalRuntime, type LocalHttpResponse } from './local-http.js'
 import { CODE_REVIEW_USAGE, parseCodeReviewArgs } from './team-code-review.js'
+import { parseDreamArgs, TEAM_DREAM_USAGE } from './team-dream.js'
+import { runTeamGrill, TEAM_GRILL_USAGE } from './team-grill.js'
 import { fetchTeamMailbox } from './team-mailbox-client.js'
+import {
+  MESSAGE_USAGE,
+  MESSAGES_USAGE,
+  parseMessageArgs,
+  parseMessageSequence,
+  parseMessagesArgs,
+} from './team-messages.js'
+import { parseTeamReviewRequestArgs, TEAM_REVIEW_REQUEST_USAGE } from './team-review-request.js'
+import { DISMISS_USAGE, parseDismissArgs, parseSpawnArgs, SPAWN_USAGE } from './team-workers.js'
 
 const REQUIRED_ENV_KEYS = [
   'HIVE_PORT',
@@ -31,21 +42,29 @@ const TEAM_USAGE = [
   'Usage:',
   '  team list',
   '  team deliveries',
+  ...TEAM_DREAM_USAGE.split('\n').map((line) => `  ${line}`),
+  `  ${MESSAGE_USAGE.replace('Usage: ', '')}`,
+  `  ${MESSAGES_USAGE.replace('Usage: ', '')}`,
   '  team tasks read',
   '  team recovery [--cursor <cursor>]',
   '  team tasks write --expected-version <version> --stdin',
   ...CODE_REVIEW_USAGE.split('\n').map((line) => `  ${line}`),
+  `  ${TEAM_REVIEW_REQUEST_USAGE}`,
+  `  ${TEAM_GRILL_USAGE}`,
   '  team git commit --expected-head <sha> "<message>"',
   `  team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`,
-  '  team send "<worker-name>" "<task>" [--skill <pack/skill>]',
+  '  team send "<worker-name>" "<task>" [--skill <pack/skill>] [--messages]',
+  '  team staffing',
+  `  ${SPAWN_USAGE.replace('Usage: ', '')}`,
+  `  ${DISMISS_USAGE.replace('Usage: ', '')}`,
   '  team skill list',
   '  team skill load (<pack/skill> | --dispatch <dispatch-id>)',
   '  team skill read --dispatch <dispatch-id> <relative-text-path>',
   '  team cancel --dispatch <dispatch-id> "<reason>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed "<body>"',
   '  team goal report --goal <goal-id> --status progress|done|blocked|failed --stdin',
-  '  team report "<result>" [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
-  '  team report --stdin [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
+  '  team report "<result>" [--dispatch <dispatch-id>] [--seen-seq <sequence>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
+  '  team report --stdin [--dispatch <dispatch-id>] [--seen-seq <sequence>] [--outcome success|failed|blocked|partial] [--artifact <path>]',
   '  team status "<current status>" [--dispatch <id> --progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]',
   '  team status --stdin [--artifact <path>]',
   '',
@@ -148,13 +167,14 @@ interface ParsedCancelArgs {
 }
 
 export interface ParsedSendArgs {
+  messageProtocolVersion?: 1
   skillName: string | undefined
   task: string
   workerName: string
 }
 
 const REPORT_USAGE =
-  'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--outcome success|failed|blocked|partial] [--artifact <path>]'
+  'Usage: team report (<result> | --stdin) [--dispatch <dispatch-id>] [--seen-seq <sequence>] [--outcome success|failed|blocked|partial] [--artifact <path>]'
 const STATUS_USAGE =
   'Usage: team status (<current status> | --stdin) [--dispatch <id>] [--progress accepted|progress|waiting_input|waiting_permission|paused|cancelled] [--artifact <path>]'
 const CANCEL_USAGE = 'Usage: team cancel --dispatch <dispatch-id> <reason>'
@@ -162,12 +182,13 @@ const GUIDE_USAGE = `Usage: team guide <${PROTOCOL_GUIDE_TOPICS.join('|')}>`
 const GOAL_REPORT_USAGE =
   'Usage: team goal report --goal <goal-id> --status progress|done|blocked|failed (<body> | --stdin) [--artifact <path>]'
 const GOAL_REPORT_STATUSES = new Set(['progress', 'done', 'blocked', 'failed'])
-const SEND_USAGE = 'Usage: team send "<worker-name>" "<task>" [--skill <pack/skill>]'
+const SEND_USAGE = 'Usage: team send "<worker-name>" "<task>" [--skill <pack/skill>] [--messages]'
 const SKILL_USAGE =
   'Usage: team skill (list | load (<pack/skill> | --dispatch <dispatch-id>) | read --dispatch <dispatch-id> <relative-text-path>)'
 
 const usageFor = (command: string) => {
-  if (command === 'review') return CODE_REVIEW_USAGE
+  if (command === 'message') return MESSAGE_USAGE
+  if (command === 'review') return `${TEAM_REVIEW_REQUEST_USAGE}\n${CODE_REVIEW_USAGE}`
   if (command === 'status') return STATUS_USAGE
   if (command === 'goal report') return GOAL_REPORT_USAGE
   return REPORT_USAGE
@@ -192,6 +213,7 @@ const readGeneratedProtocolGuide = (topic: string) => {
 }
 
 export interface ParsedReportArgs {
+  seenSeq?: number
   progressState?:
     | 'accepted'
     | 'progress'
@@ -220,12 +242,19 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
   let dispatchId: string | undefined
   let useStdin = false
   let outcome: ReportOutcome | undefined
+  let seenSeq: number | undefined
   let progressState: ParsedReportArgs['progressState']
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === undefined) continue
 
+    if (arg === '--seen-seq') {
+      if (command !== 'report' || seenSeq !== undefined)
+        throw new Error(withUsage('--seen-seq is only supported once by team report', command))
+      seenSeq = parseMessageSequence(args[++index], '--seen-seq')
+      continue
+    }
     if (arg === '--progress') {
       const value = args[index + 1]
       if (
@@ -300,6 +329,8 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
 
   if (progressState && !dispatchId)
     throw new Error(withUsage('--progress requires --dispatch', command))
+  if (seenSeq !== undefined && !dispatchId)
+    throw new Error(withUsage('--seen-seq requires --dispatch', command))
   if (useStdin && positionals.length > 0) {
     throw new Error(
       withUsage(
@@ -331,6 +362,7 @@ export const parseReportArgs = (args: string[], command = 'report'): ParsedRepor
     dispatchId,
     useStdin,
     ...(outcome ? { outcome } : {}),
+    ...(seenSeq === undefined ? {} : { seenSeq }),
     ...(progressState ? { progressState } : {}),
   }
 }
@@ -379,6 +411,7 @@ export const parseSendArgs = (args: string[]): ParsedSendArgs => {
   const positionals: string[] = []
   let skillName: string | undefined
   let positionalOnly = false
+  let messageProtocolVersion: 1 | undefined
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -397,6 +430,11 @@ export const parseSendArgs = (args: string[]): ParsedSendArgs => {
       index += 1
       continue
     }
+    if (!positionalOnly && arg === '--messages') {
+      if (messageProtocolVersion) throw new Error('--messages may be supplied only once')
+      messageProtocolVersion = 1
+      continue
+    }
     if (!positionalOnly && arg.startsWith('--')) {
       throw new Error(`Unknown argument: ${arg}\n\n${SEND_USAGE}`)
     }
@@ -406,7 +444,12 @@ export const parseSendArgs = (args: string[]): ParsedSendArgs => {
   const [workerName, ...taskParts] = positionals
   const task = taskParts.join(' ').trim()
   if (!workerName || !task || uuidPattern.test(workerName)) throw new Error(SEND_USAGE)
-  return { skillName, task, workerName }
+  return {
+    skillName,
+    task,
+    workerName,
+    ...(messageProtocolVersion ? { messageProtocolVersion } : {}),
+  }
 }
 
 export const parseSkillDispatchArgs = (args: string[]) => {
@@ -526,8 +569,53 @@ export const runTeamCommand = async (argv: string[]) => {
     return
   }
 
+  if (command === 'grill') {
+    const env = getHiveEnv()
+    await runTeamGrill(
+      args,
+      {
+        project_id: env.HIVE_PROJECT_ID,
+        from_agent_id: env.HIVE_AGENT_ID,
+        token: env.HIVE_AGENT_TOKEN,
+      },
+      (body) =>
+        fetchRuntime(getBaseUrl(env), '/api/team/grill', {
+          body: JSON.stringify(body),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        })
+    )
+    return
+  }
+
+  if (command === 'dream') {
+    const parsed = parseDreamArgs(args)
+    const env = getHiveEnv()
+    if (parsed.useStdin) {
+      const input = await readStdinToString('dream', true)
+      if (parsed.action === 'fail') parsed.body.error = input
+      else {
+        try {
+          parsed.body.result = JSON.parse(input)
+        } catch {
+          throw new Error('Dream result stdin must contain valid JSON')
+        }
+      }
+    }
+    const response = await postJson(getBaseUrl(env), `/api/team/dream/${parsed.action}`, {
+      ...parsed.body,
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+
   if (command === 'review') {
-    const parsed = parseCodeReviewArgs(args)
+    const parsed = ['context', 'file', 'submit'].includes(args[0] ?? '')
+      ? parseCodeReviewArgs(args)
+      : parseTeamReviewRequestArgs(args)
     const env = getHiveEnv()
     if (parsed.useStdin) parsed.body.summary = await readStdinToString('review')
     const response = await postJson(getBaseUrl(env), `/api/team/review/${parsed.action}`, {
@@ -641,6 +729,36 @@ export const runTeamCommand = async (argv: string[]) => {
     return
   }
 
+  if (command === 'spawn' || command === 'dismiss') {
+    const body = command === 'spawn' ? parseSpawnArgs(args) : parseDismissArgs(args)
+    const env = getHiveEnv()
+    const response = await postJson(getBaseUrl(env), `/api/team/${command}`, {
+      ...body,
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+  if (command === 'staffing') {
+    if (args.length) throw new Error('Usage: team staffing')
+    const env = getHiveEnv()
+    const response = await fetchRuntime(
+      getBaseUrl(env),
+      `/api/team/staffing?project_id=${encodeURIComponent(env.HIVE_PROJECT_ID)}`,
+      {
+        method: 'GET',
+        headers: {
+          'x-hive-agent-id': env.HIVE_AGENT_ID,
+          'x-hive-agent-token': env.HIVE_AGENT_TOKEN,
+        },
+      }
+    )
+    if (!response.ok) await throwHttpError(response)
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
   if (command === 'send') {
     const send = parseSendArgs(args)
 
@@ -650,11 +768,48 @@ export const runTeamCommand = async (argv: string[]) => {
       hive_port: env.HIVE_PORT,
       project_id: env.HIVE_PROJECT_ID,
       ...(send.skillName ? { skill_name: send.skillName } : {}),
+      ...(send.messageProtocolVersion
+        ? { message_protocol_version: send.messageProtocolVersion }
+        : {}),
       from_agent_id: env.HIVE_AGENT_ID,
       token: env.HIVE_AGENT_TOKEN,
       to: send.workerName,
       text: send.task,
     })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+
+  if (command === 'message') {
+    const message = parseMessageArgs(args)
+    const env = getHiveEnv()
+    const response = await postJson(getBaseUrl(env), '/api/team/message', {
+      project_id: env.HIVE_PROJECT_ID,
+      from_agent_id: env.HIVE_AGENT_ID,
+      token: env.HIVE_AGENT_TOKEN,
+      dispatch_id: message.dispatchId,
+      kind: message.kind,
+      ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+      body: message.useStdin ? await readStdinToString('message') : message.body,
+    })
+    console.log(JSON.stringify(await response.json()))
+    return
+  }
+
+  if (command === 'messages') {
+    const messages = parseMessagesArgs(args)
+    const env = getHiveEnv()
+    const query = new URLSearchParams({
+      project_id: env.HIVE_PROJECT_ID,
+      dispatch_id: messages.dispatchId,
+      after: String(messages.after),
+      limit: String(messages.limit),
+    })
+    const response = await fetchRuntime(getBaseUrl(env), `/api/team/messages?${query}`, {
+      method: 'GET',
+      headers: { 'x-hive-agent-id': env.HIVE_AGENT_ID, 'x-hive-agent-token': env.HIVE_AGENT_TOKEN },
+    })
+    if (!response.ok) await throwHttpError(response)
     console.log(JSON.stringify(await response.json()))
     return
   }
@@ -785,6 +940,7 @@ export const runTeamCommand = async (argv: string[]) => {
     const baseUrl = getBaseUrl(env)
     const response = await postJson(baseUrl, '/api/team/report', {
       ...(report.outcome ? { outcome: report.outcome } : {}),
+      ...(report.seenSeq === undefined ? {} : { seen_seq: report.seenSeq }),
       ...(report.dispatchId ? { dispatch_id: report.dispatchId } : {}),
       project_id: env.HIVE_PROJECT_ID,
       from_agent_id: env.HIVE_AGENT_ID,

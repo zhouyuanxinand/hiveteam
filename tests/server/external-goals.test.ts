@@ -89,13 +89,18 @@ describe('external Supervisor goals', () => {
     server.store.configureAgentLaunch(workspace.id, orchestratorId, {
       args: [
         '-e',
-        "process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => process.stdout.write(chunk))",
+        "process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => process.stdout.write(chunk)); process.stdout.write('FIXTURE_READY\\n')",
       ],
       command: process.execPath,
     })
     const run = await server.store.startAgent(workspace.id, orchestratorId, {
       hivePort: new URL(server.baseUrl).port,
     })
+    // ConPTY may spend several seconds negotiating before the CLI starts.
+    // Observe real readiness before measuring goal delivery against its 2s budget.
+    await waitFor(() => {
+      expect(server.store.getLiveRun(run.runId).output).toContain('FIXTURE_READY')
+    }, 10_000)
     const token = await getSupervisorToken(server.baseUrl)
     const headers = {
       [HIVE_SUPERVISOR_TOKEN_HEADER]: token,

@@ -1,9 +1,9 @@
-import type { Database } from 'better-sqlite3'
 import {
   type AgentSessionContext,
   createAgentSessionContextStore,
 } from './agent-session-context.js'
 import { createNativeSessionStore, type NativeSessionStore } from './native-session-store.js'
+import type { Database } from './sqlite.js'
 
 interface AgentSessionRow {
   agent_id: string

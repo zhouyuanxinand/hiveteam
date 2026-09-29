@@ -89,3 +89,11 @@ test('keeps multiline active input out of the read-only history', async () => {
   expect(model?.blocks.some(({ text }) => text.includes('还没有发送'))).toBe(false)
   expect(model?.blocks.filter(({ kind }) => kind === 'tool')).toHaveLength(2)
 })
+
+test('recognizes Codex Ultra prompts without absorbing an active draft', async () => {
+  const terminal = await fixture(`${transcript.replaceAll('›', '»')}尚未提交的中文输入`, 18)
+  const result = readTerminalProcessHistory(terminal.buffer.active)
+  expect(result?.blocks.filter((block) => block.kind === 'tool')).toHaveLength(2)
+  expect(result?.blocks.some((block) => block.text.includes('尚未提交'))).toBe(false)
+  expect(result?.blocks[0]?.text).toBe('» 请分析技术文档')
+})

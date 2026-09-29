@@ -14,6 +14,8 @@ export interface WorkspaceRecord {
 }
 
 export interface WorkerInput {
+  spawnedByAgentId?: string
+  preparing?: boolean
   avatar?: string | null
   description?: string
   name: string
@@ -21,6 +23,8 @@ export interface WorkerInput {
 }
 
 export interface WorkspaceStore {
+  retireWorker: (workspaceId: string, workerId: string) => AgentSummary
+  finishWorkerPreparation: (workspaceId: string, workerId: string, error: string | null) => void
   addWorkers: (
     workspaceId: string,
     inputs: WorkerInput[],

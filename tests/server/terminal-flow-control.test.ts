@@ -206,21 +206,22 @@ describe('terminal flow control', () => {
         script,
       ])
       const run = await startAgent(server.baseUrl, cookie, workspace.id, worker.id)
-      viewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
+      const activeViewer = await openViewer(server.baseUrl, cookie, run.runId, 'viewer-a')
+      viewer = activeViewer
 
       await waitFor(() => {
-        expect(viewer.outputs.join('')).toContain('ready')
+        expect(activeViewer.outputs.join('')).toContain('ready')
       })
 
       await new Promise((resolve) => setTimeout(resolve, 20))
       const startAt = Date.now()
       // xterm sends carriage return for Enter. A bare LF is only echoed by
       // the Unix PTY line discipline and never reaches the child process.
-      viewer.io.send('tiny\r')
+      activeViewer.io.send('tiny\r')
 
       await waitFor(
         () => {
-          expect(viewer.outputs.join('')).toContain('IN:tiny')
+          expect(activeViewer.outputs.join('')).toContain('IN:tiny')
         },
         300,
         10

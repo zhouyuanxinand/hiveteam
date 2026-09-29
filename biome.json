@@ -7,6 +7,8 @@
       "!**/dist",
       "!coverage",
       "!node_modules",
+      "!!.worktrees",
+      "!!.harnessed",
       "!docs/mockups",
       "!**/*.css"
     ],

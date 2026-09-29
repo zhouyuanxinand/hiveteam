@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { expect, test } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createRemoteAuditStore } from '../../src/server/remote-audit-store.js'
 import { InMemoryDeviceSessionProvider } from '../../src/server/remote-device-session.js'
+import Database from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import {
   decodeHttpData,

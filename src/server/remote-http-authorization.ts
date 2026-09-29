@@ -1,6 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { RemoteAction } from '../shared/remote-permissions.js'
-import type { RemoteQueueGrant } from './remote-action-context.js'
+import type {
+  InitialInputTarget,
+  InputExecution,
+  RemoteQueueGrant,
+} from './remote-action-context.js'
 import { RemotePermissionError } from './remote-permission-store.js'
 import { getRequestPrincipal } from './request-principal.js'
 import type { RuntimeStore } from './runtime-store.js'
@@ -10,16 +14,14 @@ const policies = new Map<string, readonly RemoteAction[] | 'read' | 'self'>()
 const requestChecks = new WeakMap<IncomingMessage, () => void>()
 const queueGrants = new WeakMap<IncomingMessage, RemoteQueueGrant>()
 export const remoteQueueGrantForRequest = (request: IncomingMessage) => queueGrants.get(request)
-const inputExecutors = new WeakMap<
-  IncomingMessage,
-  (runId: string, byteCount: number, write: (() => void) | null) => void
->()
+const inputExecutors = new WeakMap<IncomingMessage, InputExecution>()
 export const recheckRemoteRequest = (request: IncomingMessage) => requestChecks.get(request)?.()
 export const executeRemoteHttpInput = (
   request: IncomingMessage,
   runId: string,
   byteCount: number,
-  write: (() => void) | null
+  write: (() => void) | null,
+  initialTarget?: InitialInputTarget
 ) => {
   if (getRequestPrincipal(request)?.kind !== 'remote_device') {
     write?.()
@@ -31,7 +33,7 @@ export const executeRemoteHttpInput = (
       'remote_action_forbidden',
       'This request cannot deliver terminal input'
     )
-  execute(runId, byteCount, write)
+  execute(runId, byteCount, write, initialTarget)
 }
 const register = (
   method: string,
@@ -67,8 +69,13 @@ register(
     `${workspace}/review/document`,
     `${workspace}/review/submissions/:requestId`,
     `${uiWorkspace}/team`,
+    `${uiWorkspace}/members/retired`,
+    `${uiWorkspace}/members/:workerId`,
     `${uiWorkspace}/runs`,
     `${uiWorkspace}/activity`,
+    `${uiWorkspace}/attention`,
+    `${uiWorkspace}/collaboration-stats`,
+    dispatch,
     `${uiWorkspace}/delivery`,
     `${uiWorkspace}/onboarding`,
     `${uiWorkspace}/agents/:agentId/conversation`,
@@ -79,6 +86,8 @@ register(
     `${dispatch}/verifications/:verificationId/log`,
     `${uiWorkspace}/verification-profiles`,
     `${dispatch}/reviews`,
+    `${dispatch}/review-requests`,
+    `${uiWorkspace}/review-requests/:requestId`,
     `${dispatch}/reviews/context`,
     `${dispatch}/integration`,
     `${dispatch}/integration-candidates`,
@@ -94,8 +103,11 @@ register(
     `${uiWorkspace}/memory`,
     `${uiWorkspace}/memory/settings`,
     `${uiWorkspace}/memory/contexts`,
+    `${uiWorkspace}/memory/:memoryId/sources`,
     `${uiWorkspace}/recovery-index`,
     `${uiWorkspace}/memory/dream`,
+    `${uiWorkspace}/memory/dream/history`,
+    `${uiWorkspace}/memory/dream/:runId`,
     `${uiWorkspace}/memory/dream/:runId/reviews`,
     `${uiWorkspace}/skill-packs`,
     '/api/runtime/runs/:runId',
@@ -138,6 +150,7 @@ register(
     `${uiWorkspace}/memory/dream/:runId/reviews`,
     `${uiWorkspace}/memory/dream/:runId/submit`,
     `${uiWorkspace}/memory/dream/:runId/rollback`,
+    `${uiWorkspace}/memory/dream/:runId/discard`,
   ],
   ['memory_write']
 )
@@ -197,6 +210,8 @@ register(
   ],
   ['memory_write', 'agent_start']
 )
+
+register('POST', [`${uiWorkspace}/memory/dream/generate`], ['memory_write', 'agent_start'])
 
 export const workspaceForRun = (store: RuntimeStore, runId: string) => {
   const run = store.getLiveRun(runId)
@@ -307,11 +322,26 @@ export const authorizeRemoteHttp = (
     })
   // Reserve the audit record before any handler, JSON body processing or external side effect.
   if (workspaceId && actions.length)
-    inputExecutors.set(request, (runId, byteCount, write) => {
+    inputExecutors.set(request, (runId, byteCount, write, initialTarget) => {
       const event = { ...audit, action: 'http_input' as const, resourceId: runId, byteCount }
       try {
         recheckRemoteRequest(request)
-        if (workspaceForRun(store, runId) !== workspaceId)
+        if (initialTarget) {
+          if (
+            initialTarget.workspaceId !== workspaceId ||
+            (match.params.agentId && match.params.agentId !== initialTarget.agentId)
+          )
+            throw new RemotePermissionError(
+              'remote_workspace_forbidden',
+              'The initial input target does not match this start request'
+            )
+          if (!actions.includes('agent_start'))
+            throw new RemotePermissionError(
+              'remote_action_forbidden',
+              'Initial agent input requires an authorized start request'
+            )
+          store.getAgent(workspaceId, initialTarget.agentId)
+        } else if (workspaceForRun(store, runId) !== workspaceId)
           throw new RemotePermissionError(
             'remote_workspace_forbidden',
             'The input target belongs to another workspace'

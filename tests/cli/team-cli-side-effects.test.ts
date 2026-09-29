@@ -48,6 +48,7 @@ describe('team send CLI side effects (R1.3)', () => {
       [
         "process.stdin.setEncoding('utf8')",
         "process.stdin.on('data', (chunk) => process.stdout.write('WRK:' + chunk))",
+        "process.stdout.write('WORKER_READY\\n')",
       ].join('\n')
     )
     const orchScript = join(workspacePath, 'orch-passive.js')
@@ -95,6 +96,10 @@ describe('team send CLI side effects (R1.3)', () => {
       expect(orchStart.status).toBe(201)
       const workerStart = await startAgent(worker.id)
       expect(workerStart.status).toBe(201)
+      await waitFor(() => {
+        const run = hive.store.getActiveRunByAgentId(workspace.id, worker.id)
+        expect(run?.output).toContain('WORKER_READY')
+      }, 10_000)
 
       const orchToken = hive.store.peekAgentToken(orchestratorId)
       if (!orchToken) {
@@ -233,6 +238,10 @@ describe('team send CLI side effects (R1.3)', () => {
       }
 
       await runTeamCommand(['send', 'Alice', '评估项目结构'])
+      await waitFor(() => {
+        const run = hive.store.getActiveRunByAgentId(workspace.id, worker.id)
+        expect(run?.output).toContain('WORKER_READY')
+      }, 10_000)
 
       await waitFor(async () => {
         const workerRun = hive.store.getActiveRunByAgentId(workspace.id, worker.id)

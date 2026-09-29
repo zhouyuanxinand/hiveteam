@@ -1,11 +1,10 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { expect, test } from 'vitest'
 import { createSkillPackReleaseStore } from '../../src/server/skill-pack-release-store.js'
 import { createSkillPackResolver } from '../../src/server/skill-pack-resolver.js'
+import Database from '../../src/server/sqlite.js'
 import { applySchemaVersion35 } from '../../src/server/sqlite-schema-v35.js'
 
 test('cached resolution coalesces requests, survives reloads, and explicit resolution still detects source updates', async () => {

@@ -4,6 +4,11 @@ import { ForbiddenError, UnauthorizedError } from './http-errors.js'
 import { setRequestPrincipal } from './request-principal.js'
 
 export type TeamCommand =
+  | 'request_review'
+  | 'spawn'
+  | 'dismiss'
+  | 'message'
+  | 'messages'
   | 'send'
   | 'list'
   | 'report'
@@ -16,6 +21,11 @@ export type TeamCommand =
   | 'tasks_write'
 
 const ORCHESTRATOR_COMMANDS = new Set<TeamCommand>([
+  'request_review',
+  'spawn',
+  'dismiss',
+  'message',
+  'messages',
   'send',
   'list',
   'cancel',
@@ -23,7 +33,7 @@ const ORCHESTRATOR_COMMANDS = new Set<TeamCommand>([
   'help',
   'tasks_write',
 ])
-const WORKER_COMMANDS = new Set<TeamCommand>(['report', 'status', 'help'])
+const WORKER_COMMANDS = new Set<TeamCommand>(['report', 'status', 'help', 'message', 'messages'])
 const WORKER_ROLES = new Set<AgentSummary['role']>(['coder', 'reviewer', 'tester', 'custom'])
 
 export const commandAllowedForRole = (role: AgentSummary['role'], command: TeamCommand) => {
@@ -63,6 +73,7 @@ export const authenticateCliAgent = ({
   } catch {
     throw new UnauthorizedError('Agent not found in workspace')
   }
+  if (agent.retiredAt !== undefined) throw new ForbiddenError('This worker is retired')
   if (request) setRequestPrincipal(request, { kind: 'agent', agentId: agent.id, workspaceId })
   return agent
 }

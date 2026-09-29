@@ -1,4 +1,3 @@
-import type { Database } from 'better-sqlite3'
 import {
   type CodeReviewConclusion,
   type CodeReviewRecord,
@@ -16,6 +15,7 @@ import {
 import { createCodeReviewStore } from './code-review-store.js'
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { BadRequestError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 import { validateReviewText } from './workspace-review.js'
 
 export const validateCodeReviewVersion = (value: unknown): CodeReviewVersion => {

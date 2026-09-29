@@ -1,0 +1,37 @@
+.memory-dream-operations { display: grid; gap: 12px; margin-top: 12px; font-size: 12px; }
+.memory-dream-operation { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; display: grid; gap: 12px; }
+.memory-dream-operation legend { padding: 0 4px; font-weight: 600; }
+.memory-dream-operation label { display: grid; gap: 4px; min-width: 0; }
+.memory-dream-operation input:not([type=checkbox]), .memory-dream-operation select, .memory-dream-operation textarea { min-width: 0; width: 100%; background: var(--bg-2); color: var(--text-primary); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; }
+.memory-dream-operation textarea { min-height: 80px; resize: vertical; }
+.memory-dream-fields { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.memory-dream-fields > label { flex: 1 1 140px; }
+.memory-dream-source-picker { max-height: 240px; overflow: auto; overflow-wrap: anywhere; }
+.memory-dream-source-picker summary { cursor: pointer; padding: 6px 0; }
+.memory-dream-source-picker label { display: flex; align-items: start; gap: 8px; padding: 8px 0; }
+.memory-dream-source-picker small { display: block; color: var(--text-tertiary); }
+.memory-dream-change { min-width: 0; margin-top: 8px; overflow-wrap: anywhere; }
+.memory-dream-id { font-size: 11px; margin-bottom: 6px; }
+.memory-dream-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.memory-dream-diff > div { background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; padding: 8px; }
+.memory-dream-value { display: grid; gap: 6px; margin-top: 6px; }
+.memory-dream-body { white-space: pre-wrap; }
+@media (max-width: 600px) { .memory-dream-diff { grid-template-columns: 1fr; } }
+
+@media (max-width: 600px) { .memory-dream-operation input:not([type=checkbox]), .memory-dream-operation select, .memory-dream-operation textarea { font-size: 16px; min-height: 44px; } }
+
+.memory-dream-create-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.memory-dream-generation { display: grid; gap: 8px; margin-top: 12px; padding-block: 12px; border-block: 1px solid var(--border); font-size: 12px; overflow-wrap: anywhere; }
+.memory-dream-generation > button { justify-self: start; }
+.memory-dream-evidence { min-width: 0; font-size: 12px; }
+.memory-dream-evidence summary { cursor: pointer; padding-block: 6px; overflow-wrap: anywhere; }
+.memory-dream-messages { display: grid; gap: 12px; max-height: 320px; overflow: auto; margin-top: 8px; padding-inline-end: 8px; list-style: none; }
+.memory-dream-messages li { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.memory-dream-message-heading { font-variant-numeric: tabular-nums; }
+.memory-dream-messages .memory-dream-body { padding-block-start: 4px; }
+@media (max-width: 600px) { .memory-dream-create-actions > button { flex: 1 1 180px; white-space: normal; min-height: 44px; } }
+
+.memory-dream-history-controls, .memory-dream-history-controls > fieldset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.memory-dream-history-controls { margin-top: 12px; font-size: 12px; }
+.memory-dream-history-controls button[aria-pressed=true] { background: var(--bg-3); color: var(--text-primary); }
+@media (max-width: 600px) { .memory-dream-history-controls button { min-height: 44px; white-space: normal; } }

@@ -1,5 +1,3 @@
-import type { Database } from 'better-sqlite3'
-
 import {
   createPublicAppStateStore,
   type InternalAppStateStore,
@@ -16,6 +14,7 @@ import {
   type RoleTemplateInput,
   type RoleTemplateRecord,
 } from './role-template-store.js'
+import type { Database } from './sqlite.js'
 
 export interface SettingsStore {
   createCommandPreset: (input: CommandPresetInput) => CommandPresetRecord

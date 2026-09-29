@@ -52,9 +52,14 @@ describe('pty output subscription (real pty)', () => {
       received.push(chunk)
     })
 
-    await waitFor(() => {
-      expect(manager.getRun(run.runId).status).toBe('exited')
-      expect(received.join('')).toContain('hello')
-    })
+    try {
+      // The CLI's first output follows ConPTY's headless DA negotiation.
+      // Once output arrives, exit still has the original two-second budget.
+      await waitFor(() => expect(received.join('')).toContain('hello'), 10_000)
+      await waitFor(() => expect(manager.getRun(run.runId).status).toBe('exited'))
+    } finally {
+      manager.stopRun(run.runId)
+      await manager.waitForRunExit?.(run.runId)
+    }
   })
 })

@@ -7,6 +7,7 @@ import type {
 } from '../../../src/shared/execution-policy.js'
 import { useI18n } from '../i18n.js'
 import { isRemoteMode } from '../remote/remote-permissions-api.js'
+import { AutomaticWorkerTrustPreference } from './AutomaticWorkerTrustPreference.js'
 import { executionPolicyRequest } from './execution-policy-api.js'
 import { executionCapabilityMessage } from './execution-policy-labels.js'
 
@@ -77,6 +78,7 @@ export const ExecutionPolicyButton = ({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
+  const [trustAutomaticWorkers, setTrustAutomaticWorkers] = useState(false)
   const requestEpoch = useRef(0)
   useEffect(() => {
     const epoch = ++requestEpoch.current
@@ -85,9 +87,19 @@ export const ExecutionPolicyButton = ({
     setPolicy(null)
     setError('')
     setAcknowledged(false)
+    setTrustAutomaticWorkers(false)
     void executionPolicyRequest(workspaceId, agentId).then(
       (view) => {
-        if (requestEpoch.current === epoch) setPolicy(view)
+        if (requestEpoch.current === epoch) {
+          setPolicy(view)
+          setAcknowledged(view.automatic_worker === true)
+          setTrustAutomaticWorkers(
+            view.trust_automatic_workers === true ||
+              (view.automatic_worker === true &&
+                view.automatic_worker_trust_configured === false &&
+                view.enforcement !== 'trusted_unsafe')
+          )
+        }
       },
       (cause: unknown) => {
         if (requestEpoch.current === epoch)
@@ -99,8 +111,8 @@ export const ExecutionPolicyButton = ({
     }
   }, [open, workspaceId, agentId])
   if (isRemoteMode()) return null
-  const update = async (unsafe: boolean) => {
-    if (!policy || busy || (unsafe && !acknowledged)) return
+  const update = async (unsafe: boolean, defaultOnly = false) => {
+    if (!policy || busy || (unsafe && !defaultOnly && !acknowledged)) return
     const epoch = requestEpoch.current
     setBusy(true)
     setError('')
@@ -111,18 +123,22 @@ export const ExecutionPolicyButton = ({
         unsafe ? 'PUT' : 'DELETE',
         unsafe
           ? {
-              profile: 'trusted_unsafe',
+              profile: defaultOnly ? policy.profile : 'trusted_unsafe',
               expected_cli_fingerprint: policy.cli_fingerprint,
               expected_cli_version: policy.cli_version,
               policy_revision: policy.policy_revision,
               acknowledge_unsafe: true,
+              ...(defaultOnly || trustAutomaticWorkers !== (policy.trust_automatic_workers === true)
+                ? { trust_automatic_workers: trustAutomaticWorkers }
+                : {}),
             }
           : undefined
       )
       if (requestEpoch.current !== epoch) return
       setPolicy(updated)
       setAcknowledged(false)
-      if (unsafe && updated.enforcement === 'trusted_unsafe' && onAuthorized) {
+      setTrustAutomaticWorkers(updated.trust_automatic_workers === true)
+      if (unsafe && !defaultOnly && updated.enforcement === 'trusted_unsafe' && onAuthorized) {
         setOpen(false)
         onAuthorized()
       }
@@ -290,6 +306,19 @@ export const ExecutionPolicyButton = ({
                     <PermissionDetails permissions={policy.actual} zh={zh} />
                   </details>
                 ) : null}
+                {policy.automatic_worker || policy.automatic_worker_trust_configured ? (
+                  <AutomaticWorkerTrustPreference
+                    checked={trustAutomaticWorkers}
+                    disabled={busy}
+                    saved={policy.trust_automatic_workers === true}
+                    zh={zh}
+                    onChange={setTrustAutomaticWorkers}
+                    {...(policy.enforcement === 'trusted_unsafe' ||
+                    policy.automatic_worker_trust_configured
+                      ? { onSave: () => void update(true, true) }
+                      : {})}
+                  />
+                ) : null}
                 {policy.enforcement === 'trusted_unsafe' ? (
                   <div
                     className="mt-4 rounded border p-3"
@@ -331,6 +360,7 @@ export const ExecutionPolicyButton = ({
                         type="checkbox"
                         className="mt-1"
                         checked={acknowledged}
+                        disabled={busy}
                         onChange={(event) => setAcknowledged(event.target.checked)}
                       />
                       {zh

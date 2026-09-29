@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import type { GitRepositoryState } from '../shared/git.js'
+import type { Database } from './sqlite.js'
 
 export interface GitWorkspaceSettingsRecord {
   autoSnapshotEnabled: boolean

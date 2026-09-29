@@ -1,6 +1,10 @@
-import type { Database } from 'better-sqlite3'
+import { createMemoryDreamMessageWindow } from './memory-dream-message-window.js'
+import type { Database } from './sqlite.js'
+
+export type MessageLogPurpose = 'conversation' | 'memory_dream_review'
 
 export interface MessageLogRecord {
+  purpose?: MessageLogPurpose
   artifacts?: string[]
   createdAt: number
   fromAgentId?: string
@@ -106,8 +110,9 @@ export const createMessageLogStore = (db: Database) => {
      text,
      status,
      artifacts,
-     created_at
-   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     created_at,
+     purpose
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const listRecoveryStmt = db.prepare(
     `SELECT worker_id, type, from_agent_id, to_agent_id, text, status, artifacts, created_at
@@ -132,7 +137,8 @@ export const createMessageLogStore = (db: Database) => {
       input.text,
       input.status ?? null,
       input.artifacts ? JSON.stringify(input.artifacts) : null,
-      input.createdAt
+      input.createdAt,
+      input.purpose ?? 'conversation'
     )
     return { sequence: Number(result.lastInsertRowid) }
   }
@@ -210,6 +216,7 @@ export const createMessageLogStore = (db: Database) => {
   }
 
   return {
+    ...createMemoryDreamMessageWindow(db),
     deleteMessage,
     insertMessage,
     listMessageKinds,

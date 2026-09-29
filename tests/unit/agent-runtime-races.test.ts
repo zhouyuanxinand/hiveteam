@@ -46,6 +46,9 @@ describe('agent runtime races (unit)', () => {
             status: 'starting',
           }
         },
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
         getInputSequence: () => 0,
         getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,
@@ -103,6 +106,9 @@ describe('agent runtime races (unit)', () => {
           runId: 'run-1',
           status: 'exited',
         }),
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
         getInputSequence: () => 0,
         getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,
@@ -155,6 +161,9 @@ describe('agent runtime races (unit)', () => {
           runId: 'run-1',
           status: 'starting',
         }),
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
         getInputSequence: () => 0,
         getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,
@@ -225,6 +234,9 @@ describe('agent runtime races (unit)', () => {
           runId: 'run-1',
           status: 'starting',
         }),
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
         getInputSequence: () => 0,
         getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,

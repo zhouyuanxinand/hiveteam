@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { type IPty, spawn } from 'node-pty'
+import { type IPty, spawn } from '@lydell/node-pty'
 import { resolveSpawnCommand } from './agent-command-resolver.js'
 import { attachAgentPty, toAgentRunSnapshot } from './agent-manager-support.js'
 import { createExecutionEnvironment } from './execution-environment.js'
@@ -14,6 +14,7 @@ import { TerminalStateMirror } from './terminal-state-mirror.js'
 type RunStatus = 'starting' | 'running' | 'exited' | 'error'
 
 interface StartAgentInput {
+  runId?: string
   afterNativeExit?: () => Promise<void>
   execution: ManagedExecution
   agentId: string
@@ -67,10 +68,19 @@ interface AgentManager {
 
 const createRunId = () => randomUUID()
 const WINDOWS_PTY_RELEASE_SETTLE_MS = 500
-const isClosedPtyResizeError = (error: unknown) =>
-  /cannot resize a pty that has already exited|pty seems to have been killed already|pty is not active|already exited/i.test(
-    error instanceof Error ? error.message : String(error)
-  )
+const PTY_CONNECT_TIMEOUT_MS = 10_000
+
+// Windows connects asynchronously. Read the public PID rather than waiting for
+// output: an idle CLI may never print anything, and a short CLI may already exit.
+const waitForPtyPid = async (pty: IPty, exited: () => boolean) => {
+  const deadline = Date.now() + PTY_CONNECT_TIMEOUT_MS
+  while (pty.pid <= 0) {
+    if (exited()) throw new Error('PTY exited before a child process was connected.')
+    if (Date.now() >= deadline) throw new Error('Timed out connecting the PTY child process.')
+    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+  }
+  return pty.pid
+}
 
 const waitForWindowsPtyRelease = async () => {
   if (process.platform !== 'win32') return
@@ -119,7 +129,11 @@ export const createAgentManager = ({
         throw error
       }
 
-      const runId = createRunId()
+      const runId = input.runId ?? createRunId()
+      if (runs.has(runId)) {
+        input.execution.cancelBeforeSpawn()
+        throw new Error(`Run already exists: ${runId}`)
+      }
       let resolveRunExit = () => {}
       const runExitPromise = new Promise<void>((resolve) => {
         resolveRunExit = resolve
@@ -152,6 +166,7 @@ export const createAgentManager = ({
       if (input.onExit) run.onExit = input.onExit
 
       let pty: IPty | undefined
+      let attached = false
       const stopOnAbort = () => run.process.stop()
 
       try {
@@ -159,10 +174,9 @@ export const createAgentManager = ({
           cwd: input.cwd,
           env,
           name: 'xterm-256color',
-          // Vitest runs without a real Windows console. Winpty keeps the
-          // integration suite deterministic there; normal Hive launches keep
-          // node-pty's modern ConPTY default unless explicitly overridden.
-          ...(process.env.HIVE_TEST_PTY_BACKEND === 'winpty' ? { useConpty: false } : {}),
+          // The bundled ConPTY implementation also supports services and shells
+          // without an attached console. Production and tests use the same path.
+          ...(process.platform === 'win32' ? { useConptyDll: true } : {}),
         }
         input.execution.beginSpawn()
         runs.set(runId, run)
@@ -174,7 +188,7 @@ export const createAgentManager = ({
           screen.dispose()
           screens.delete(runId)
         })
-        const pid = pty.pid
+        const spawnedPty = pty
         let nativeExitObserved = false
         pty.onExit(() => {
           if (nativeExitObserved) return
@@ -184,7 +198,7 @@ export const createAgentManager = ({
             try {
               await waitForWindowsPtyRelease()
               await input.afterNativeExit?.()
-              input.execution.confirmExit(runId, pid)
+              input.execution.confirmExit(runId, spawnedPty.pid > 0 ? spawnedPty.pid : null)
             } catch (error) {
               try {
                 input.execution.markUnconfirmed(
@@ -204,14 +218,16 @@ export const createAgentManager = ({
           })()
         })
         attachAgentPty(run, pty, ptyOutputBus)
-        input.execution.markStarted({ runId, pid, startedAt: Date.now() })
+        attached = true
         input.execution.signal?.addEventListener('abort', stopOnAbort, { once: true })
         if (input.execution.signal?.aborted) stopOnAbort()
+        const pid = await waitForPtyPid(pty, () => nativeExitObserved)
+        input.execution.markStarted({ runId, pid, startedAt: Date.now() })
       } catch (error) {
         if (pty) {
           try {
-            if (run.process.pid === null) pty.kill('SIGKILL')
-            else run.process.stop()
+            if (attached) run.process.stop()
+            else pty.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
           } catch (cleanupError) {
             input.execution.markUnconfirmed(`PTY cleanup failed for run ${runId}, PID ${pty.pid}`)
             throw new AggregateError(
@@ -239,15 +255,11 @@ export const createAgentManager = ({
       // surfacing node-pty's "Cannot resize a pty that has already exited" to
       // the terminal UI.
       if (run.status === 'exited' || run.status === 'error' || run.process.isStopped()) return
-      try {
-        run.process.resize(cols, rows)
-        run.terminalSize = { cols, rows }
-        // Apply geometry before the child can emit a frame for that size.
-        // Replaying old ANSI output at the latest dimensions loses this order.
-        screens.get(runId)?.resize(cols, rows)
-      } catch (error) {
-        if (!isClosedPtyResizeError(error)) throw error
-      }
+      run.process.resize(cols, rows)
+      run.terminalSize = { cols, rows }
+      // Apply geometry before the child can emit a frame for that size.
+      // Replaying old ANSI output at the latest dimensions loses this order.
+      screens.get(runId)?.resize(cols, rows)
     },
 
     resumeRun(runId) {

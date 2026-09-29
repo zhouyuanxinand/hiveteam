@@ -1,4 +1,3 @@
-import type { Database } from 'better-sqlite3'
 import type {
   ReviewDocument,
   ReviewDraft,
@@ -6,6 +5,7 @@ import type {
   SaveReviewDraft,
 } from '../shared/workspace-review.js'
 import { ConflictError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 export const createWorkspaceReviewStore = (db: Database) => {
   const draft = (workspaceId: string, path: string) =>

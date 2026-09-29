@@ -2,6 +2,7 @@ import type {
   RemoteAction,
   RemoteTerminalPermissions,
 } from '../../../src/shared/remote-permissions.js'
+import type { TerminalGrillHandoff } from '../../../src/shared/terminal-grill.js'
 import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
@@ -10,6 +11,7 @@ import { isRemoteMode } from '../remote/remote-permissions-api.js'
 
 type TerminalControlServerMessage =
   | RemoteTerminalPermissions
+  | TerminalGrillHandoff
   | { type: 'error'; message: string }
   | { type: 'exit'; code: number | null }
   | { type: 'restore'; snapshot: string }
@@ -34,6 +36,7 @@ interface TerminalClientOptions {
    */
   onRestore: (snapshot: string) => void | Promise<void>
   onRecovery?: (recovery: TerminalSessionRecovery | null) => void
+  onGrillHandoff?: (handoff: TerminalGrillHandoff) => void
   onConnectionChange?: (status: TerminalConnectionStatus) => void
   onInputPermissionChange?: (allowed: boolean) => void
   runId: string
@@ -63,6 +66,7 @@ export const createTerminalClient = ({
   onOutput,
   onRestore,
   onRecovery,
+  onGrillHandoff,
   onConnectionChange,
   onInputPermissionChange,
   runId,
@@ -211,6 +215,7 @@ export const createTerminalClient = ({
       if (!restored) onConnectionChange?.('disconnected')
     }
     if (message.type === 'session_recovery' && !exited) onRecovery?.(message.recovery)
+    if (message.type === 'grill_handoff' && !exited) onGrillHandoff?.(message)
     if (message.type === 'session_retry' && pendingRetry?.requestId === message.request_id) {
       clearTimeout(pendingRetry.timer)
       pendingRetry.resolve(message.status)

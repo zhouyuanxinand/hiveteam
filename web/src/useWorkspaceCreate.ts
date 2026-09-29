@@ -59,7 +59,7 @@ export const useWorkspaceCreate = ({
           path: input.path,
           language: input.language ?? language,
           autostart_orchestrator: input.autostartOrchestrator ?? false,
-          initialization_mode: input.initializationMode ?? 'basic',
+          initialization_mode: input.initializationMode ?? 'packs',
           command_preset_id: input.commandPresetId,
           startup_command: input.startupCommand ?? null,
         })

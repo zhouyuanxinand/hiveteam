@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { ExecutionKind, ResourceReservation } from '../shared/resource-budget.js'
 import type { ResourceQueueEntry, ResourceQueueSource } from '../shared/resource-queue.js'
 import { ConflictError } from './http-errors.js'
@@ -10,6 +9,7 @@ import {
   withRemoteActionCheck,
 } from './remote-action-context.js'
 import { type ResourceBudgetStore, ResourceLimitError } from './resource-budget-store.js'
+import type { Database } from './sqlite.js'
 
 export interface ResourceQueueWork extends ResourceQueueEntry {
   payload: Record<string, unknown>

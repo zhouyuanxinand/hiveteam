@@ -1,4 +1,5 @@
 import type { ClarificationAssignment } from './clarification.js'
+import type { WorkerLifecycleFields, WorkerLifecyclePayload } from './worker-lifecycle.js'
 
 export const agentStatuses = ['idle', 'working', 'stopped'] as const
 
@@ -25,7 +26,7 @@ export interface WorkspaceRecoverySettings {
   autoResumeOnRestart: boolean
 }
 
-export interface AgentSummary {
+export interface AgentSummary extends WorkerLifecycleFields {
   /** Locally stored PNG/JPEG/WebP data URL selected for this worker. */
   avatar?: string
   id: string
@@ -37,7 +38,7 @@ export interface AgentSummary {
   pendingTaskCount: number
 }
 
-export interface TeamListItem {
+export interface TeamListItem extends WorkerLifecycleFields {
   clarification?: ClarificationAssignment
   worktreeBranch?: string
   workingDirectory?: string
@@ -69,7 +70,7 @@ export interface TeamListItem {
  * Per AGENTS.md §8 + spec §3.3 line 162-179, HTTP JSON is snake_case.
  * Internal TS code uses TeamListItem (camelCase); serializers/deserializers convert.
  */
-export interface TeamListItemPayload {
+export interface TeamListItemPayload extends WorkerLifecyclePayload {
   clarification?: { dispatch_id: string; skill_name: string; active: boolean }
   worktree_branch?: string
   working_directory?: string

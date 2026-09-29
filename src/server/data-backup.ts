@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, readdir, realpath, rename, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import type { Database as SqliteDatabase } from 'better-sqlite3'
-import Database from 'better-sqlite3'
 import type { HiveBackupManifest } from '../shared/data-backup.js'
 import { exportBackupDatabase, validateBackupDatabase } from './backup-database.js'
 import {
@@ -15,6 +13,8 @@ import {
 import { BadRequestError, ConflictError } from './http-errors.js'
 import { nativeBackupProfile } from './native-backup-profile.js'
 import { readPackageVersion } from './package-version.js'
+import type { Database as SqliteDatabase } from './sqlite.js'
+import Database from './sqlite.js'
 import { CURRENT_SCHEMA_VERSION } from './sqlite-schema.js'
 
 export const createDataBackup = async (

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 import { applyResourceQueueSchema } from './sqlite-schema-resource-queue.js'
 
 export const applySchemaVersion50 = (db: Database) => {

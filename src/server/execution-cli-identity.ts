@@ -1,20 +1,24 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { access, realpath, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { realpath, stat } from 'node:fs/promises'
+import { basename } from 'node:path'
 import { resolveCommandPath } from './agent-command-resolver.js'
 import type { AgentLaunchConfigInput } from './agent-run-store.js'
+import { resolveCodexNativeExecutable } from './codex-native-executable.js'
 import { createExecutionEnvironment } from './execution-environment.js'
 
 const identities = new Map<string, { stamp: string; digest: string; version: string | null }>()
-// Exact release artifacts, verified with synthetic acceptance only. Unknown bytes never execute a probe.
+// Only byte-verified releases receive a security version. Identity discovery never executes the CLI.
 const VERIFIED_CODEX_ARTIFACTS = new Map([
   ['0753dfe1d8b87a52436deb13eb1c549661ef4c84fee2c5aa688385eebeccb761', 'codex-cli 0.155.1'],
   ['eba0f32c976667cb9298efafd98513e823eeda7b576a03ec658bb8be8d336316', 'codex-cli 0.155.1'],
+  // Windows x64: bundled-model metadata and fixed login-status probe verified.
+  ['af02050cc0c95f5aeb714af2c1077e635c58e9896c13c89d75099cf5b96477be', 'codex-cli 0.158.0'],
 ])
 
 export interface ExecutionCliIdentity {
   artifactSha256?: string
+  artifactFingerprint?: string
   id: string
   executable: string | null
   launcher: string | null
@@ -22,43 +26,6 @@ export interface ExecutionCliIdentity {
   fingerprint: string
   available: boolean
   unavailableReason?: string
-}
-
-const nativeCodex = async (path: string) => {
-  const name = basename(path).toLowerCase()
-  if (name === 'codex' || name === 'codex.exe') return path
-  if (!/^codex\.(?:js|cmd|ps1)$/u.test(name)) return path
-  const platform = process.platform === 'win32' ? 'win32' : process.platform
-  const target =
-    process.platform === 'win32'
-      ? 'x86_64-pc-windows-msvc'
-      : process.arch === 'arm64'
-        ? 'aarch64-unknown-linux-musl'
-        : 'x86_64-unknown-linux-musl'
-  const filename = process.platform === 'win32' ? 'codex.exe' : 'codex'
-  const roots =
-    name === 'codex.js'
-      ? [join(dirname(path), '..')]
-      : [join(dirname(path), 'node_modules', '@openai', 'codex')]
-  for (const root of roots) {
-    const candidate = join(
-      root,
-      'node_modules',
-      '@openai',
-      `codex-${platform}-${process.arch}`,
-      'vendor',
-      target,
-      'bin',
-      filename
-    )
-    try {
-      await access(candidate)
-      return await realpath(candidate)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    }
-  }
-  return path
 }
 
 const digestFile = async (path: string) => {
@@ -81,7 +48,7 @@ export const readExecutionCliIdentity = async (
   let launcher: string
   try {
     launcher = await realpath(resolveCommandPath(config.command, cwd, createExecutionEnvironment()))
-    executable = await nativeCodex(launcher)
+    executable = await resolveCodexNativeExecutable(launcher)
   } catch (error) {
     if (!['ENOENT', 'EACCES', 'ENOEXEC'].includes((error as NodeJS.ErrnoException).code ?? ''))
       throw error
@@ -106,23 +73,22 @@ export const readExecutionCliIdentity = async (
     identity = { stamp, digest, version }
     identities.set(executable, identity)
   }
+  const artifact = [
+    executable,
+    identity.digest,
+    launcher,
+    launcher === executable ? identity.digest : await digestFile(launcher),
+  ]
   return {
     id: requestedId,
     executable,
     launcher,
     available: true,
     artifactSha256: identity.digest,
+    artifactFingerprint: createHash('sha256').update(JSON.stringify(artifact)).digest('hex'),
     version: identity.version,
     fingerprint: createHash('sha256')
-      .update(
-        JSON.stringify([
-          executable,
-          identity.digest,
-          launcher,
-          launcher === executable ? identity.digest : await digestFile(launcher),
-          launchIdentity,
-        ])
-      )
+      .update(JSON.stringify([...artifact, launchIdentity]))
       .digest('hex'),
   }
 }

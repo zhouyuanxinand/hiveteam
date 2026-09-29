@@ -53,6 +53,11 @@ describe('agent run status model (unit)', () => {
             status: 'starting',
           }
         },
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
+        getInputSequence: () => 0,
+        getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,
         pauseRun: () => {},
         removeRun: () => {},

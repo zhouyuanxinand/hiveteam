@@ -1,5 +1,3 @@
-import type { Database } from 'better-sqlite3'
-
 import type {
   GitCommitPage,
   GitCommitSummary,
@@ -26,6 +24,7 @@ import {
   type GitSnapshotRecord,
   type GitWorkspaceSettingsRecord,
 } from './git-snapshot-store.js'
+import type { Database } from './sqlite.js'
 
 const SHA_PATTERN = /^[0-9a-f]{7,64}$/iu
 

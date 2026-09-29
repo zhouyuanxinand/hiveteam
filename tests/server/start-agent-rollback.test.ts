@@ -1,16 +1,30 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import { createAgentManager } from '../../src/server/agent-manager.js'
+import type { RuntimeStore } from '../../src/server/runtime-store.js'
 import { createAuthorizedTestRuntimeStore as createRuntimeStore } from '../helpers/authorized-runtime.js'
 
-afterEach(() => {
+let directory: string
+const stores: RuntimeStore[] = []
+
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'hive-start-agent-rollback-'))
+})
+
+afterEach(async () => {
+  for (const store of stores.splice(0)) await store.close()
   vi.restoreAllMocks()
+  await rm(directory, { recursive: true, force: true })
 })
 
 describe('startAgent exception rollback (R1.2)', () => {
   test('marks agent stopped when launch config is missing', async () => {
     const store = createRuntimeStore()
-    const workspace = store.createWorkspace('/tmp/hive-rollback', 'Alpha')
+    stores.push(store)
+    const workspace = store.createWorkspace(directory, 'Alpha')
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
 
     await expect(store.startAgent(workspace.id, worker.id, { hivePort: '4010' })).rejects.toThrow(
@@ -22,7 +36,8 @@ describe('startAgent exception rollback (R1.2)', () => {
 
   test('worker lands in stopped (§12) when the spawned command does not exist', async () => {
     const store = createRuntimeStore({ agentManager: createAgentManager() })
-    const workspace = store.createWorkspace('/tmp/hive-bad-spawn', 'Alpha')
+    stores.push(store)
+    const workspace = store.createWorkspace(directory, 'Alpha')
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
     store.configureAgentLaunch(workspace.id, worker.id, {
       command: '/definitely/not/a/real/binary',
@@ -41,18 +56,13 @@ describe('startAgent exception rollback (R1.2)', () => {
   test('marks agent stopped when agentManager.startAgent throws after token issue', async () => {
     const agentManager = createAgentManager()
     const spawnError = new Error('simulated spawn failure')
-    const originalStart = agentManager.startAgent.bind(agentManager)
-    vi.spyOn(agentManager, 'startAgent').mockImplementation(async (input) => {
-      // Allow mock flow; we just throw to simulate a failure after env/token construction.
-      void originalStart
-      void input
-      throw spawnError
-    })
+    vi.spyOn(agentManager, 'startAgent').mockRejectedValue(spawnError)
 
     const store = createRuntimeStore({ agentManager })
-    const workspace = store.createWorkspace('/tmp/hive-rollback-spawn', 'Alpha')
+    stores.push(store)
+    const workspace = store.createWorkspace(directory, 'Alpha')
     const worker = store.addWorker(workspace.id, { name: 'Alice', role: 'coder' })
-    store.configureAgentLaunch(workspace.id, worker.id, { command: '/bin/bash', args: [] })
+    store.configureAgentLaunch(workspace.id, worker.id, { command: process.execPath, args: [] })
 
     await expect(store.startAgent(workspace.id, worker.id, { hivePort: '4010' })).rejects.toThrow(
       /simulated spawn failure/

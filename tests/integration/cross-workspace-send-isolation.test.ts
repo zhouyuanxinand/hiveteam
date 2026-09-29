@@ -55,11 +55,11 @@ describe('cross workspace send isolation', () => {
       const workerScriptB = join(workspaceBPath, 'echo-b.js')
       writeFileSync(
         workerScriptA,
-        "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('A:' + c))\n"
+        "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('A:' + c))\nprocess.stdout.write('FIXTURE_READY\\n')\n"
       )
       writeFileSync(
         workerScriptB,
-        "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('B:' + c))\n"
+        "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('B:' + c))\nprocess.stdout.write('FIXTURE_READY\\n')\n"
       )
 
       const createWorkspace = async (name: string, path: string) => {
@@ -116,7 +116,19 @@ describe('cross workspace send isolation', () => {
 
       const runA = await start(a.id, workerA.id)
       const runB = await start(b.id, workerB.id)
-      await start(a.id, `${a.id}:orchestrator`)
+      const orchestratorRun = await start(a.id, `${a.id}:orchestrator`)
+
+      // Headless ConPTY negotiates terminal capabilities before the CLI starts.
+      // Keep that startup budget separate from the protocol delivery deadline.
+      await waitFor(async () => {
+        for (const run of [runA, runB, orchestratorRun]) {
+          const response = await fetch(`${baseUrl}/api/runtime/runs/${run.runId}`, {
+            headers: { cookie: uiCookie },
+          })
+          const body = (await response.json()) as { output: string }
+          expect(body.output).toContain('FIXTURE_READY')
+        }
+      }, 10_000)
 
       await fetch(`${baseUrl}/api/team/send`, {
         method: 'POST',

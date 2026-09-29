@@ -385,6 +385,8 @@ describe('Workspace Skill Pack drawer', () => {
   })
 
   test('drops removed Skills from hidden profile selections during an update', async () => {
+    const lockedPack = configuredInspectionPayload.lock.packs[0]
+    if (!lockedPack) throw new Error('Expected a locked Skill Pack fixture')
     const legacySkill = {
       contains_scripts: false,
       content_digest: `sha256:${'1'.repeat(64)}`,
@@ -407,8 +409,8 @@ describe('Workspace Skill Pack drawer', () => {
         ...configuredInspectionPayload.lock,
         packs: [
           {
-            ...configuredInspectionPayload.lock.packs[0],
-            skills: [...configuredInspectionPayload.lock.packs[0].skills, legacySkill],
+            ...lockedPack,
+            skills: [...lockedPack.skills, legacySkill],
           },
         ],
       },
@@ -425,7 +427,7 @@ describe('Workspace Skill Pack drawer', () => {
       id: 'plan-2',
       intent: { ...planPayload.intent, action: 'update', release_id: 'release-2' },
     }
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
       const url = String(input)
       if (url.endsWith('/resolve')) return jsonResponse(updateRelease)
       if (url.endsWith('/plans')) return jsonResponse(updatePlan)

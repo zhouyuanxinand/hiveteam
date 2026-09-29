@@ -1,5 +1,5 @@
-import type { Database } from 'better-sqlite3'
 import { DEFAULT_DISPATCH_TIMEOUTS } from '../shared/message-delivery.js'
+import type { Database } from './sqlite.js'
 
 /** Transport evidence supplements the existing dispatch/outbox, never rewrites historical results. */
 export const applySchemaVersion52 = (db: Database) => {

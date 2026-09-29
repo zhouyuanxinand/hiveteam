@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
 import { describeSkillPackSource } from '../shared/skill-pack-source.js'
 import type { SkillPackManifest, SkillPackRelease, SkillPackSource } from '../shared/skill-packs.js'
 import { normalizeResolveSkillPackInput } from './skill-pack-source.js'
+import type { Database } from './sqlite.js'
 
 interface SkillPackReleaseRow {
   cache_key: string

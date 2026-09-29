@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Stores immutable, content-addressed Skill Pack releases. */
 export const applySchemaVersion35 = (db: Database) => {

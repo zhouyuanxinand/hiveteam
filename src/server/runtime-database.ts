@@ -1,7 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Database } from 'better-sqlite3'
-import BetterSqlite3 from 'better-sqlite3'
+import Database from './sqlite.js'
 
 import { initializeRuntimeDatabase } from './sqlite-schema.js'
 
@@ -9,12 +8,12 @@ export const openRuntimeDatabase = (dataDir?: string): Database => {
   let database: Database
   if (dataDir) {
     mkdirSync(dataDir, { recursive: true })
-    database = new BetterSqlite3(join(dataDir, 'runtime.sqlite'))
+    database = new Database(join(dataDir, 'runtime.sqlite'))
     // WAL lets the 500ms UI polls read without queueing behind dispatch writes,
     // and NORMAL sync trades an fsync per commit for one per checkpoint. Both
     // settings live in the database file header, so they survive restarts.
   } else {
-    database = new BetterSqlite3(':memory:')
+    database = new Database(':memory:')
   }
   try {
     if (dataDir) {

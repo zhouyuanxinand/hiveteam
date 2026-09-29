@@ -1,5 +1,3 @@
-import type { Database } from 'better-sqlite3'
-
 import { BUILTIN_COMMAND_PRESETS } from './command-preset-defaults.js'
 import {
   CODER_ROLE_DESCRIPTION,
@@ -7,6 +5,7 @@ import {
   REVIEWER_ROLE_DESCRIPTION,
   TESTER_ROLE_DESCRIPTION,
 } from './role-templates.js'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion7 = (db: Database) => {
   const now = Date.now()

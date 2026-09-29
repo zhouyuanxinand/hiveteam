@@ -1,0 +1,32 @@
+{
+  "driver": "better-sqlite3",
+  "driver_version": "12.9.0",
+  "node_version": "v22.23.2",
+  "source_commit": "05780444c892c086a79860480324caa6c4d79d57",
+  "fixtures": {
+    "runtime-v59": {
+      "scope": "complete runtime schema 59 with workspace, worker, accepted report, receipt and memory",
+      "sqlite_version": "3.53.0",
+      "uncompressed_bytes": 876544,
+      "sha256": "ee28ae50e941d6ae21111c9fb7e5f453b781f2dbc7149c33224309abaca44e6a"
+    },
+    "runtime-v4": {
+      "scope": "legacy schema 4 from the existing schema-version migration contract",
+      "sqlite_version": "3.53.0",
+      "uncompressed_bytes": 49152,
+      "sha256": "1e952714544944d17dc4294a043ff48754ae956b746b1a91148c1d39d6d254ab"
+    },
+    "report-outbox-v46": {
+      "scope": "report_outbox before version 47 only",
+      "sqlite_version": "3.53.0",
+      "uncompressed_bytes": 12288,
+      "sha256": "9bda31fea92641499a604e69e356e6fb3b57b72d82b66ced83bdb70863e65666"
+    },
+    "report-outbox-v47": {
+      "scope": "report_outbox version 47 with pending checkpoint and historical delivered decision",
+      "sqlite_version": "3.53.0",
+      "uncompressed_bytes": 12288,
+      "sha256": "ec7bbd907b003d9d6162b3b8b540bab25832dad6dcdfa0e53180c12d3f122007"
+    }
+  }
+}

@@ -1,3 +1,11 @@
+import type { MemoryDreamGeneration } from './memory-dream-generation.js'
+import type {
+  MemoryDreamOperation,
+  MemoryDreamReceipt,
+  MemoryDreamSnapshot,
+} from './memory-dream-plan.js'
+import type { MemorySourceReference } from './memory-provenance.js'
+
 export const TEAM_MEMORY_BODY_MAX_CHARS = 4_000
 export const TEAM_MEMORY_SEARCH_DEFAULT_LIMIT = 10
 export const TEAM_MEMORY_SEARCH_MAX_LIMIT = 50
@@ -56,6 +64,7 @@ export interface TeamMemoryEntry {
 }
 
 export interface CreateTeamMemoryInput {
+  sourceRef?: MemorySourceReference
   body: string
   confidence?: number
   createdByAgentId?: string | null
@@ -68,7 +77,7 @@ export interface CreateTeamMemoryInput {
   tags?: string[]
 }
 
-export type TeamMemoryDreamStatus = 'review' | 'submitted' | 'rolled_back'
+export type TeamMemoryDreamStatus = 'review' | 'submitted' | 'rolled_back' | 'discarded'
 
 export type TeamMemoryDreamExecutionStatus = 'queued' | 'requested' | 'completed' | 'failed'
 
@@ -84,6 +93,12 @@ export interface TeamMemoryDreamSuggestion {
 }
 
 export interface TeamMemoryDreamRun {
+  generation: MemoryDreamGeneration | null
+  planVersion: number
+  planRevision: number
+  operations: MemoryDreamOperation[]
+  sourceSnapshots: MemoryDreamSnapshot[]
+  receipt: MemoryDreamReceipt | null
   createdAt: number
   createdMemoryIds: string[]
   executionError: string | null

@@ -1,4 +1,5 @@
 import type { TeamListItem, TeamListItemPayload } from '../shared/types.js'
+import { serializeWorkerLifecycle } from '../shared/worker-lifecycle.js'
 
 export const serializeTeamListItem = ({
   avatar,
@@ -13,7 +14,9 @@ export const serializeTeamListItem = ({
   worktreeBranch,
   workingDirectory,
   worktreeError,
+  ...lifecycle
 }: TeamListItem): TeamListItemPayload => ({
+  ...serializeWorkerLifecycle(lifecycle),
   ...(clarification
     ? {
         clarification: {

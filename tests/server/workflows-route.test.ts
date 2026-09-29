@@ -124,7 +124,7 @@ describe('workspace workflows route', () => {
       status: string
       steps: Array<{ dispatch_id: string | null; id: string; status: string }>
     }
-    expect(started.status).toBe('running')
+    expect(started.status).toBe('interrupted')
     expect(started.steps).toEqual([
       expect.objectContaining({ id: 'build', dispatch_id: expect.any(String), status: 'running' }),
       expect.objectContaining({ id: 'review', dispatch_id: null, status: 'queued' }),
@@ -140,7 +140,7 @@ describe('workspace workflows route', () => {
 
     await waitFor(() => {
       expect(server.store.workflows.get(workspace.id, started.id)).toMatchObject({
-        status: 'running',
+        status: 'interrupted',
         steps: [
           expect.objectContaining({ id: 'build', status: 'completed' }),
           expect.objectContaining({

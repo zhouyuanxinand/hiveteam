@@ -1,9 +1,8 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { waitForRunResourceRelease } from '../helpers/native-release.js'
 import { normalizePtyText, writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
@@ -111,6 +110,10 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const args = process.argv.slice(2)
+if (args[0] === '--help') {
+  console.log('Codex CLI\\nUsage: codex [OPTIONS]\\n  --no-daemon  Run without a shared daemon')
+  process.exit(0)
+}
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : '019dc277-0e8e-75c1-9794-94929426288e'
 const delayIndex = args.indexOf('--session-write-delay-ms-test')
@@ -194,7 +197,8 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(${JSON.stringify(packageJsonPath)})
-const Database = require('better-sqlite3')
+const { require: requireTypeScript } = require('tsx/cjs/api')
+const { default: Database } = requireTypeScript('./src/server/sqlite.ts', ${JSON.stringify(packageJsonPath)})
 const args = process.argv.slice(2)
 const sessionIndex = args.indexOf('--session-id-test')
 const sessionId = sessionIndex >= 0 ? args[sessionIndex + 1] : 'ses_25c8f572efferzSV4Mgjo99WqB'
@@ -280,8 +284,15 @@ const startWorkerViaHttp = async (
     headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify({ hive_port: port }),
   })
-  expect(response.status).toBe(201)
+  expect(response.status, await response.clone().text()).toBe(201)
   const payload = (await response.json()) as { run_id: string; thread_id?: string | null }
+  // ConPTY may wait for a terminal capability reply before starting the CLI.
+  // Observe real fixture output before starting each session-capture deadline;
+  // process creation alone does not mean the native CLI has initialized.
+  await waitFor(async () => {
+    const run = await getRunViaHttp(baseUrl, cookie, payload.run_id)
+    expect(run.output).toContain('ARGS:')
+  }, 10_000)
   return { runId: payload.run_id, threadId: payload.thread_id ?? null }
 }
 

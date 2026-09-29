@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { join } from 'node:path'
+import { transferableAbortController } from 'node:util'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import Database from 'better-sqlite3'
 import { afterEach, expect, test, vi } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { NativeSessionButton } from '../../web/src/worker/NativeSessionButton.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
@@ -30,6 +31,8 @@ test('local session controls show unverified capabilities and preserve old bindi
       'INSERT INTO agent_sessions(workspace_id,agent_id,last_session_id,updated_at) VALUES(?,?,?,?)'
     ).run(workspace.id, worker.id, 'legacy-session-fixture', Date.now())
     const cookie = await getUiCookie(server.baseUrl)
+    // The real HTTP request uses Node fetch, which requires a Node AbortSignal.
+    vi.stubGlobal('AbortController', transferableAbortController().constructor)
     vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
       const path = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
       const headers = new Headers(init?.headers)

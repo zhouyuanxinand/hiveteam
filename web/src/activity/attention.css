@@ -1,0 +1,19 @@
+.attention-panel { padding: 16px; display: grid; gap: 20px; min-width: 0; color: var(--text-primary); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.attention-panel h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.attention-panel h3 { font-weight: 600; }
+.attention-panel p { max-width: 72ch; }
+.attention-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.attention-controls select { min-width: 0; max-width: 100%; min-height: 44px; padding: 8px; background: var(--bg-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+.attention-panel .icon-btn { min-height: 44px; white-space: normal; }
+.attention-panel :is(button,select,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.attention-list { list-style: none; padding: 0; margin: 0; }
+.attention-list > li { padding-block: 20px; border-bottom: 1px solid var(--border); display: grid; gap: 10px; }
+.attention-list > li:first-child { padding-top: 0; }
+.attention-meta { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.attention-meta time { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.attention-task { font-weight: 500; }
+.attention-detail { white-space: pre-wrap; max-height: 12em; overflow: auto; }
+.attention-list summary { cursor: pointer; min-height: 44px; padding-block: 10px; }
+.attention-item-actions, .attention-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.attention-report { min-width: 0; }
+@media (max-width: 600px) { .attention-panel { font-size: 16px; } .attention-controls select { width: 100%; } }

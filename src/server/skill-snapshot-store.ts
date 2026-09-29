@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-
-import type { Database } from 'better-sqlite3'
-
 import type { SkillMemberInspection, SkillScanStatus } from '../shared/skill-packs.js'
+import type { Database } from './sqlite.js'
 
 export interface SkillSnapshotRecord {
   agentId: string

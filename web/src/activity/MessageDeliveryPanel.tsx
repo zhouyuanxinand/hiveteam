@@ -16,7 +16,14 @@ const stateLabel = (record: MessageDelivery, zh: boolean) =>
     confirmed: zh ? '已确认接收' : 'Receipt confirmed',
     resolved: zh ? '已处理' : 'Handled',
   })[record.state]
-export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) => {
+export const MessageDeliveryPanel = ({
+  workspaceId,
+  initialDeliveryId,
+}: {
+  workspaceId: string
+  initialDeliveryId?: string | undefined
+}) => {
+  const [focusedDeliveryId, setFocusedDeliveryId] = useState(initialDeliveryId)
   const { language } = useI18n(),
     zh = language === 'zh'
   const [data, setData] = useState<DeliveryOverview | null>(null),
@@ -53,11 +60,13 @@ export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) =
   }, [workspaceId])
   const items = (data?.deliveries ?? []).filter(
     (entry) =>
-      all ||
-      (entry.state !== 'confirmed' && entry.state !== 'resolved') ||
-      data?.health.some(
-        (health) => health.dispatch_id === entry.dispatch_id && health.reasons.length
-      )
+      (!focusedDeliveryId || entry.id === focusedDeliveryId) &&
+      (focusedDeliveryId === entry.id ||
+        all ||
+        (entry.state !== 'confirmed' && entry.state !== 'resolved') ||
+        data?.health.some(
+          (health) => health.dispatch_id === entry.dispatch_id && health.reasons.length
+        ))
   )
   const currentPage = Math.min(page, Math.max(0, Math.ceil(items.length / 25) - 1))
   const visible = items.slice(currentPage * 25, (currentPage + 1) * 25)
@@ -91,6 +100,23 @@ export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) =
             : 'Remote view only. Delivery decisions and timeout settings require the local computer.'}
         </p>
       )}
+      {focusedDeliveryId ? (
+        <div className="break-words text-sec">
+          <p>
+            {zh ? '投递回执' : 'Delivery receipt'}: {focusedDeliveryId}
+          </p>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => {
+              setFocusedDeliveryId(undefined)
+              setPage(0)
+            }}
+          >
+            {zh ? '查看所有投递' : 'Show all deliveries'}
+          </button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2">
           <input
@@ -127,7 +153,13 @@ export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) =
       ) : null}
       {data && !items.length ? (
         <p className="text-sec">
-          {zh ? '目前没有需要关注的投递。' : 'No deliveries need attention.'}
+          {focusedDeliveryId
+            ? zh
+              ? '该回执已不在当前投递记录中。'
+              : 'This receipt is no longer in the delivery records.'
+            : zh
+              ? '目前没有需要关注的投递。'
+              : 'No deliveries need attention.'}
         </p>
       ) : null}
       <ul className="space-y-5">
@@ -146,9 +178,13 @@ export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) =
                       ? zh
                         ? '取消提示'
                         : 'Cancellation'
-                      : zh
-                        ? '派单'
-                        : 'Dispatch'}
+                      : record.kind === 'message'
+                        ? zh
+                          ? '任务消息'
+                          : 'Task message'
+                        : zh
+                          ? '派单'
+                          : 'Dispatch'}
                 </h3>
                 <span className="text-sec">{stateLabel(record, zh)}</span>
               </div>
@@ -200,14 +236,19 @@ export const MessageDeliveryPanel = ({ workspaceId }: { workspaceId: string }) =
               {!isRemoteMode() ? (
                 <MessageDeliveryActions record={record} zh={zh} onChanged={load} />
               ) : null}
-              {!isRemoteMode() && health && record.kind === 'dispatch' ? (
+              {!isRemoteMode() &&
+              health &&
+              (record.kind === 'dispatch' ||
+                (record.kind === 'cancel' && focusedDeliveryId === record.id)) ? (
                 <div className="mt-3">
-                  <DispatchTimeoutSettings
-                    workspaceId={workspaceId}
-                    dispatchId={record.dispatch_id}
-                    initial={health.timeouts}
-                    zh={zh}
-                  />
+                  {record.kind === 'dispatch' ? (
+                    <DispatchTimeoutSettings
+                      workspaceId={workspaceId}
+                      dispatchId={record.dispatch_id}
+                      initial={health.timeouts}
+                      zh={zh}
+                    />
+                  ) : null}
                   <CancellationReview health={health} zh={zh} onChanged={load} />
                 </div>
               ) : null}

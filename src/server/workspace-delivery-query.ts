@@ -1,4 +1,3 @@
-import type { Database } from 'better-sqlite3'
 import type {
   DeliveryCounts,
   DeliveryFilter,
@@ -6,6 +5,7 @@ import type {
 } from '../shared/workspace-delivery.js'
 import type { createDispatchLedgerStore, DispatchRecord } from './dispatch-ledger-store.js'
 import { BadRequestError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 // Read the existing delivery/health facts; this query does not advance their state.
 const classified = `WITH classified AS (

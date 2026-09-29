@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
-import type { Database } from 'better-sqlite3'
 import type {
   WorkflowCondition,
   WorkflowResultVersion,
@@ -11,10 +10,10 @@ import type {
 import type { DispatchRecord } from './dispatch-ledger-store.js'
 import { BadRequestError, ConflictError } from './http-errors.js'
 import { sanitizePromptData, wrapUntrustedPromptData } from './prompt-safety.js'
+import type { Database } from './sqlite.js'
 import { createWorkflowAttempts } from './workflow-attempts.js'
 import {
   listWorkflowFiles,
-  MAX_REPORT_LENGTH,
   MAX_TASK_LENGTH,
   MAX_WORKFLOW_SOURCE_BYTES,
   parseDefinition,
@@ -22,7 +21,10 @@ import {
   resolveWorkflowPath,
   titleFromFileName,
 } from './workflow-definition.js'
+import { createWorkflowDeliveryRecovery, workflowIsActive } from './workflow-delivery-recovery.js'
+import { createWorkflowReports } from './workflow-reports.js'
 import { createWorkflowRunStore, type WorkflowRunRow } from './workflow-run-store.js'
+import { createWorkflowStopRecovery } from './workflow-stop-recovery.js'
 import type { WorkspaceStore } from './workspace-store.js'
 
 export interface WorkflowRuntimeInput {
@@ -45,7 +47,7 @@ export interface WorkflowRuntimeInput {
     ) => Promise<DispatchRecord>
   }
   workspaceStore: WorkspaceStore
-  getDispatch?: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
+  getDispatch: (workspaceId: string, dispatchId: string) => DispatchRecord | undefined
   cancellationConfirmed?: (dispatchId: string) => boolean
   canDispatch?: (workspaceId: string) => boolean
 }
@@ -74,14 +76,24 @@ export const createWorkflowRuntime = ({
       }>)
     | undefined
 
-  const { get, listRuns, findRunForDispatch, saveRun, updateStep } = createWorkflowRunStore(db)
+  const runStore = createWorkflowRunStore(db)
+  const { findRunForDispatch, saveRun, updateStep } = runStore
+  const recovery = createWorkflowDeliveryRecovery(db, runStore)
+  const get = (workspaceId: string, runId: string) => {
+    const run = runStore.get(workspaceId, runId)
+    return run ? recovery.view(run) : undefined
+  }
+  const listRuns = (workspaceId: string, limit?: number) =>
+    runStore.listRuns(workspaceId, limit).map(recovery.view)
+  const reports = createWorkflowReports(runStore, getDispatch)
+  const stops = createWorkflowStopRecovery(db, runStore, teamOps)
   const failRun = (run: WorkflowRun, error: unknown) => {
     const message = sanitizePromptData(
       error instanceof Error ? error.message : String(error),
       1_000
     )
     let current = get(run.workspaceId, run.id) ?? run
-    if (current.status !== 'running') return current
+    if (!workflowIsActive(current)) return current
     for (const step of current.steps) {
       if (!['queued', 'running'].includes(step.status) || !step.dispatchId) continue
       try {
@@ -94,7 +106,7 @@ export const createWorkflowRuntime = ({
       }
     }
     current = get(run.workspaceId, run.id) ?? current
-    if (current.status !== 'running') return current
+    if (!workflowIsActive(current)) return current
     const nextSteps = current.steps.map((step) =>
       step.status === 'queued' ||
       step.status === 'running' ||
@@ -126,17 +138,17 @@ export const createWorkflowRuntime = ({
         candidate.needsRerun
       )
         continue
-      const dispatch = getDispatch?.(initial.workspaceId, candidate.dispatchId)
+      const dispatch = getDispatch(initial.workspaceId, candidate.dispatchId)
       if (!dispatch || dispatch.status !== 'reported') continue
       const evidence = readEvidence
         ? await readEvidence(initial.workspaceId, dispatch, candidate.quality.all_of)
         : null
       const latest = get(initial.workspaceId, initial.id)
       const step = latest?.steps.find((item) => item.id === candidate.id)
-      const current = getDispatch?.(initial.workspaceId, candidate.dispatchId)
+      const current = getDispatch(initial.workspaceId, candidate.dispatchId)
       if (
         !latest ||
-        !['running', 'completed'].includes(latest.status) ||
+        !['running', 'interrupted', 'completed'].includes(latest.status) ||
         !step ||
         step.dispatchId !== candidate.dispatchId ||
         step.attempt !== candidate.attempt ||
@@ -186,7 +198,7 @@ export const createWorkflowRuntime = ({
           affected.delete(step.id)
           for (const child of updated.steps)
             if (affected.has(child.id) && child.dispatchId) {
-              const dispatch = getDispatch?.(updated.workspaceId, child.dispatchId)
+              const dispatch = getDispatch(updated.workspaceId, child.dispatchId)
               if (dispatch && ['queued', 'submitted', 'failed'].includes(dispatch.status))
                 teamOps.cancelTask(updated.workspaceId, dispatch.id, {
                   fromAgentId: `${updated.workspaceId}:orchestrator`,
@@ -288,14 +300,21 @@ export const createWorkflowRuntime = ({
     inFlightRuns.add(runId)
     try {
       const initialRun = get(workspaceId, runId)
-      if (!initialRun || !['running', 'completed'].includes(initialRun.status)) return
-      if (canDispatch && !canDispatch(workspaceId)) return
-      let run: WorkflowRun = settleRerun(initialRun)
+      if (initialRun?.status === 'stopped') {
+        stops.reconcile(workspaceId, runId)
+        return
+      }
+      if (!initialRun || !['running', 'interrupted', 'completed'].includes(initialRun.status))
+        return
+      let run = recovery.reconcile(reports.refresh(initialRun))
+      run = settleRerun(run, run.status === 'running')
       run = await refreshQuality(run)
+      run = recovery.reconcile(run)
       if (run.status !== 'running') return
       const readySteps = run.steps.filter((step) => stepIsReady(step, run.steps))
       for (const candidate of readySteps) {
-        const currentRun = get(workspaceId, runId)
+        const latestRun = get(workspaceId, runId)
+        const currentRun = latestRun ? recovery.reconcile(latestRun) : undefined
         if (!currentRun || currentRun.status !== 'running') return
         const currentStep = currentRun.steps.find((step) => step.id === candidate.id)
         if (!currentStep || !stepIsReady(currentStep, currentRun.steps)) continue
@@ -317,7 +336,8 @@ export const createWorkflowRuntime = ({
               fromAgentId: `${workspaceId}:orchestrator`,
               hivePort: typeof portRow?.hive_port === 'string' ? portRow.hive_port : '',
               onCreated: (dispatch) => {
-                const owner = get(workspaceId, runId)
+                const storedOwner = get(workspaceId, runId)
+                const owner = storedOwner ? recovery.reconcile(storedOwner) : undefined
                 const current = owner?.steps.find((step) => step.id === candidate.id)
                 if (
                   !owner ||
@@ -346,8 +366,12 @@ export const createWorkflowRuntime = ({
             }
           )
           const latest = get(workspaceId, runId)
-          if (!latest || latest.status !== 'running') {
-            if (dispatch.status === 'queued' || dispatch.status === 'submitted') {
+          if (!latest || !workflowIsActive(latest)) {
+            if (
+              dispatch.status === 'queued' ||
+              dispatch.status === 'submitted' ||
+              dispatch.status === 'failed'
+            ) {
               teamOps.cancelTask(workspaceId, dispatch.id, {
                 fromAgentId: `${workspaceId}:orchestrator`,
                 reason: 'Workflow run stopped before this step was accepted.',
@@ -355,21 +379,35 @@ export const createWorkflowRuntime = ({
             }
             return
           }
-          if (dispatch.status === 'failed') {
-            failRun(latest, dispatch.lastError ?? 'Workflow step delivery failed')
-            return
-          }
           run = updateStep(latest, candidate.id, {
             dispatchId: dispatch.id,
             inputVersion: dispatch.baseHeadSha,
             ...(latest.steps.find((step) => step.id === candidate.id)?.status === 'queued'
               ? {
-                  status: dispatch.status === 'queued' ? 'queued' : 'running',
+                  status:
+                    dispatch.status === 'queued' || dispatch.status === 'failed'
+                      ? 'queued'
+                      : 'running',
                 }
               : {}),
           })
+          run = recovery.reconcile(run)
         } catch (error) {
-          failRun(get(workspaceId, runId) ?? run, error)
+          const latest = get(workspaceId, runId)
+          const owned = latest?.steps.find((step) => step.id === candidate.id)?.dispatchId
+          const reconciled = latest ? recovery.reconcile(latest) : undefined
+          if (
+            reconciled?.status !== 'interrupted' &&
+            !(latest && owned && getDispatch(workspaceId, owned))
+          )
+            failRun(reconciled ?? run, error)
+          else
+            console.error('[hive] workflow dispatch failed; original responsibility retained', {
+              runId,
+              stepId: candidate.id,
+              dispatchId: owned,
+              error,
+            })
           return
         }
       }
@@ -391,7 +429,10 @@ export const createWorkflowRuntime = ({
   }
 
   return {
-    rerun: requestRerun,
+    rerun(...args: Parameters<typeof requestRerun>) {
+      stops.reconcile(args[0], args[1])
+      return requestRerun(...args)
+    },
     rerunForDispatch(workspaceId: string, dispatchId: string, text: string) {
       const run = findRunForDispatch(workspaceId, dispatchId)
       const step = run?.steps.find((item) => item.dispatchId === dispatchId)
@@ -418,17 +459,24 @@ export const createWorkflowRuntime = ({
         snapshot: JSON.parse(entry.snapshot) as WorkflowRunStep,
       }))
     },
-    resume(hivePort: string) {
+    resume(hivePort: string, workspaceId?: string) {
       if (closing) return
-      db.prepare("UPDATE workflow_runs SET hive_port=? WHERE status='running'").run(hivePort)
-      if (timer) return
-      timer = setInterval(() => {
-        for (const row of db
-          .prepare("SELECT id FROM workflow_runs WHERE status='running'")
-          .all() as Array<{ id: string }>)
-          schedule(row.id)
-      }, 1500)
-      timer.unref()
+      db.prepare(
+        "UPDATE workflow_runs SET hive_port=? WHERE status IN ('running','interrupted')"
+      ).run(hivePort)
+      if (!timer) {
+        timer = setInterval(() => {
+          for (const row of db
+            .prepare("SELECT id FROM workflow_runs WHERE status IN ('running','interrupted')")
+            .all() as Array<{ id: string }>)
+            schedule(row.id)
+          for (const row of stops.pending()) schedule(row.id)
+        }, 1500)
+        timer.unref()
+      }
+      // Agent startup calls resume before opening a PTY or replaying queued work.
+      // Failure must reach that caller; the installed timer can retry persisted intent.
+      for (const row of stops.pending(workspaceId)) stops.reconcile(row.workspace_id, row.id)
     },
     async close() {
       closing = true
@@ -445,8 +493,9 @@ export const createWorkflowRuntime = ({
     },
     async refresh(workspaceId: string, runId: string) {
       const run = get(workspaceId, runId)
-      if (run && ['running', 'completed'].includes(run.status)) {
-        await refreshQuality(run)
+      if (run?.status === 'stopped') stops.reconcile(workspaceId, runId)
+      else if (run && ['running', 'interrupted', 'completed'].includes(run.status)) {
+        await refreshQuality(recovery.reconcile(reports.refresh(run)))
         await dispatchReady(runId)
       }
       return get(workspaceId, runId)
@@ -534,100 +583,23 @@ export const createWorkflowRuntime = ({
     listRuns,
     get,
     async stop(workspaceId: string, runId: string) {
-      const current = get(workspaceId, runId)
-      if (!current) return undefined
-      if (
-        current.status === 'completed' ||
-        current.status === 'failed' ||
-        current.status === 'stopped'
-      ) {
-        return current
-      }
-      const orchestratorId = `${workspaceId}:orchestrator`
-      const nextSteps = current.steps.map((step) => {
-        if (step.status === 'completed' || step.status === 'failed' || step.status === 'stopped')
-          return step
-        if (step.dispatchId && ['queued', 'running'].includes(step.status)) {
-          try {
-            teamOps.cancelTask(workspaceId, step.dispatchId, {
-              fromAgentId: orchestratorId,
-              reason: 'Workflow run stopped by the user.',
-            })
-          } catch {
-            // The worker may have reported between the read and cancellation.
-          }
-        }
-        return {
-          ...step,
-          error: step.status === 'running' ? 'Stopped by user.' : null,
-          status: 'stopped' as const,
-        }
-      })
-      const next = { ...current, steps: nextSteps, status: 'stopped' as const }
-      saveRun(next, { status: 'stopped', endedAt: Date.now() })
-      return get(workspaceId, runId) ?? next
+      return stops.stop(workspaceId, runId)
     },
     recordDispatchSubmitted(workspaceId: string, dispatchId: string) {
       const run = findRunForDispatch(workspaceId, dispatchId)
-      if (!run || run.status !== 'running') return
+      if (!run || !workflowIsActive(run)) return
       const step = run.steps.find((candidate) => candidate.dispatchId === dispatchId)
-      if (step?.status === 'queued') updateStep(run, step.id, { status: 'running' })
+      if (step?.status === 'queued')
+        recovery.reconcile(updateStep(run, step.id, { status: 'running' }))
+      else recovery.reconcile(run)
     },
     recordDispatchReport(workspaceId: string, dispatch: DispatchRecord) {
-      const persisted = getDispatch?.(workspaceId, dispatch.id)
-      if (
-        persisted &&
-        (persisted.status !== 'reported' || persisted.reportRevision !== dispatch.reportRevision)
-      )
-        return false
-      const run = findRunForDispatch(workspaceId, dispatch.id)
-      if (!run || run.status !== 'running' || dispatch.status !== 'reported') return false
+      const reported = reports.record(workspaceId, dispatch)
+      if (!reported) return false
+      const run = recovery.reconcile(reported)
       const step = run.steps.find((candidate) => candidate.dispatchId === dispatch.id)
-      if (
-        !step ||
-        step.rerunPending ||
-        step.needsRerun ||
-        !['queued', 'running', 'blocked', 'awaiting_review'].includes(step.status)
-      )
-        return false
-      const canAdvance = dispatch.reportOutcome === 'success' || dispatch.acceptedAt != null
-      const status = step.quality
-        ? 'awaiting_review'
-        : canAdvance
-          ? 'completed'
-          : dispatch.reportOutcome
-            ? 'blocked'
-            : 'awaiting_review'
-      const completed = updateStep(run, step.id, {
-        artifacts: dispatch.artifacts,
-        error:
-          status === 'blocked'
-            ? `Worker reported ${dispatch.reportOutcome}. Review the report and send feedback to continue.`
-            : null,
-        reportText: dispatch.reportText
-          ? sanitizePromptData(dispatch.reportText, MAX_REPORT_LENGTH)
-          : '',
-        status,
-        resultVersion:
-          !step.quality && canAdvance
-            ? {
-                attempt: step.attempt ?? 0,
-                dispatch_id: dispatch.id,
-                report_revision: dispatch.reportRevision,
-                source_sha: null,
-                base_sha: null,
-                repository_id: null,
-              }
-            : null,
-      })
-      if (step.quality) {
-        schedule(run.id)
-        return true
-      }
-      if (!canAdvance) return true
-      if (completed.steps.every((candidate) => candidate.status === 'completed')) {
-        saveRun(completed, { status: 'completed', endedAt: Date.now() })
-      } else {
+      if (step?.quality) schedule(run.id)
+      else if (step?.status === 'completed' && run.status === 'running') {
         void dispatchReady(run.id).catch((error: unknown) => {
           console.error('[hive] workflow dependency dispatch failed', error)
           const latest = get(workspaceId, run.id)

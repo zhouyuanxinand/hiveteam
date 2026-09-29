@@ -5,12 +5,17 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
-import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { App } from '../../web/src/app.js'
 import { UI_LANGUAGE_STORAGE_KEY } from '../../web/src/uiLanguage.js'
+import { fetchWithNodeSignal } from '../helpers/fetch-with-node-signal.js'
 import { writeNodeCli } from '../helpers/platform-cli.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
+
+// Compile the real lazy dialog during module collection. Cold Vite transforms
+// belong outside the initialization and interaction deadlines on Windows.
+import '../../web/src/worker/AddWorkerDialog.js'
+import '../../web/src/activity/ActivityCenterDrawer.js'
 
 // These flow tests isolate terminal rendering; real parser coverage lives in terminal-theme.test.
 vi.mock('../../web/src/terminal/input-highlights.js', () => ({
@@ -78,12 +83,6 @@ let fakeCliDir = ''
 
 const WORKER_FLOW_TIMEOUT_MS = 5000
 
-beforeAll(async () => {
-  // Compile the real lazy dialog before timing interactions. Cold Vite
-  // transforms on Windows can exceed the UI wait without a rendering failure.
-  await import('../../web/src/worker/AddWorkerDialog.js')
-})
-
 const openAddWorkerDialog = async (label = 'Add team member') => {
   fireEvent.click(
     await screen.findByTestId('add-worker-trigger', {}, { timeout: WORKER_FLOW_TIMEOUT_MS })
@@ -103,7 +102,7 @@ const fetchThroughServer = (input: RequestInfo | URL, init?: RequestInit) => {
 const stubFetch = () => {
   vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
     const { headers, url } = fetchThroughServer(input, init)
-    return nativeFetch(url, { ...init, headers })
+    return fetchWithNodeSignal(url, { ...init, headers })
   })
 }
 
@@ -118,7 +117,7 @@ const stubFetchWithEmptyTerminalRuns = () => {
         })
       )
     }
-    return nativeFetch(url, { ...init, headers })
+    return fetchWithNodeSignal(url, { ...init, headers })
   })
 }
 
@@ -157,14 +156,16 @@ beforeEach(async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ bootstrap_token: server.store.createUiBootstrap() }),
   }).then((response) => {
+    expect(response.status).toBe(200)
     cookie = response.headers.get('set-cookie') ?? ''
   })
   uiCookie = cookie
   const workspaceResponse = await nativeFetch(`${server.baseUrl}/api/workspaces`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie },
-    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: '/tmp/hive-alpha' }),
+    body: JSON.stringify({ autostart_orchestrator: false, name: 'Alpha', path: server.dataDir }),
   })
+  expect(workspaceResponse.status).toBe(201)
   workspaceId = ((await workspaceResponse.json()) as { id: string }).id
   const presetResponse = await nativeFetch(`${server.baseUrl}/api/settings/command-presets`, {
     method: 'POST',
@@ -179,6 +180,7 @@ beforeEach(async () => {
       yolo_args_template: null,
     }),
   })
+  expect(presetResponse.status).toBe(201)
   sleeperPresetId = ((await presetResponse.json()) as { id: string }).id
   stubFetch()
 })
@@ -206,7 +208,7 @@ describe('worker flow with real server', () => {
       await screen.findByText('Team members', {}, { timeout: WORKER_FLOW_TIMEOUT_MS })
     ).toBeInTheDocument()
     const dialog = await openAddWorkerDialog()
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Generate random member name' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use a name matching this role' }))
     const nameInput = within(dialog).getByPlaceholderText('e.g. Alice') as HTMLInputElement
     expect(nameInput.value.trim()).not.toBe('')
     fireEvent.change(within(dialog).getByPlaceholderText('e.g. Alice'), {
@@ -333,7 +335,7 @@ describe('worker flow with real server', () => {
     expect(worker?.description).toBe('你是审查型 worker。先找高风险问题，再给出最小修复建议。')
   })
 
-  test('Add Worker random name remains available under the selected Chinese language', async () => {
+  test('Add Worker role names remain available under the selected Chinese language', async () => {
     window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, 'zh')
     render(<App />)
 
@@ -344,9 +346,11 @@ describe('worker flow with real server', () => {
 
     const dialog = await openAddWorkerDialog('添加团队成员')
     const nameInput = within(dialog).getByPlaceholderText('例如 鲁班') as HTMLInputElement
-    fireEvent.click(within(dialog).getByRole('button', { name: '生成随机成员名' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '使用符合当前角色的名称' }))
 
-    expect(WORKER_NAME_POOL).toContain(nameInput.value)
+    expect(nameInput.value).toBe('Coder')
+    fireEvent.click(within(dialog).getByTestId('role-card-reviewer'))
+    expect(nameInput.value).toBe('Reviewer')
   })
 
   test('Add Worker dialog can run a generic full startup command without preset semantics', async () => {
@@ -506,3 +510,48 @@ describe('worker flow with real server', () => {
     })
   })
 })
+
+test('attention navigates to the responsible member by ID without starting stopped agents', async () => {
+  if (!serverContext) throw new Error('Expected server fixture')
+  const store = serverContext.store
+  store.dispatchDelivery.close()
+  const worker = store.addWorker(workspaceId, { name: 'Attention navigator', role: 'coder' })
+  const dispatch = await store.dispatchTask(workspaceId, worker.id, 'Navigation task', {
+    messageProtocolVersion: 1,
+  })
+  render(<App />)
+  await screen.findByRole('button', { name: 'Open Attention navigator' }, { timeout: 10000 })
+  fireEvent.click(screen.getByTestId('topbar-activity'))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Needs attention' }, { timeout: 10000 })
+  )
+  const panel = await screen.findByRole('region', { name: 'Needs attention' })
+  fireEvent.click(await within(panel).findByRole('button', { name: 'Open member terminal' }))
+  const modal = await screen.findByTestId('worker-modal')
+  expect(within(modal).getByRole('heading', { name: 'Attention navigator' })).toBeInTheDocument()
+  expect(screen.queryByTestId('activity-center-drawer')).toBeNull()
+  expect(store.listTerminalRuns(workspaceId)).toEqual([])
+  fireEvent.click(screen.getByTestId('worker-modal-close'))
+  await waitFor(() => expect(screen.queryByTestId('worker-modal')).toBeNull())
+  store.dispatchMessages.send(workspaceId, dispatch.id, worker.id, {
+    kind: 'question',
+    body: 'Confirm the target branch?',
+  })
+  fireEvent.click(screen.getByTestId('topbar-activity'))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Needs attention' }, { timeout: 10000 })
+  )
+  fireEvent.change(await screen.findByLabelText('Item type'), { target: { value: 'question' } })
+  await screen.findByText('Confirm the target branch?')
+  const terminal = document.getElementById(`terminal-${workspaceId}`)
+  if (!terminal) throw new Error('Expected Orchestrator terminal region')
+  // jsdom has focus semantics but no layout/scroll implementation.
+  terminal.scrollIntoView = () => {}
+
+  fireEvent.click(screen.getByRole('button', { name: 'Open member terminal' }))
+  await waitFor(() =>
+    expect(document.activeElement).toBe(document.getElementById(`terminal-${workspaceId}`))
+  )
+  expect(store.listTerminalRuns(workspaceId)).toEqual([])
+  expect(store.getDispatch(workspaceId, dispatch.id)?.status).toBe('queued')
+}, 30000)

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import {
   type ExecutionKind,
   MAX_RESOURCE_LIMIT,
@@ -8,6 +7,7 @@ import {
   type ResourceReservation,
 } from '../shared/resource-budget.js'
 import { BadRequestError, HttpError } from './http-errors.js'
+import type { Database } from './sqlite.js'
 
 export type ResourceLimitReason =
   | 'global_limit'
@@ -102,14 +102,14 @@ export const assertWorkerCapacityInTransaction = (
   if (!Number.isSafeInteger(additionalCount) || additionalCount < 0)
     throw new BadRequestError('Invalid worker count.')
   const count = db
-    .prepare('SELECT COUNT(*) AS count FROM workers WHERE workspace_id = ?')
+    .prepare('SELECT COUNT(*) AS count FROM workers WHERE workspace_id = ? AND retired_at IS NULL')
     .get(workspaceId) as { count: number }
   const available = Math.max(0, readLimits(db).max_workers_per_workspace - count.count)
   if (additionalCount > available) {
     throw new ResourceLimitError(
       'worker_limit',
       readSnapshot(db),
-      `This request needs ${additionalCount} worker slots; ${available} are available. Delete existing members or raise the worker member limit. Stopping a process does not free a member slot.`
+      `This request needs ${additionalCount} worker slots; ${available} are available. Retire or delete existing members, or raise the worker member limit. Stopping a process does not free a member slot.`
     )
   }
 }

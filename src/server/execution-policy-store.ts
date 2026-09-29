@@ -1,8 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type { ExecutionPolicySnapshot, UnsafeExecutionGrant } from '../shared/execution-policy.js'
+import type { Database } from './sqlite.js'
 
 export const createExecutionPolicyStore = (db: Database) => ({
+  hasDecision(workspaceId: string, agentId: string) {
+    return Boolean(
+      db
+        .prepare(`SELECT 1 FROM execution_policy_events
+      WHERE workspace_id = ? AND agent_id = ? AND action IN
+      ('grant_unsafe', 'revoke_unsafe', 'grant_automatic_worker') LIMIT 1`)
+        .get(workspaceId, agentId)
+    )
+  },
   getGrant(workspaceId: string, agentId: string): UnsafeExecutionGrant | null {
     return (
       (db
@@ -11,7 +20,12 @@ export const createExecutionPolicyStore = (db: Database) => ({
         .get(workspaceId, agentId) as UnsafeExecutionGrant | undefined) ?? null
     )
   },
-  grant(workspaceId: string, agentId: string, grant: UnsafeExecutionGrant) {
+  grant(
+    workspaceId: string,
+    agentId: string,
+    grant: UnsafeExecutionGrant,
+    automatic?: { preset_id: string; preference_fingerprint: string; spawned_by_agent_id: string }
+  ) {
     db.transaction(() => {
       db.prepare(`INSERT INTO execution_unsafe_grants
       (workspace_id, agent_id, cli_fingerprint, cli_version, policy_revision, granted_at)
@@ -30,9 +44,9 @@ export const createExecutionPolicyStore = (db: Database) => ({
         randomUUID(),
         workspaceId,
         agentId,
-        'local_user',
-        'grant_unsafe',
-        JSON.stringify(grant),
+        automatic ? 'local_user_preference' : 'local_user',
+        automatic ? 'grant_automatic_worker' : 'grant_unsafe',
+        JSON.stringify(automatic ? { ...grant, ...automatic } : grant),
         Date.now()
       )
     })()

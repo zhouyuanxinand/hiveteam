@@ -1,5 +1,6 @@
 import { closeSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { codexMessageHash } from './codex-message-wire.js'
 import { getCodexHome, readCodexSessionFirstLine } from './session-capture-codex.js'
 
 export const assertReportSession = (file: string, sessionId: string, cwd: string) => {
@@ -51,27 +52,39 @@ export const findReportSession = (pattern: string, sessionId: string, cwd: strin
   return file
 }
 
-const isUserReceipt = (line: string, marker: string) => {
+const isUserReceipt = (line: string, marker: string, expectedHash?: string) => {
   const record = JSON.parse(line)
   const payload = record.payload
+  const matches = (text: unknown) =>
+    typeof text === 'string' &&
+    text.includes(marker) &&
+    (expectedHash === undefined || codexMessageHash(text) === expectedHash)
   if (record.type === 'event_msg' && payload?.type === 'user_message')
-    return typeof payload.message === 'string' && payload.message.includes(marker)
+    return matches(payload.message)
   return (
     record.type === 'response_item' &&
     payload?.role === 'user' &&
     Array.isArray(payload.content) &&
-    payload.content.some(
-      (part: { type?: string; text?: string }) =>
-        (part.type === 'input_text' || part.type === 'text') &&
-        typeof part.text === 'string' &&
-        part.text.includes(marker)
+    matches(
+      payload.content
+        .filter(
+          (part: { type?: string; text?: string }) =>
+            (part.type === 'input_text' || part.type === 'text') && typeof part.text === 'string'
+        )
+        .map((part: { text: string }) => part.text)
+        .join('\n')
     )
   )
 }
 
 /** Reads only new, complete JSONL records. Never acknowledges a PTY echo,
  * assistant/tool quotation, or a task-start event without the report itself. */
-export const createReportJournalReader = (file: string, offset: number, marker: string) => {
+export const createReportJournalReader = (
+  file: string,
+  offset: number,
+  marker: string,
+  expectedHash?: string
+) => {
   let position = offset
   let partial = Buffer.alloc(0)
   let found = false
@@ -90,7 +103,7 @@ export const createReportJournalReader = (file: string, offset: number, marker: 
       while (end >= 0) {
         const line = partial.subarray(0, end).toString('utf8').trim()
         partial = partial.subarray(end + 1)
-        if (line && isUserReceipt(line, marker)) {
+        if (line && isUserReceipt(line, marker, expectedHash)) {
           found = true
           return { found: true, caughtUp: true }
         }

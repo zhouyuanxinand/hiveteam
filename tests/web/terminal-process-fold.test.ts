@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 
-import { fireEvent, within } from '@testing-library/dom'
+import { fireEvent, within } from '@testing-library/react'
 import { Terminal } from '@xterm/xterm'
 import { afterEach, expect, test, vi } from 'vitest'
 import { createTerminalProcessFold } from '../../web/src/terminal/terminal-process-fold.js'
 
 const disposables: Array<() => void> = []
-const labels = { history: '终端消息', internalCall: '内部调用', lines: '{count} 行' }
+const labels = {
+  history: '终端消息',
+  internalCall: '内部调用',
+  lines: '{count} 行',
+  process: '执行过程',
+  running: '正在执行…',
+  interrupted: '本轮执行已中断。',
+  truncated: '部分记录已省略。',
+}
 const transcript =
   '› 请分析技术文档\r\n\r\n• 我先查看当前可用的成员。\r\n\r\n• Ran Get-ChildItem -Force\r\n  Directory: D:\\项目\r\n  result.txt\r\n\r\n› '
 
@@ -25,7 +33,7 @@ const fixture = async () => {
   Object.defineProperty(screen, 'clientHeight', { value: 480 })
   const write = (text: string) => new Promise<void>((resolve) => terminal.write(text, resolve))
   await write(transcript)
-  const fold = createTerminalProcessFold(terminal, container)
+  const fold = createTerminalProcessFold(terminal, container, 'run')
   disposables.push(() => fold.dispose())
   fold.setLabels(labels)
   fold.afterOutput()

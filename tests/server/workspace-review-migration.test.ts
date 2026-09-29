@@ -1,5 +1,5 @@
-import Database from 'better-sqlite3'
 import { expect, test } from 'vitest'
+import Database from '../../src/server/sqlite.js'
 import { applySchemaVersion44 } from '../../src/server/sqlite-schema-v44.js'
 
 test('legacy receipts keep their Orchestrator recipient and subsequent migrations preserve member recipients', () => {

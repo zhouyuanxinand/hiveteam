@@ -1,7 +1,7 @@
 import { open, readdir, realpath } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import type { AgentConversation } from '../shared/agent-conversation.js'
-import { parseAgentConversation } from './agent-conversation-parser.js'
+import { parseAgentConversationTranscript } from './agent-conversation-parser.js'
 import { isPathWithinRoot } from './fs-sandbox.js'
 
 const MAX_LOG_BYTES = 2 * 1024 * 1024
@@ -77,11 +77,12 @@ export const createAgentConversationReader = () => {
         const tail = await file.read(buffer, 0, buffer.length, start)
         const bytes = buffer.subarray(0, tail.bytesRead)
         const content = (start > 0 ? bytes.subarray(bytes.indexOf(10) + 1) : bytes).toString('utf8')
+        const parsed = parseAgentConversationTranscript(content)
         const value: AgentConversation = {
           status: 'ready',
           session_id: sessionId,
-          turns: parseAgentConversation(content),
-          truncated: start > 0,
+          turns: parsed.turns,
+          truncated: start > 0 || parsed.truncated,
         }
         snapshots.delete(key)
         snapshots.set(key, { fingerprint, value })

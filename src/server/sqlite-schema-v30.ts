@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /** Adds a local custom image to persisted worker profiles. */
 export const applySchemaVersion30 = (db: Database) => {

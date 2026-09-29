@@ -1,4 +1,3 @@
-import type { Database } from 'better-sqlite3'
 import {
   REVIEW_TEXT_LIMIT,
   type ReviewSubmission,
@@ -7,6 +6,7 @@ import {
 } from '../shared/workspace-review.js'
 import { BadRequestError, ConflictError, HttpError } from './http-errors.js'
 import { wrapUntrustedPromptData } from './prompt-safety.js'
+import type { Database } from './sqlite.js'
 import {
   listReviewDocuments,
   readReviewDocument,

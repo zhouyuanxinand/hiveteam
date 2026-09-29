@@ -1,3 +1,4 @@
+import type { TerminalGrillHandoff } from '../shared/terminal-grill.js'
 import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
@@ -11,6 +12,7 @@ type TerminalControlClientMessage =
   | { type: 'retry_session'; request_id: string }
 
 type TerminalControlServerMessage =
+  | TerminalGrillHandoff
   | { type: 'error'; message: string }
   | { type: 'exit'; code: number | null }
   | { type: 'restore'; snapshot: string }

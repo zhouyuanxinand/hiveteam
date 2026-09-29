@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import Database from 'better-sqlite3'
 import { expect, test } from 'vitest'
 import { stampLoopbackHeaders } from '../../src/server/remote-loopback-auth.js'
+import Database from '../../src/server/sqlite.js'
 import { startAuthorizedTestServer, startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 

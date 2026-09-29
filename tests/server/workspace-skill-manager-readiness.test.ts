@@ -1,12 +1,11 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test } from 'vitest'
 import { createSkillPackChangeStore } from '../../src/server/skill-pack-change-store.js'
 import { createSkillPackReleaseStore } from '../../src/server/skill-pack-release-store.js'
 import { createSkillSnapshotStore } from '../../src/server/skill-snapshot-store.js'
+import Database from '../../src/server/sqlite.js'
 import { applySchemaVersion34 } from '../../src/server/sqlite-schema-v34.js'
 import { applySchemaVersion35 } from '../../src/server/sqlite-schema-v35.js'
 import { applySchemaVersion36 } from '../../src/server/sqlite-schema-v36.js'

@@ -1,4 +1,4 @@
-import type { Database } from 'better-sqlite3'
+import type { Database } from './sqlite.js'
 
 /**
  * Removes the retired Sentinel role and any persisted workers created with it.

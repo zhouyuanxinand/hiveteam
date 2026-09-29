@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import type { Database } from 'better-sqlite3'
 import type {
   NativeSessionAttempt,
   NativeSessionContext,
@@ -7,6 +6,7 @@ import type {
 } from '../shared/native-session.js'
 import type { SessionHarness } from '../shared/session-adapter.js'
 import { NativeSessionError } from './native-session-error.js'
+import type { Database } from './sqlite.js'
 
 type GenerationRow = Omit<NativeSessionGeneration, 'context' | 'current' | 'last_error'> & {
   context_json: string

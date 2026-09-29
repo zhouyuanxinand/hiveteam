@@ -1,6 +1,5 @@
-import type { Database } from 'better-sqlite3'
-
 import { BUILTIN_COMMAND_PRESETS } from './command-preset-defaults.js'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion17 = (db: Database) => {
   const commandPresetsTable = db

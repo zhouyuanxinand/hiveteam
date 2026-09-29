@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import type { CommandPreset, FsProbeResponse } from '../api.js'
 import { useI18n } from '../i18n.js'
 import { WorkspaceCommandPresetSelect } from './WorkspaceCommandPresetSelect.js'
+import { WorkspaceInitializationSelect } from './WorkspaceInitializationSelect.js'
 import type { WorkspaceCreateInput } from './workspace-create-input.js'
 
 type ConfirmWorkspaceDialogProps = {
@@ -42,7 +43,7 @@ export const ConfirmWorkspaceDialog = ({
 }: ConfirmWorkspaceDialogProps) => {
   const { t, language } = useI18n()
   const zh = language === 'zh'
-  const [initializationMode, setInitializationMode] = useState<'basic' | 'packs'>('basic')
+  const [initializationMode, setInitializationMode] = useState<'basic' | 'packs'>('packs')
   const [autostart, setAutostart] = useState(false)
   const initialPath = probe?.path ?? ''
   const initialName = probe?.suggested_name ?? basenameOf(initialPath)
@@ -215,30 +216,10 @@ export const ConfirmWorkspaceDialog = ({
                 startupCommand={startupCommand}
                 value={commandPresetId}
               />
-              <label className="flex flex-col gap-2 text-sm">
-                {zh ? '工作区初始化' : 'Workspace initialization'}
-                <select
-                  className="input"
-                  value={initializationMode}
-                  onChange={(event) =>
-                    setInitializationMode(event.target.value as 'basic' | 'packs')
-                  }
-                >
-                  <option value="basic">
-                    {zh ? '基础模式（可离线创建）' : 'Basic workspace (offline creation)'}
-                  </option>
-                  <option value="packs">
-                    {zh
-                      ? '安装默认团队技能包（需要网络或缓存）'
-                      : 'Install default skill packs (network or cache required)'}
-                  </option>
-                </select>
-                <span className="text-xs text-sec">
-                  {zh
-                    ? '基础模式不会安装默认技能包。已有技能与文件保留，之后可从顶部“团队技能”扩展。'
-                    : 'Basic mode skips default packs and preserves existing skills and files. Add packs later from Team Skills in the top bar.'}
-                </span>
-              </label>
+              <WorkspaceInitializationSelect
+                value={initializationMode}
+                onChange={setInitializationMode}
+              />
               <label className="flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"

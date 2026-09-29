@@ -1,6 +1,6 @@
-import type { Database } from 'better-sqlite3'
 import type { WorkflowRun, WorkflowRunStep } from '../shared/workflows.js'
 import { sanitizePromptData } from './prompt-safety.js'
+import type { Database } from './sqlite.js'
 import { MAX_REPORT_LENGTH, MAX_TASK_LENGTH, MAX_WORKFLOW_STEPS } from './workflow-definition.js'
 export interface WorkflowRunRow {
   created_at: number
@@ -93,7 +93,7 @@ export const createWorkflowRunStore = (db: Database) => {
     const row = db
       .prepare(
         `SELECT * FROM workflow_runs
-       WHERE workspace_id = ? AND status IN ('running', 'completed')
+       WHERE workspace_id = ? AND status IN ('running', 'interrupted', 'completed')
          AND EXISTS (SELECT 1 FROM json_each(steps_json) step
                      WHERE json_extract(step.value, '$.dispatchId') = ?)
        LIMIT 1`

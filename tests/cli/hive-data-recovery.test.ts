@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import Database from 'better-sqlite3'
 import { expect, test } from 'vitest'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import Database from '../../src/server/sqlite.js'
 
 const exec = promisify(execFile)
 const loader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href

@@ -1,11 +1,10 @@
-import type { Database } from 'better-sqlite3'
-
 import {
   CODER_ROLE_DESCRIPTION,
   ORCHESTRATOR_ROLE_DESCRIPTION,
   REVIEWER_ROLE_DESCRIPTION,
   TESTER_ROLE_DESCRIPTION,
 } from './role-templates.js'
+import type { Database } from './sqlite.js'
 
 const BUILTIN_ROLE_DESCRIPTIONS = [
   ['orchestrator', ORCHESTRATOR_ROLE_DESCRIPTION],

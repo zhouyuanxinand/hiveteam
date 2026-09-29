@@ -1,6 +1,8 @@
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit'
 import type { Terminal as XtermTerminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AgentConversation } from '../../../src/shared/agent-conversation.js'
+import type { TerminalGrillHandoff } from '../../../src/shared/terminal-grill.js'
 import type {
   TerminalSessionRecovery,
   TerminalSessionRetryStatus,
@@ -64,7 +66,13 @@ export const useTerminalRun = (
     latestProcess.current = labels
     processFoldRef.current?.setLabels(labels)
   }, [])
+  const latestConversation = useRef<AgentConversation | undefined>(undefined)
+  const updateConversation = useCallback((conversation: AgentConversation | undefined) => {
+    latestConversation.current = conversation
+    processFoldRef.current?.setConversation(conversation)
+  }, [])
   const [recovery, setRecovery] = useState<TerminalSessionRecovery | null>(null)
+  const [grillHandoff, setGrillHandoff] = useState<TerminalGrillHandoff | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<TerminalConnectionStatus>('connecting')
   const [connectionVersion, setConnectionVersion] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +96,7 @@ export const useTerminalRun = (
     if (!containerRef.current) return
     setError(null)
     setRecovery(null)
+    setGrillHandoff(null)
     setStatus('connecting')
     setConnectionStatus('connecting')
 
@@ -140,8 +149,9 @@ export const useTerminalRun = (
       terminal = nextTerminal
       fitAddon = nextFitAddon
       inputHighlights = createInputHighlights(nextTerminal)
-      processFoldRef.current = createTerminalProcessFold(nextTerminal, containerRef.current)
+      processFoldRef.current = createTerminalProcessFold(nextTerminal, containerRef.current, runId)
       processFoldRef.current.setLabels(latestProcess.current)
+      processFoldRef.current.setConversation(latestConversation.current)
       const scheduleUserInputDecorations = () => {
         if (userInputDecorationFrame !== undefined) return
         const decorate = () => {
@@ -340,6 +350,9 @@ export const useTerminalRun = (
         onRecovery(next) {
           if (!disposed) setRecovery(next)
         },
+        onGrillHandoff(next) {
+          if (!disposed) setGrillHandoff(next)
+        },
         onConnectionChange(next) {
           if (!disposed) setConnectionStatus(next)
         },
@@ -434,9 +447,11 @@ export const useTerminalRun = (
     status,
     readOnly,
     recovery,
+    grillHandoff,
     retrySession,
     connectionStatus,
     reconnect,
     updateProcess,
+    updateConversation,
   }
 }

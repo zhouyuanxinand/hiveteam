@@ -1,9 +1,8 @@
-import BetterSqlite3 from 'better-sqlite3'
 import { describe, expect, test } from 'vitest'
-
 import { createRemoteAuditStore } from '../../src/server/remote-audit-store.js'
 import { createRemoteConfigSource } from '../../src/server/remote-config-keys.js'
 import { createRemoteDeviceStore } from '../../src/server/remote-device-store.js'
+import BetterSqlite3 from '../../src/server/sqlite.js'
 import { initializeRuntimeDatabase } from '../../src/server/sqlite-schema.js'
 import { applySchemaVersion49 } from '../../src/server/sqlite-schema-v49.js'
 

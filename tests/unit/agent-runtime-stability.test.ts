@@ -3,11 +3,9 @@ import '../helpers/mock-node-pty.ts'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-
 import { createAgentRunStore } from '../../src/server/agent-run-store.js'
+import Database from '../../src/server/sqlite.js'
 import { createPolicyIsolatedAgentRuntime as createAgentRuntime } from '../helpers/agent-runtime-policy.js'
 import { readyTeamSkillRuntime } from '../helpers/team-skill-stubs.js'
 
@@ -58,6 +56,9 @@ describe('agent runtime stability (unit)', () => {
           runId: 'run-1',
           status: 'running',
         }),
+        async getTerminalScreen(runId) {
+          return this.getRun(runId).output
+        },
         getInputSequence: () => 0,
         getTerminalSize: () => ({ cols: 80, rows: 24 }),
         getOutputBus: () => outputBus,

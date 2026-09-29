@@ -32,7 +32,7 @@ const setup = async () => {
 const until = (check: () => unknown | Promise<unknown>) =>
   waitFor(check, { timeout: 30000, interval: 100 })
 const button = async (name: string) => {
-  const element = await screen.findByRole('button', { name, exact: true }, { timeout: 30000 })
+  const element = await screen.findByRole('button', { name }, { timeout: 30000 })
   await until(() => expect(element).toBeEnabled())
   fireEvent.click(element)
 }

@@ -1,3 +1,5 @@
+import type { MemorySourceSnapshot } from './memory-provenance.js'
+
 export interface MemorySelection {
   memory_id: string
   revision: number
@@ -5,15 +7,7 @@ export interface MemorySelection {
   score: number
   reasons: string[]
   hits: Array<{ field: string; token: string }>
-  sources: Array<{
-    id: string
-    source_id: string | null
-    type: string
-    version: string | null
-    captured_version: string | null
-    state: 'unknown' | 'current' | 'stale'
-    stale?: boolean
-  }>
+  sources: MemorySourceSnapshot[]
   body?: string
   injected_chars: number
   memory_changed?: boolean

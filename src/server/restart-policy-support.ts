@@ -19,26 +19,15 @@ export interface RestartPolicyInput {
 export const findPreviousRun = (runs: PersistedAgentRun[], currentRunId: string) =>
   runs.find((run) => run.runId !== currentRunId)
 
-export const writeSystemMessage = ({
+export const persistSystemMessage = ({
   deleteMessage,
   insertMessage,
   record,
-  runId,
-  text,
-  writeToRun,
 }: {
   deleteMessage: RestartPolicyInput['deleteMessage']
   insertMessage: RestartPolicyInput['insertMessage']
   record: MessageLogRecord
-  runId: string
-  text: string
-  writeToRun: (runId: string, text: string) => void
 }) => {
   const handle = insertMessage(record)
-  try {
-    writeToRun(runId, text)
-  } catch (error) {
-    deleteMessage(handle)
-    throw error
-  }
+  return () => deleteMessage(handle)
 }

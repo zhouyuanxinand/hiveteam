@@ -84,6 +84,18 @@ const waitFor = async (
   throw lastError
 }
 
+const waitForOrchestratorReady = async (baseUrl: string, cookie: string, runId: string) => {
+  // ConPTY capability negotiation belongs to startup, not the 2s report deadline.
+  await waitFor(async () => {
+    const response = await fetch(`${baseUrl}/api/runtime/runs/${runId}`, {
+      headers: { cookie },
+    })
+    expect(response.status).toBe(200)
+    const run = (await response.json()) as { output: string }
+    expect(normalizeTerminalText(run.output)).toContain('FIXTURE_READY')
+  }, 10_000)
+}
+
 afterEach(() => {
   process.env = { ...originalEnv }
   for (const dir of tempDirs.splice(0)) rmSync(dir, { force: true, recursive: true })
@@ -99,7 +111,7 @@ describe('team report cli', () => {
     const orchScript = join(workspacePath, 'orch-echo.js')
     writeFileSync(
       orchScript,
-      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\n"
+      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\nprocess.stdout.write('FIXTURE_READY\\n')\n"
     )
 
     process.env.HIVE_DATA_DIR = dataDir
@@ -154,6 +166,7 @@ describe('team report cli', () => {
         body: JSON.stringify({ hive_port: String(hive.port) }),
       })
 
+      await waitForOrchestratorReady(baseUrl, uiCookie, payload.run_id)
       process.env = {
         ...originalEnv,
         HIVE_DATA_DIR: dataDir,
@@ -214,7 +227,7 @@ describe('team report cli', () => {
     const orchScript = join(workspacePath, 'orch-echo.js')
     writeFileSync(
       orchScript,
-      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\n"
+      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\nprocess.stdout.write('FIXTURE_READY\\n')\n"
     )
 
     process.env.HIVE_DATA_DIR = dataDir
@@ -283,6 +296,7 @@ describe('team report cli', () => {
       if (!orchestratorToken) {
         throw new Error('Expected orchestrator token after start')
       }
+      await waitForOrchestratorReady(baseUrl, uiCookie, run.runId)
       process.env = {
         ...originalEnv,
         HIVE_DATA_DIR: dataDir,
@@ -339,7 +353,7 @@ describe('team report cli', () => {
     const orchScript = join(workspacePath, 'orch-echo.js')
     writeFileSync(
       orchScript,
-      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\n"
+      "process.stdin.setEncoding('utf8')\nprocess.stdin.on('data', c => process.stdout.write('ORCH:' + c))\nprocess.stdout.write('FIXTURE_READY\\n')\n"
     )
 
     process.env.HIVE_DATA_DIR = dataDir
@@ -404,6 +418,7 @@ describe('team report cli', () => {
       const orchestratorToken = hive.store.peekAgentToken(orchestratorId)
       if (!orchestratorToken) throw new Error('Expected orchestrator token after start')
 
+      await waitForOrchestratorReady(baseUrl, uiCookie, orchStart.run_id)
       process.env = {
         ...originalEnv,
         HIVE_DATA_DIR: dataDir,

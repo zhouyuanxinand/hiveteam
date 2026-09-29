@@ -15,9 +15,10 @@ const PASTE_ACK_TIMEOUT_MS = 3000
 const CODEX_STARTUP_PROMPT_SETTLE_DELAY_MS = 1000
 const OPENCODE_COMPLETED_TURN_FOOTER_SETTLE_DELAY_MS = 1000
 const COMMANDS_WITH_BRACKETED_PASTE = new Set(['claude', 'codex', 'opencode'])
+// DEC save/restore (ESC 7/8) must not obscure a prompt or consume adjacent text.
 // biome-ignore lint/complexity/useRegexLiterals: build the ANSI matcher from escaped text to avoid literal control characters.
 const ANSI_CONTROL_SEQUENCE = new RegExp(
-  '\\u001b(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007]*(?:\\u0007|\\u001b\\\\))',
+  '\\u001b(?:[78]|\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007]*(?:\\u0007|\\u001b\\\\))',
   'gu'
 )
 
@@ -417,13 +418,14 @@ export const createAwaitablePostStartInputWriter = (
   }
 
   const codexBootstrapStates = new Map<string, CodexBootstrapState>()
+  const outputSource = getCommandName(command) === 'codex' ? 'screen' : 'history'
 
   return (runId, text) => {
     if (text.trim().length === 0) return Promise.resolve()
     const codexBootstrapState = codexBootstrapStates.get(runId) ?? createCodexBootstrapState()
     codexBootstrapStates.set(runId, codexBootstrapState)
     return new Promise<void>((resolve, reject) => {
-      const tryWrite = () => {
+      const tryWrite = async () => {
         try {
           checkPendingRemoteInput(runId, Buffer.byteLength(text))
         } catch (error) {
@@ -433,7 +435,19 @@ export const createAwaitablePostStartInputWriter = (
         let output: string | null
         try {
           const run = agentManager.getRun(runId)
-          output = isWritableRunStatus(run.status) ? run.output : null
+          // Cursor-addressed TUI frames need rendering: removing ANSI bytes
+          // does not restore the line breaks that position the composer.
+          const inputSequence =
+            outputSource === 'screen' ? agentManager.getInputSequence(runId) : undefined
+          output = !isWritableRunStatus(run.status)
+            ? null
+            : outputSource === 'screen'
+              ? await agentManager.getTerminalScreen(runId)
+              : run.output
+          if (outputSource === 'screen' && agentManager.getInputSequence(runId) !== inputSequence)
+            throw new Error(
+              'Other input reached Codex; automatic submission stopped to preserve the draft.'
+            )
         } catch (error) {
           reject(error)
           return
@@ -444,7 +458,14 @@ export const createAwaitablePostStartInputWriter = (
         }
         try {
           if (
-            handleCodexBootstrapPrompt(agentManager, runId, command, output, codexBootstrapState)
+            handleCodexBootstrapPrompt(
+              agentManager,
+              runId,
+              command,
+              output,
+              codexBootstrapState,
+              outputSource
+            )
           ) {
             setTimeout(tryWrite, READY_CHECK_INTERVAL_MS)
             return
@@ -459,7 +480,7 @@ export const createAwaitablePostStartInputWriter = (
         // the process look hung. The writer keeps polling until the CLI shows
         // its actual input prompt or the PTY exits.
         const promptReady = hasInteractivePromptReady(
-          getCodexPromptOutput(output, codexBootstrapState),
+          outputSource === 'screen' ? output : getCodexPromptOutput(output, codexBootstrapState),
           command
         )
         if (
@@ -519,6 +540,17 @@ export const createPostStartInputWriter = (
     return (runId, text) => {
       if (text.trim().length === 0) return
       writeIfRunWritable(agentManager, runId, `${text}\r`)
+    }
+  }
+
+  if (getCommandName(command) === 'codex') {
+    const write = createAwaitablePostStartInputWriter(agentManager, command)
+    return (runId, text) => {
+      if (text.trim().length === 0) return
+      checkPendingRemoteInput(runId, Buffer.byteLength(text))
+      void write(runId, text).catch((error: unknown) => {
+        console.error('[hive] Codex automatic input stopped', { runId, error })
+      })
     }
   }
 

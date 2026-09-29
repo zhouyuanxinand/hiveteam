@@ -1,6 +1,5 @@
-import type { Database } from 'better-sqlite3'
-
 import { CLAUDE_DEFAULT_YOLO_ARGS } from './claude-command-defaults.js'
+import type { Database } from './sqlite.js'
 
 export const applySchemaVersion9 = (db: Database) => {
   db.prepare(

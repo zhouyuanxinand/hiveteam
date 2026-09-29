@@ -305,7 +305,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'renamed',
       path: PICKED,
@@ -330,7 +330,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'codex',
       name: 'alpha',
       path: PICKED,
@@ -367,7 +367,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(within(confirm).getByTestId('confirm-workspace-create'))
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'codex',
       name: 'alpha',
       path: PICKED,
@@ -418,7 +418,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: true,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -450,7 +450,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -480,7 +480,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: null,
       name: 'alpha',
       path: PICKED,
@@ -510,7 +510,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'alpha',
       path: PICKED,
@@ -537,7 +537,7 @@ describe('AddWorkspaceDialog — native folder picker default flow', () => {
     fireEvent.click(screen.getByTestId('confirm-workspace-create'))
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'custom',
       path: '/abs/path/here',
@@ -590,7 +590,7 @@ describe('AddWorkspaceDialog — server-browse Advanced mode', () => {
 
     expect(onCreate).toHaveBeenCalledWith({
       autostartOrchestrator: false,
-      initializationMode: 'basic',
+      initializationMode: 'packs',
       commandPresetId: 'claude',
       name: 'Alpha',
       path: PICKED,

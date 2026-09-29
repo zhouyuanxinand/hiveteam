@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { WORKER_NAME_POOL } from '../../src/shared/random-worker-name.js'
 import type { ScenarioLaunchEvent } from '../../src/shared/team-scenario-launch.js'
 import { startAuthorizedTestServer as startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
@@ -196,10 +195,9 @@ describe('team scenario routes', () => {
     expect(body.created).toHaveLength(3)
     expect(body.started).toEqual([])
     expect(body.workers).toHaveLength(3)
-    expect(new Set(body.workers.map((worker) => worker.name)).size).toBe(3)
+    expect(body.workers.map((worker) => worker.name)).toEqual(['Builder', 'Reviewer', 'Tester'])
     for (const worker of body.workers) {
       expect(worker.command_preset_id).toBe(preset.id)
-      expect(WORKER_NAME_POOL).toContain(worker.name)
     }
   })
 
@@ -231,4 +229,47 @@ describe('team scenario routes', () => {
     })
     expect(server.store.listWorkers(workspace.id)).toEqual([])
   })
+})
+
+test('scenario role names avoid occupied names and preserve existing members when the team is reused', async () => {
+  const server = await startTestServer()
+  servers.push(server)
+  const cookie = await getUiCookie(server.baseUrl)
+  const workspace = server.store.createWorkspace(server.dataDir, 'Existing team')
+  const preset = createPreset(server, process.execPath)
+  const existing = server.store.addWorkers(workspace.id, [
+    { name: 'Builder', role: 'custom', description: 'Manual member' },
+    { name: 'Builder 2', role: 'coder', description: 'Independent coder' },
+    { name: 'Reviewer', role: 'custom', description: 'Another manual member' },
+    {
+      name: 'Legacy tester',
+      role: 'tester',
+      description: 'Runs focused validation and reports reproducible failures.',
+    },
+  ])
+  const launch = () =>
+    fetch(`${server.baseUrl}/api/ui/workspaces/${workspace.id}/team-scenarios/ship-feature`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ autostart: false, command_preset_id: preset.id }),
+    })
+  const response = await launch()
+  expect(response.status).toBe(201)
+  const created = await response.json()
+  expect(created.created).toHaveLength(2)
+  expect(created.reused).toEqual([existing[3]?.id])
+  expect(created.workers.map((worker: { name: string }) => worker.name)).toEqual([
+    'Builder',
+    'Builder 2',
+    'Reviewer',
+    'Legacy tester',
+    'Builder 3',
+    'Reviewer 2',
+  ])
+  const repeated = await launch()
+  expect(repeated.status).toBe(201)
+  const reused = await repeated.json()
+  expect(reused.created).toEqual([])
+  expect(reused.reused).toHaveLength(3)
+  expect(reused.workers).toEqual(created.workers)
 })
