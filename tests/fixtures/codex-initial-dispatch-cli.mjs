@@ -5,9 +5,18 @@ import { join } from 'node:path'
 export const runInitialDispatchCli = (root) => {
   const args = process.argv.slice(2)
   if (args.includes('--help')) {
-    console.log(
-      'Codex CLI\nUsage: codex [OPTIONS] [PROMPT]\n  --no-daemon  Run without a shared daemon'
-    )
+    const printHelp = () =>
+      console.log(
+        'Codex CLI\nUsage: codex [OPTIONS] [PROMPT]\n  --no-daemon  Run without a shared daemon'
+      )
+    if (existsSync(join(root, 'help-gate'))) {
+      writeFileSync(join(root, 'help-pending'), '')
+      const timer = setInterval(() => {
+        if (!existsSync(join(root, 'help-release'))) return
+        clearInterval(timer)
+        printHelp()
+      }, 10)
+    } else printHelp()
     return
   }
   if (args.includes('--version')) {

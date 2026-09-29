@@ -1,9 +1,11 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
+import { stampLoopbackHeaders } from '../../src/server/remote-loopback-auth.js'
 import Database from '../../src/server/sqlite.js'
+import type { RemoteAction, RemoteGrant } from '../../src/shared/remote-permissions.js'
 import { startTestServer } from '../helpers/test-server.js'
 import { getUiCookie } from '../helpers/ui-session.js'
 
@@ -151,6 +153,216 @@ const setup = async () => {
   }
   return { root, server, workspace, worker, cookie, policyPath, launches, send, restart }
 }
+
+const remote = async (f: Awaited<ReturnType<typeof setup>>) => {
+  const device = f.server.store.remote.devices.insert({
+    id: randomUUID(),
+    name: 'Initial dispatch phone',
+    keys: { d2p: new Uint8Array(32).fill(1), p2d: new Uint8Array(32).fill(2) },
+    devicePublicKey: new Uint8Array(32).fill(3),
+  })
+  const desktopHeaders = { cookie: f.cookie, 'content-type': 'application/json' }
+  const headers = stampLoopbackHeaders(
+    { 'content-type': 'application/json' },
+    f.server.store.getRemoteTunnelSecret(),
+    device.id
+  )
+  const scope = await fetch(`${f.server.baseUrl}/api/remote/devices/${device.id}/scopes`, {
+    method: 'PUT',
+    headers: desktopHeaders,
+    body: JSON.stringify({ workspace_ids: [f.workspace.id] }),
+  })
+  expect(scope.status).toBe(200)
+  return {
+    device,
+    headers,
+    async approve(actions: RemoteAction[]) {
+      const request = await fetch(`${f.server.baseUrl}/api/remote/access-requests`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ workspace_id: f.workspace.id, actions, duration_ms: 600000 }),
+      })
+      expect(request.status).toBe(201)
+      const requested = await request.json()
+      const approved = await fetch(
+        `${f.server.baseUrl}/api/remote/access-requests/${requested.id}/approve`,
+        {
+          method: 'POST',
+          headers: desktopHeaders,
+          body: '{}',
+        }
+      )
+      expect(approved.status).toBe(200)
+      return approved.json() as Promise<RemoteGrant>
+    },
+    start: () =>
+      fetch(`${f.server.baseUrl}/api/workspaces/${f.workspace.id}/agents/${f.worker.id}/start`, {
+        method: 'POST',
+        headers,
+      }),
+  }
+}
+
+const queueLocal = async (f: Awaited<ReturnType<typeof setup>>) => {
+  f.server.store.cancelPendingAgentStart(f.workspace.id, f.worker.id)
+  const queued = await f.send()
+  expect(queued.status, await queued.clone().text()).toBe(202)
+  expect(f.launches()).toEqual([])
+  return (await queued.json()).dispatch_id as string
+}
+
+test.skipIf(process.platform !== 'win32')(
+  'an authorized remote start delivers a locally queued first dispatch through native argv',
+  async () => {
+    const f = await setup()
+    const dispatchId = await queueLocal(f)
+    const phone = await remote(f)
+    const grant = await phone.approve(['agent_start'])
+    const response = await phone.start()
+    expect(response.status, await response.clone().text()).toBe(201)
+    const { run_id: runId } = await response.json()
+    await expect.poll(() => f.launches().length, { timeout: 10000 }).toBe(1)
+    expect(f.launches()[0]?.prompt).toContain(taskBody)
+    await expect
+      .poll(() => f.server.store.dispatchDelivery.records.get(dispatchId)?.state, {
+        timeout: 10000,
+      })
+      .toBe('confirmed')
+    expect(f.server.store.getDispatch(f.workspace.id, dispatchId)?.status).toBe('submitted')
+    expect(
+      f.server.store.remote.audit.list(100).filter((entry) => entry.action === 'http_input')
+    ).toEqual(
+      expect.arrayContaining(
+        ['authorized', 'ok'].map((result) =>
+          expect.objectContaining({
+            device_id: phone.device.id,
+            workspace_id: f.workspace.id,
+            grant_id: grant.id,
+            resource_id: runId,
+            byte_count: Buffer.byteLength(f.launches()[0]?.prompt ?? ''),
+            result,
+          })
+        )
+      )
+    )
+  },
+  40000
+)
+
+test.skipIf(process.platform !== 'win32')(
+  'remote first-dispatch start without approval leaves the task pending and never spawns',
+  async () => {
+    const f = await setup()
+    const dispatchId = await queueLocal(f)
+    const phone = await remote(f)
+    const response = await phone.start()
+    expect(response.status).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'remote_action_forbidden' })
+    expect(f.launches()).toEqual([])
+    expect(f.server.store.listAgentRuns(f.worker.id)).toEqual([])
+    expect(f.server.store.dispatchDelivery.records.get(dispatchId)).toMatchObject({
+      state: 'pending',
+      attempt: 0,
+      write_started: 0,
+      checkpoint: null,
+    })
+  },
+  40000
+)
+
+test.skipIf(process.platform !== 'win32')(
+  'revocation during first-dispatch preparation blocks argv even when a later start grant exists',
+  async () => {
+    const f = await setup()
+    const dispatchId = await queueLocal(f)
+    const phone = await remote(f)
+    const grant = await phone.approve(['agent_start'])
+    writeFileSync(join(f.root, 'help-gate'), '')
+    const pending = phone.start()
+    await expect.poll(() => existsSync(join(f.root, 'help-pending')), { timeout: 10000 }).toBe(true)
+    f.server.store.remote.permissions.revokeGrant(grant.id)
+    await phone.approve(['agent_start'])
+    writeFileSync(join(f.root, 'help-release'), '')
+    const response = await pending
+    expect(response.status, await response.clone().text()).toBe(403)
+    expect(await response.json()).toMatchObject({ code: 'remote_grant_expired' })
+    expect(f.launches()).toEqual([])
+    expect(f.server.store.listAgentRuns(f.worker.id)).toEqual([])
+    expect(f.server.store.dispatchDelivery.records.get(dispatchId)).toMatchObject({
+      state: 'pending',
+      attempt: 0,
+      write_started: 0,
+      checkpoint: null,
+    })
+  },
+  40000
+)
+
+test.skipIf(process.platform !== 'win32').each([false, true])(
+  'first-dispatch argv preserves its original remote workflow grant (revoked: %s)',
+  async (revoked) => {
+    const f = await setup()
+    f.server.store.cancelPendingAgentStart(f.workspace.id, f.worker.id)
+    const phone = await remote(f)
+    const original = await phone.approve(['workflow_manage', 'agent_start'])
+    const directory = join(f.workspace.path, '.hive', 'workflows')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(
+      join(directory, 'remote-first.json'),
+      JSON.stringify({
+        name: 'Remote first dispatch',
+        steps: [{ id: 'first', worker: f.worker.name, task: taskBody }],
+      })
+    )
+    const queued = await fetch(
+      `${f.server.baseUrl}/api/ui/workspaces/${f.workspace.id}/workflows/runs`,
+      {
+        method: 'POST',
+        headers: phone.headers,
+        body: JSON.stringify({ workflow_id: 'remote-first.json' }),
+      }
+    )
+    expect(queued.status, await queued.clone().text()).toBe(201)
+    const workflow = await queued.json()
+    const dispatchId = workflow.steps[0].dispatch_id as string
+    expect(f.launches()).toEqual([])
+    if (revoked) f.server.store.remote.permissions.revokeGrant(original.id)
+    await phone.approve(['agent_start'])
+    const response = await phone.start()
+    if (revoked) {
+      expect(response.status, await response.clone().text()).toBe(403)
+      expect(await response.json()).toMatchObject({ code: 'remote_grant_expired' })
+      expect(f.launches()).toEqual([])
+      expect(f.server.store.dispatchDelivery.records.get(dispatchId)).toMatchObject({
+        state: 'pending',
+        attempt: 0,
+        write_started: 0,
+        checkpoint: null,
+      })
+    } else {
+      expect(response.status, await response.clone().text()).toBe(201)
+      const { run_id: runId } = await response.json()
+      await expect
+        .poll(() => f.server.store.dispatchDelivery.records.get(dispatchId)?.state, {
+          timeout: 10000,
+        })
+        .toBe('confirmed')
+      expect(f.launches()[0]?.prompt).toContain(taskBody)
+      expect(f.server.store.remote.audit.list(100)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'http_input',
+            endpoint: 'queued_dispatch',
+            grant_id: original.id,
+            resource_id: runId,
+            result: 'ok',
+          }),
+        ])
+      )
+    }
+  },
+  40000
+)
 
 test.skipIf(process.platform !== 'win32')(
   'the first worker dispatch enters native argv intact, confirms one full receipt and resumes without another write',

@@ -73,7 +73,7 @@ export const createResourceQueueAuthorization = (
       return withRemoteActionCheck(
         () => validate(guard),
         deliver,
-        (runId, byteCount, write) => {
+        (runId, byteCount, write, initialTarget) => {
           const event = {
             deviceId: guard.deviceId,
             workspaceId: guard.workspaceId,
@@ -86,6 +86,11 @@ export const createResourceQueueAuthorization = (
           }
           try {
             validate(guard)
+            if (initialTarget && initialTarget.workspaceId !== guard.workspaceId)
+              throw new RemotePermissionError(
+                'remote_workspace_forbidden',
+                'The initial input target belongs to another workspace'
+              )
           } catch (error) {
             audit.append({
               ...event,

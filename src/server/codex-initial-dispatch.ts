@@ -4,7 +4,7 @@ import type { createDispatchLedgerStore } from './dispatch-ledger-store.js'
 import type { DispatchSkillActivationStore } from './dispatch-skill-activation-store.js'
 import { ConflictError } from './http-errors.js'
 import type { DeliveryRecord, MessageDeliveryStore } from './message-delivery-store.js'
-import { executeRemoteInput } from './remote-action-context.js'
+import { executeRemoteInitialInput } from './remote-action-context.js'
 import { reportReceiptMarker } from './report-delivery-receipt.js'
 import type { Database } from './sqlite.js'
 import type { TeamMemoryDigestProvider } from './team-memory-digest.js'
@@ -106,34 +106,40 @@ export const createCodexInitialDispatch =
           requireOpen()
           let started: ReturnType<typeof start> | undefined
           // Keep original remote input authorization/audit around the argv handoff.
-          executeRemoteInput(runId, Buffer.byteLength(text), () => {
-            const claimed = input.db
-              .transaction(() => {
-                requireOpen()
-                const claimed = input.records.claim(record.id, runId, true)
-                if (!claimed) throw new ConflictError('Initial dispatch was stopped or superseded')
-                input.records.prepared(record.id, claimed.attempt, text)
-                input.records.saveCheckpoint(record.id, claimed.attempt, {
-                  cwd,
-                  capturePattern,
-                  runId,
-                  inputSequence: 0,
-                  lastSubmitAt: 0,
-                  offset: 0,
-                  pasteConfirmed: false,
-                  sessionFile: null,
-                  sessionId: null,
-                  wireFormat: 'native-initial-v1',
-                  wireSha256: codexMessageHash(text),
-                  submitAttempts: 0,
+          executeRemoteInitialInput(
+            runId,
+            { workspaceId, agentId },
+            Buffer.byteLength(text),
+            () => {
+              const claimed = input.db
+                .transaction(() => {
+                  requireOpen()
+                  const claimed = input.records.claim(record.id, runId, true)
+                  if (!claimed)
+                    throw new ConflictError('Initial dispatch was stopped or superseded')
+                  input.records.prepared(record.id, claimed.attempt, text)
+                  input.records.saveCheckpoint(record.id, claimed.attempt, {
+                    cwd,
+                    capturePattern,
+                    runId,
+                    inputSequence: 0,
+                    lastSubmitAt: 0,
+                    offset: 0,
+                    pasteConfirmed: false,
+                    sessionFile: null,
+                    sessionId: null,
+                    wireFormat: 'native-initial-v1',
+                    wireSha256: codexMessageHash(text),
+                    submitAttempts: 0,
+                  })
+                  input.records.beforeWrite(record.id, claimed.attempt)
+                  return claimed
                 })
-                input.records.beforeWrite(record.id, claimed.attempt)
-                return claimed
-              })
-              .immediate()
-            attempt = claimed.attempt
-            started = start()
-          })
+                .immediate()
+              attempt = claimed.attempt
+              started = start()
+            }
+          )
           if (!started) throw new ConflictError('Initial dispatch launch was not authorized')
           return started
         }),

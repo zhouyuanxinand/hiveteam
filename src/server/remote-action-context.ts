@@ -1,6 +1,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 
-type InputExecution = (runId: string, byteCount: number, write: (() => void) | null) => void
+/** Runtime-owned identity for argv input, before the child has a live run. */
+export interface InitialInputTarget {
+  workspaceId: string
+  agentId: string
+}
+export type InputExecution = (
+  runId: string,
+  byteCount: number,
+  write: (() => void) | null,
+  initialTarget?: InitialInputTarget
+) => void
 export interface RemoteQueueGrant {
   deviceId: string
   workspaceId: string
@@ -37,9 +47,9 @@ export const withAdditionalActionCheck = <T>(check: () => void, action: () => T)
     },
     action,
     parent?.input
-      ? (runId, bytes, write) => {
+      ? (runId, bytes, write, initialTarget) => {
           check()
-          parent.input?.(runId, bytes, write)
+          parent.input?.(runId, bytes, write, initialTarget)
         }
       : undefined,
     parent?.grant
@@ -59,6 +69,21 @@ export const executeRemoteInput = (runId: string, byteCount: number, write: () =
   else {
     context?.check()
     write()
+  }
+}
+
+/** Initial argv input is checked against its actual agent, never a synthetic live run. */
+export const executeRemoteInitialInput = (
+  runId: string,
+  target: InitialInputTarget,
+  byteCount: number,
+  launch: () => void
+) => {
+  const context = authorization.getStore()
+  if (context?.input) context.input(runId, byteCount, launch, target)
+  else {
+    context?.check()
+    launch()
   }
 }
 
