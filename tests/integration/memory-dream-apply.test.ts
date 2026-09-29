@@ -70,6 +70,35 @@ const operation = (
   }
 }
 
+test.each([
+  { method: 'PATCH', suffix: '' },
+  { method: 'POST', suffix: '/submit' },
+  { method: 'POST', suffix: '/reviews' },
+])('Dream $method $suffix rejects null without changing memory or starting work', async ({
+  method,
+  suffix,
+}) => {
+  const f = await fixture()
+  f.create('Keep this source unchanged')
+  const run = f.dreams.create(f.workspace.id)
+  const before = {
+    memory: f.snapshot(),
+    runs: f.db.prepare('SELECT * FROM agent_runs ORDER BY run_id').all(),
+    dispatches: f.db.prepare('SELECT * FROM dispatches ORDER BY id').all(),
+  }
+  const response = await fetch(`${f.server.baseUrl}${f.path}/${run.id}${suffix}`, {
+    method,
+    headers: { cookie: f.cookie, 'content-type': 'application/json' },
+    body: 'null',
+  })
+  expect(response.status).toBe(400)
+  expect(await response.json()).toEqual({ error: 'Dream request must be an object' })
+  expect(f.snapshot()).toEqual(before.memory)
+  expect(f.dreams.get(f.workspace.id, run.id)).toEqual(run)
+  expect(f.db.prepare('SELECT * FROM agent_runs ORDER BY run_id').all()).toEqual(before.runs)
+  expect(f.db.prepare('SELECT * FROM dispatches ORDER BY id').all()).toEqual(before.dispatches)
+})
+
 test('removing a proposal leaves its source intact and applies the current edited operations atomically', async () => {
   const f = await fixture()
   const keep = f.create('Keep untouched', 'decision')

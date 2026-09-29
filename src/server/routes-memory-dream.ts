@@ -163,9 +163,7 @@ export const memoryDreamRoutes: RouteDefinition[] = [
     const workspaceId = workspaceIdFrom(context)
     const runId = dreamIdFrom(context)
     if (!workspaceId || !runId) return
-    const body = await readJsonBody<{ expected_revision?: unknown; operations?: unknown }>(
-      context.request
-    )
+    const body = await readDreamRequestBody(context.request)
     const updated = context.store.memoryDream.updateOperations(
       workspaceId,
       runId,
@@ -202,7 +200,7 @@ export const memoryDreamRoutes: RouteDefinition[] = [
     const workspaceId = workspaceIdFrom(context)
     const runId = dreamIdFrom(context)
     if (!workspaceId || !runId) return
-    const body = await readJsonBody<{ worker_id?: unknown }>(context.request)
+    const body = await readDreamRequestBody(context.request)
     if (typeof body.worker_id !== 'string' || !body.worker_id.trim()) {
       throw new BadRequestError('worker_id is required')
     }
@@ -219,11 +217,7 @@ export const memoryDreamRoutes: RouteDefinition[] = [
     const workspaceId = workspaceIdFrom(context)
     const runId = dreamIdFrom(context)
     if (!workspaceId || !runId) return
-    const body = await readJsonBody<{
-      orchestrator_id?: unknown
-      expected_revision?: unknown
-      operations?: unknown
-    }>(context.request)
+    const body = await readDreamRequestBody(context.request)
     if (typeof body.orchestrator_id !== 'string' || !body.orchestrator_id.trim()) {
       throw new BadRequestError('orchestrator_id is required')
     }
