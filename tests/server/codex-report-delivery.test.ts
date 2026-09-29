@@ -200,6 +200,7 @@ test('an unbound checkpoint recovers its receipt after reopen without accepting 
 test.each([
   'collapsed',
   'mixed',
+  'mixed-multiline',
 ])('a slow %s Codex paste and an ignored Enter cannot falsely acknowledge a worker report', async (display) => {
   const { db, journal, manager, runId, store, worker, workspace } = await setup(1, display)
   await store.dispatchTask(workspace.id, worker.id, 'Review the document')

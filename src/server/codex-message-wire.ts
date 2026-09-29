@@ -27,29 +27,45 @@ export const codexReceiptHash = (checkpoint: ReportDeliveryCheckpoint): string |
 /** Codex can mix inline text and multiple opaque paste chips. Match each
  * visible character and skip only the exact Unicode length of each chip.
  * A clipped composer, changed character or missing space is not complete. */
-export const completeCodexEncodedPasteVisible = (content: string, wire: string) => {
-  if (/[\r\n]/u.test(wire)) return false
+const completeVisiblePaste = (content: string, text: string, rawText: boolean) => {
   const lines = content.split('\n')
   const first = lines[0]?.match(/^[ \t]*› (.*)$/u)
   if (!first) return false
   let display = first[1] ?? ''
+  const rowBreaks = new Set<number>()
   for (let row = 1; row < lines.length; row++) {
     const continuation = lines[row]
     if (!continuation?.trim()) break
     // These two columns belong to the composer renderer, not its text.
     if (!continuation.startsWith('  ')) return false
+    rowBreaks.add(display.length)
     display += continuation.slice(2)
   }
-  const expected = Array.from(wire)
+  const expected = Array.from(text)
   let offset = 0
+  let opaquePasteEnd = -1
+  const consumeRowBreak = (index: number) => {
+    if (rawText && index !== opaquePasteEnd && rowBreaks.has(index) && expected[offset] === '\n')
+      offset += 1
+  }
+  const consumeInline = (start: number, end: number) => {
+    let index = start
+    for (const character of display.slice(start, end)) {
+      consumeRowBreak(index)
+      if (character !== expected[offset]) return false
+      offset += 1
+      index += character.length
+    }
+    return true
+  }
   const consume = () => {
     let cursor = 0
     // A paste chip's own label can wrap across rows. Codex drops the label's
     // separator space at that wrap; tolerate this only inside known UI syntax.
     for (const match of display.matchAll(/\[Pasted[ \t]*Content[ \t]*([\d,]+)[ \t]*chars\]/gu)) {
-      const inline = Array.from(display.slice(cursor, match.index))
-      if (inline.some((character, index) => character !== expected[offset + index])) return false
-      offset += inline.length
+      if (!consumeInline(cursor, match.index)) return false
+      // A wrap beside an opaque chip cannot prove a body newline. Let the
+      // chip's exact count include it, or leave this ambiguous draft waiting.
       const literal = Array.from(match[0])
       if (literal.every((character, index) => character === expected[offset + index])) {
         offset += literal.length
@@ -61,11 +77,21 @@ export const completeCodexEncodedPasteVisible = (content: string, wire: string) 
         return false
       offset += count
       cursor = match.index + match[0].length
+      opaquePasteEnd = cursor
     }
-    const tail = Array.from(display.slice(cursor))
-    if (tail.some((character, index) => character !== expected[offset + index])) return false
-    offset += tail.length
-    return true
+    return consumeInline(cursor, display.length)
   }
-  return consume() && offset === expected.length
+  return (
+    consume() &&
+    (offset === expected.length ||
+      (rawText && expected.slice(offset).every((character) => character === '\n')))
+  )
 }
+
+export const completeCodexEncodedPasteVisible = (content: string, wire: string) =>
+  !/[\r\n]/u.test(wire) && completeVisiblePaste(content, wire, false)
+
+// Raw newlines must be inside counted chips or correspond to a visible row
+// boundary. Only final line breaks may have no visible composer glyph.
+export const completeCodexTextPasteVisible = (content: string, text: string) =>
+  completeVisiblePaste(content, text, true)

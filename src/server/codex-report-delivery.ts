@@ -4,6 +4,7 @@ import {
   codexMessageHash,
   codexReceiptHash,
   completeCodexEncodedPasteVisible,
+  completeCodexTextPasteVisible,
   encodeCodexMessage,
 } from './codex-message-wire.js'
 import { completeCodexPasteVisible } from './codex-prompt-submission.js'
@@ -181,7 +182,8 @@ export const deliverCodexReport = async ({
             ? completeCodexEncodedPasteVisible(input.content, wire)
             : checkpoint.capturePattern
               ? completeCodexPasteVisible(input.content, payload)
-              : pastedComposer(input, marker)
+              : pastedComposer(input, marker) ||
+                completeCodexTextPasteVisible(input.content, payload)
         ) {
           if (!checkpoint.pasteConfirmed) save({ ...checkpoint, pasteConfirmed: true })
           if (

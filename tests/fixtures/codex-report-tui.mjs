@@ -30,11 +30,13 @@ let ignored = Number(ignoredEnters)
 let pastes = 0
 let isReport = false
 const prompt = (text = 'Ask Codex to do anything') => process.stdout.write(`\r\n› ${text}\r\n`)
-const mixedPaste = (text) => {
+const mixedPaste = (text, multiline) => {
   const points = Array.from(text)
-  const head = points.slice(0, 24).join('')
+  const newline = points.indexOf('\n')
+  const headLength = multiline && newline >= 0 ? newline + 8 : 24
+  const head = points.slice(0, headLength).join('').replaceAll('\n', '\r\n  ')
   const tail = points.slice(-24).join('')
-  return `${head}[Pasted Content ${points.length - 48} chars]\r\n  ${tail}`
+  return `${head}[Pasted Content ${points.length - headLength - 24} chars]\r\n  ${tail}`
 }
 prompt()
 process.stdin.on('data', (chunk) => {
@@ -54,8 +56,8 @@ process.stdin.on('data', (chunk) => {
         ready = true
         const receipt = pending.match(/\[Hive report receipt: [\da-f-]+\]/)?.[0]
         prompt(
-          display === 'mixed' && receipt
-            ? mixedPaste(pending)
+          (display === 'mixed' || display === 'mixed-multiline') && receipt
+            ? mixedPaste(pending, display === 'mixed-multiline')
             : display === 'expanded' && receipt
               ? `${pending.slice(0, 50)}\r\n  ${receipt}\r\n`
               : `[Pasted Content ${Array.from(pending).length} chars]`

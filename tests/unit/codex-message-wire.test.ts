@@ -3,6 +3,7 @@ import {
   codexMessageHash,
   codexReceiptHash,
   completeCodexEncodedPasteVisible,
+  completeCodexTextPasteVisible,
   encodeCodexMessage,
 } from '../../src/server/codex-message-wire.js'
 import type { ReportDeliveryCheckpoint } from '../../src/server/report-delivery-receipt.js'
@@ -61,6 +62,62 @@ test('does not remove body whitespace or treat a literal chip label as an opaque
   expect(completeCodexEncodedPasteVisible(`› ${text}`, text)).toBe(true)
   expect(completeCodexEncodedPasteVisible(`› ${text.trim()}`, text)).toBe(false)
   expect(completeCodexEncodedPasteVisible('› first\n  second', 'first\nsecond')).toBe(false)
+})
+
+test('matches raw multiline messages hidden in mixed paste chips without requiring a visible receipt marker', () => {
+  const text = `[Hive report] ${'中文 🐝\n  report body\n'.repeat(10)}[Hive report receipt: fixture-id]\n`
+  const points = Array.from(text)
+  const head = points.slice(0, 14).join('')
+  const tail = points.slice(-12).join('').replace(/\n$/u, '')
+  const count = points.length - 14 - 12
+  const content = `› ${head}[Pasted Content ${count} chars]\n  ${tail}\n\n  footer`
+  expect(completeCodexTextPasteVisible(content, text)).toBe(true)
+  expect(completeCodexEncodedPasteVisible(content, text)).toBe(false)
+  for (const changed of [
+    content.replace('[Hive report]', '[Hive wrong]'),
+    content.replace('fixture-id]', 'fixture-XX]'),
+    content.replace(`${count} chars`, `${count - 1} chars`),
+    content.replace(`${count} chars`, `${count + 1} chars`),
+    content.replace(tail, tail.slice(0, -1)),
+    content.replace(tail, `${tail} user edit`),
+  ])
+    expect(completeCodexTextPasteVisible(changed, text)).toBe(false)
+  expect(completeCodexTextPasteVisible(content, `${text}missing text`)).toBe(false)
+})
+
+test('matches visible raw newlines only at actual composer row boundaries', () => {
+  const text = 'visible 中文\n  second line\nopaque body\nreceipt tail\n'
+  const content =
+    '› visible 中文\n    second line\n  [Pasted Content 13 chars]receipt tail\n\n  footer'
+  expect(completeCodexTextPasteVisible(content, text)).toBe(true)
+  expect(completeCodexTextPasteVisible(content.replace('13 chars', '12 chars'), text)).toBe(false)
+  expect(completeCodexTextPasteVisible(content.replace('中文\n    ', '中文  '), text)).toBe(false)
+  expect(completeCodexTextPasteVisible(content.replace('    second', '   second'), text)).toBe(
+    false
+  )
+  expect(
+    completeCodexTextPasteVisible(content.replace('receipt tail', 'receipt\n  tail'), text)
+  ).toBe(false)
+  expect(
+    completeCodexTextPasteVisible(content.replace('receipt tail', 'receipt \n  tail'), text)
+  ).toBe(true)
+})
+
+test('does not infer a raw newline from a visual wrap next to an opaque paste chip', () => {
+  const beforeChip = 'head\n1234tail\n'
+  expect(completeCodexTextPasteVisible('› head\n  [Pasted Content 5 chars]tail', beforeChip)).toBe(
+    true
+  )
+  expect(completeCodexTextPasteVisible('› head\n  [Pasted Content 4 chars]tail', beforeChip)).toBe(
+    false
+  )
+  const afterChip = 'head1234\ntail\n'
+  expect(completeCodexTextPasteVisible('› head[Pasted Content 5 chars]\n  tail', afterChip)).toBe(
+    true
+  )
+  expect(completeCodexTextPasteVisible('› head[Pasted Content 4 chars]\n  tail', afterChip)).toBe(
+    false
+  )
 })
 
 const checkpoint: ReportDeliveryCheckpoint = {
