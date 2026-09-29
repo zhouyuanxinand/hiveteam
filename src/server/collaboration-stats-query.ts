@@ -46,6 +46,13 @@ const rollup = `WITH families AS (
   SELECT d.root_id,v.accepted_at,i.integrated_at
     FROM dispatch_integrations i JOIN dispatch_verifications v ON v.id=i.verification_id
     JOIN cohort d ON d.id=v.dispatch_id AND d.workspace_id=v.workspace_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM integration_candidates c
+      WHERE c.workspace_id=v.workspace_id AND c.dispatch_id=v.dispatch_id
+        AND json_extract(c.snapshot,'$.state')='integrated'
+        AND json_extract(c.snapshot,'$.source_verification_id')=i.verification_id
+        AND json_extract(c.snapshot,'$.target_sha')=i.target_sha
+    )
   UNION ALL
   SELECT d.root_id,json_extract(c.snapshot,'$.accepted_at'),json_extract(c.snapshot,'$.integrated_at')
     FROM integration_candidates c JOIN cohort d ON d.id=c.dispatch_id AND d.workspace_id=c.workspace_id
