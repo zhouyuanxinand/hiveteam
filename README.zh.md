@@ -128,7 +128,7 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 4. 在 Team Members 面板里添加 Worker。
 5. 跟 Orchestrator 说一声让它派活，它会用 `team send <worker-name> "<task>"` 发任务，Worker 完事后用 `team report` 回报。
 
-在 Team Members 面板中管理成员及其 CLI 启动配置。Orchestrator 用 `team list` 查看团队，再用 `team send` 给已有成员派单。可通过 `team guide dispatch` 查看当前派单协议；CLI 不提供 `team spawn` 或 `team dismiss` 命令。
+在 Team Members 面板中管理成员及其 CLI 启动配置。Orchestrator 用 `team list` 查看团队，再用 `team send` 给已有成员派单。可通过 `team guide dispatch` 查看当前派单协议。动态配员默认关闭；使用 `team spawn` 前，需在成员面板授权允许的 CLI 预设和临时成员数量。成员任务完成或取消后，可用 `team dismiss` 将临时成员退役。
 
 需要多步骤协作时，将 JSON 定义保存到 `.hive/workflows`，再从顶栏的 **Workflows** 面板启动并查看步骤结果。每步指定一个已有 Worker，也可以声明对其他步骤的依赖；面板提供停止和步骤重跑入口。当前只执行 JSON 定义，TypeScript 等其他已收录文件仅展示元数据，不提供定时任务或由 Workflow 创建成员的功能。
 

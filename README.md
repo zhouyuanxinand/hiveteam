@@ -180,7 +180,9 @@ First-run flow:
 Manage members and their CLI launch settings from the Team Members panel.
 The Orchestrator uses `team list` to inspect the team and `team send` to
 dispatch to an existing member. Use `team guide dispatch` for the current
-dispatch protocol; `team spawn` and `team dismiss` are not CLI commands.
+dispatch protocol. Dynamic staffing is disabled by default; authorize CLI presets
+and a temporary-member limit in the member panel before using `team spawn`.
+Use `team dismiss` to retire a temporary member after its tasks finish or are cancelled.
 
 For multi-step work, save a JSON definition under `.hive/workflows`, then open
 **Workflows** in the topbar to run it and inspect step results. Each step names
