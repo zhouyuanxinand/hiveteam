@@ -134,7 +134,7 @@ test('the CLI refuses writes while another runtime owns the data directory', asy
   const before = f.snapshot()
   await expect(f.invoke(native.id)).rejects.toMatchObject({
     code: 1,
-    stderr: expect.stringContaining('Another Hive runtime owns'),
+    stderr: expect.stringContaining('Another HiveTeam runtime owns'),
   })
   expect(f.snapshot()).toEqual(before)
   expect(f.store.getWorkspaceSnapshot(f.workspace.id).summary.name).toBe('Existing workspace')

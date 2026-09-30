@@ -32,13 +32,13 @@ store the backup accordingly.
 
 Original CLI sessions are pointers by default. Optional native-session content
 requires a certified version profile; no real Cursor/Grok profile is currently
-certified. A Hive backup does not guarantee that an external CLI session exists
+certified. A HiveTeam backup does not guarantee that an external CLI session exists
 on another machine.
 
 Restoration writes a new data directory and leaves the original intact. Agents
 stay stopped, active work requires review, and old process IDs are discarded.
 Reconfigure launch commands and authentication, re-pair remote devices, and verify
-the workspace/native-session bindings before starting agents. The running Hive
+the workspace/native-session bindings before starting agents. The running HiveTeam
 instance does not switch data directories automatically. Stop it and launch with
 `HIVE_DATA_DIR` pointing to the restored directory. To return to the original
 data, stop the new instance and launch with the original directory.

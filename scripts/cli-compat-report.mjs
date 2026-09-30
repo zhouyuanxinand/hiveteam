@@ -100,7 +100,9 @@ if (jsonOutput) {
     )
   )
 } else {
-  console.log(`Hive CLI compatibility report (Node ${report.node.version}, ABI ${report.node.abi})`)
+  console.log(
+    `HiveTeam CLI compatibility report (Node ${report.node.version}, ABI ${report.node.abi})`
+  )
   console.log('')
   console.log('Runtime modules:')
   for (const item of report.nativeModules) {

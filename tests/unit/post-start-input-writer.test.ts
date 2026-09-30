@@ -49,7 +49,7 @@ describe('post-start input writer', () => {
     }
 
     const write = createPostStartInputWriter(manager as never, 'C:\\tools\\opencode.CMD')
-    write('run-opencode', 'Hive startup instructions')
+    write('run-opencode', 'HiveTeam startup instructions')
 
     vi.advanceTimersByTime(999)
     expect(manager.writeInput).not.toHaveBeenCalled()
@@ -58,7 +58,7 @@ describe('post-start input writer', () => {
     expect(manager.writeInput).toHaveBeenNthCalledWith(
       1,
       'run-opencode',
-      '\u001b[200~Hive startup instructions\u001b[201~'
+      '\u001b[200~HiveTeam startup instructions\u001b[201~'
     )
   })
 
@@ -164,7 +164,7 @@ describe('post-start input writer', () => {
     }
 
     const write = createPostStartInputWriter(manager as never, 'gemini')
-    write('run-1', '[Hive 系统消息：启动说明]\n请基于此继续。')
+    write('run-1', '[HiveTeam 系统消息：启动说明]\n请基于此继续。')
 
     vi.advanceTimersByTime(5000)
     expect(manager.writeInput).not.toHaveBeenCalled()
@@ -176,7 +176,7 @@ describe('post-start input writer', () => {
     expect(manager.writeInput).toHaveBeenNthCalledWith(
       1,
       'run-1',
-      '[Hive 系统消息：启动说明]\n请基于此继续。'
+      '[HiveTeam 系统消息：启动说明]\n请基于此继续。'
     )
     expect(manager.writeInput.mock.calls[0]?.[1]).not.toContain('\u001b[200~')
     expect(manager.writeInput.mock.calls[0]?.[1]).not.toContain('\u001b[201~')

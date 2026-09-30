@@ -8,7 +8,7 @@ const escapeHtml = (value: string) =>
 
 export const shell = (title: string, body: string) => `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)} · Hive Gateway</title>
+<title>${escapeHtml(title)} · HiveTeam Gateway</title>
 <style>
 :root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#171717;color:#f5f5f5}
 body{max-width:560px;margin:0 auto;padding:40px 20px;background:#171717;min-height:100vh;box-sizing:border-box}
@@ -22,18 +22,18 @@ button{margin-top:18px;border:0;border-radius:8px;background:#4d70df;color:#fff;
 
 export const gatewayHomePage = () =>
   shell(
-    'Hive Gateway',
-    `<h1>Hive Gateway</h1><p>自建单用户网关已启动。它只负责认证和加密连接中继，Hive Agent 与 Workspace 仍留在你的电脑上。</p>
+    'HiveTeam Gateway',
+    `<h1>HiveTeam Gateway</h1><p>自建单用户网关已启动。它只负责认证和加密连接中继，HiveTeam Agent 与 Workspace 仍留在你的电脑上。</p>
     <form method="post" action="/auth/login"><label for="token">网关管理 Token</label><input id="token" name="token" type="password" autocomplete="current-password" required><button type="submit">登录</button></form>
     <p class="hint">请将 HIVE_GATEWAY_OWNER_TOKEN 设置为你自己的长随机字符串。</p>`
   )
 
 export const daemonApprovalPage = (code: string) =>
   shell(
-    'Approve Hive machine',
-    `<h1>确认 Hive 设备</h1><p>确认后，终端中的 Hive 才会获得网关连接 Token。</p><div class="code">${escapeHtml(code)}</div>
+    'Approve HiveTeam machine',
+    `<h1>确认 HiveTeam 设备</h1><p>确认后，终端中的 HiveTeam 才会获得网关连接 Token。</p><div class="code">${escapeHtml(code)}</div>
     <form method="post" action="/daemon/approve"><input type="hidden" name="code" value="${escapeHtml(code)}"><label for="token">网关管理 Token</label><input id="token" name="token" type="password" required><button type="submit">批准此设备</button></form>`
   )
 
 export const approvedPage = () =>
-  shell('Approved', '<h1 class="ok">已批准</h1><p>返回终端，Hive 会自动完成登录。</p>')
+  shell('Approved', '<h1 class="ok">已批准</h1><p>返回终端，HiveTeam 会自动完成登录。</p>')

@@ -3,7 +3,6 @@
 import { createAppStateStore } from '../server/app-state-store.js'
 import { getMachineName } from '../server/machine-name.js'
 import {
-  DEFAULT_GATEWAY_URL,
   REMOTE_DAEMON_ID_KEY,
   REMOTE_DAEMON_TOKEN_KEY,
   REMOTE_ENABLED_KEY,
@@ -14,17 +13,11 @@ import { createRemoteDeviceStore } from '../server/remote-device-store.js'
 import { openRuntimeDatabase } from '../server/runtime-database.js'
 import { resolveDataDir } from './hive-data-dir.js'
 
-export {
-  DEFAULT_GATEWAY_URL,
-  REMOTE_DAEMON_ID_KEY,
-  REMOTE_DAEMON_TOKEN_KEY,
-  REMOTE_ENABLED_KEY,
-  REMOTE_GATEWAY_URL_KEY,
-}
+export { REMOTE_DAEMON_ID_KEY, REMOTE_DAEMON_TOKEN_KEY, REMOTE_ENABLED_KEY, REMOTE_GATEWAY_URL_KEY }
 
 export const HIVE_REMOTE_USAGE = [
   'Usage:',
-  '  hive remote login [--gateway <url>]   Link this machine to your Hive account.',
+  '  hive remote login [--gateway <url>]   Link this machine to your HiveTeam gateway.',
   '  hive remote status                    Show remote-access connection state.',
   '  hive remote logout                    Forget the gateway token and disable remote.',
   '  hive remote devices                   List paired devices.',
@@ -33,7 +26,7 @@ export const HIVE_REMOTE_USAGE = [
   'Remote access is disabled until login succeeds. The gateway only relays encrypted frames.',
   '',
   'Options:',
-  `  --gateway <url>   Gateway base URL (default: ${DEFAULT_GATEWAY_URL}).`,
+  '  --gateway <url>   Your HiveTeam gateway URL; required until a gateway has been saved.',
   '  -h, --help        Print this help.',
 ].join('\n')
 
@@ -164,10 +157,14 @@ const runLogin = async (
   log: (line: string) => void,
   onDaemonIdentityChange?: () => number
 ) => {
-  const gatewayUrl =
-    readGatewayFlag(argv) ?? readConfig(store, REMOTE_GATEWAY_URL_KEY) ?? DEFAULT_GATEWAY_URL
+  const gatewayUrl = readGatewayFlag(argv) ?? readConfig(store, REMOTE_GATEWAY_URL_KEY)
+  if (!gatewayUrl) {
+    throw new Error(
+      'No remote gateway is configured. Deploy your own HiveTeam gateway, then run hive remote login --gateway https://your-gateway.example (replace the example URL).'
+    )
+  }
   const { code, expiresAt, pollIntervalMs } = await client.requestCode(gatewayUrl)
-  log('Open this approval page in a browser where you are logged in to Hive:')
+  log('Open this HiveTeam gateway approval page in a browser:')
   log(`  ${approveUrl(gatewayUrl, code)}`)
   log(`  Code: ${code}`)
   log('Waiting for approval…')
@@ -186,7 +183,7 @@ const runLogin = async (
         lastNetworkError = detail
       }
       if (now() >= expiresAt) {
-        log('The login code expired. Run `hive remote login` again.')
+        log('The login code expired. Run the same login command again.')
         return 1
       }
       await sleep(Math.max(250, pollIntervalMs))
@@ -206,11 +203,11 @@ const runLogin = async (
         )
       }
       log('This machine is linked. Remote access is now enabled.')
-      log('Restart Hive to connect the remote tunnel.')
+      log('Restart HiveTeam to connect the remote tunnel.')
       return 0
     }
     if (now() >= expiresAt) {
-      log('The login code expired. Run `hive remote login` again.')
+      log('The login code expired. Run the same login command again.')
       return 1
     }
     await sleep(pollIntervalMs)
@@ -226,7 +223,13 @@ const runStatus = (store: RemoteConfigStore, log: (line: string) => void) => {
   log(`Logged in: ${loggedIn ? 'yes' : 'no'}`)
   if (gatewayUrl) log(`Gateway: ${gatewayUrl}`)
   if (daemonId) log(`Machine id: ${daemonId}`)
-  if (!loggedIn) log('Run `hive remote login` to link this machine.')
+  if (!loggedIn) {
+    log(
+      gatewayUrl
+        ? 'Run `hive remote login` to link this machine.'
+        : 'Run `hive remote login --gateway https://your-gateway.example` to link this machine (replace the example URL).'
+    )
+  }
   return 0
 }
 

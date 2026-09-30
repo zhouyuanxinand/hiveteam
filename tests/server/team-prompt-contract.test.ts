@@ -268,7 +268,7 @@ describe('team prompt contract', () => {
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       expect(run?.output).toContain('❯')
-      expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).not.toContain('[HiveTeam 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
     }, 10_000)
 
@@ -280,7 +280,7 @@ describe('team prompt contract', () => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       const output = normalizePtyOutput(run?.output ?? '')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
-      expect(output).toContain('[Hive 系统消息：来自 @Orchestrator 的派单]')
+      expect(output).toContain('[HiveTeam 系统消息：来自 @Orchestrator 的派单]')
       expect(output).toContain('实现登录')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
       expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)
@@ -341,7 +341,7 @@ describe('team prompt contract', () => {
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       expect(run?.output).toContain('❯')
-      expect(run?.output).not.toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).not.toContain('[HiveTeam 系统消息：启动说明]')
       expect(run?.output).not.toContain('SUBMITTED')
     }, 10_000)
 
@@ -353,7 +353,7 @@ describe('team prompt contract', () => {
       const run = store.getActiveRunByAgentId(workspace.id, worker.id)
       const output = normalizePtyOutput(run?.output ?? '')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
-      expect(output).toContain('[Hive 系统消息：来自 @Orchestrator 的派单]')
+      expect(output).toContain('[HiveTeam 系统消息：来自 @Orchestrator 的派单]')
       expect(output).toContain('实现登录')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
       // The selected interactive CLI must receive one final submit for the
@@ -418,7 +418,7 @@ describe('team prompt contract', () => {
     }, 10_000)
     await waitFor(() => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
-      expect(run?.output).toContain('[Hive 系统消息：启动说明]')
+      expect(run?.output).toContain('[HiveTeam 系统消息：启动说明]')
       expect(run?.output).toContain('SUBMITTED')
     }, 4000)
 
@@ -440,7 +440,7 @@ describe('team prompt contract', () => {
       const run = store.getActiveRunByAgentId(workspace.id, orchestrator.id)
       const output = normalizePtyOutput(run?.output ?? '')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[200~')
-      expect(output).toContain('[Hive 系统消息：来自 @Alice 的汇报]')
+      expect(output).toContain('[HiveTeam 系统消息：来自 @Alice 的汇报]')
       expect(output).toContain('Done from shell-wrapped Claude')
       if (process.platform !== 'win32') expect(output).toContain('\u001b[201~')
       expect(output.match(/SUBMITTED/g)?.length ?? 0).toBeGreaterThanOrEqual(1)

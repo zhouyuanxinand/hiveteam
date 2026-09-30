@@ -31,7 +31,7 @@ export const grokSessionSummaryPath = (context: NativeSessionContext, id: string
   if (encoded.length > 255)
     throw new NativeSessionError(
       'session_adapter_unverified',
-      'This cwd requires Grok’s version-specific long-path encoding, which has not been verified. Move/rebind explicitly; Hive will not search other histories.'
+      'This cwd requires Grok’s version-specific long-path encoding, which has not been verified. Move/rebind explicitly; HiveTeam will not search other histories.'
     )
   return join(context.storage_root, 'sessions', encoded, id, 'summary.json')
 }
@@ -128,7 +128,7 @@ export const checkCursorSession = async (input: ProcessInput, id: string) => {
             id: message.id,
             error: {
               code: -32601,
-              message: 'Hive session inspection does not provide client tools.',
+              message: 'HiveTeam session inspection does not provide client tools.',
             },
           })
           return false

@@ -3,7 +3,7 @@ import type { AgentSummary, WorkerRole, WorkspaceLanguage } from '../shared/type
 import { TASKS_RELATIVE_PATH } from './tasks-file.js'
 
 export const ORCHESTRATOR_ROLE_DESCRIPTION = [
-  '你是 Hive 的 Orchestrator，负责直接响应用户并组织右侧真实成员协作。',
+  '你是 HiveTeam 的 Orchestrator，负责直接响应用户并组织右侧真实成员协作。',
   '工作方式：',
   '- 澄清目标，把需求拆成可派发的小任务。',
   `- 维护 ${TASKS_RELATIVE_PATH}，让当前计划、进度和阻塞可追踪。`,
@@ -47,7 +47,7 @@ export const CUSTOM_ROLE_DESCRIPTION = [
 ].join('\n')
 
 export const ORCHESTRATOR_ROLE_DESCRIPTION_EN = [
-  'You are the Hive Orchestrator. Respond directly to the user and coordinate the real members shown in the right-side team panel.',
+  'You are the HiveTeam Orchestrator. Respond directly to the user and coordinate the real members shown in the right-side team panel.',
   'How to work:',
   '- Clarify the goal and split it into small dispatchable tasks.',
   `- Maintain ${TASKS_RELATIVE_PATH} so the current plan, progress, and blockers stay traceable.`,

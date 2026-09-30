@@ -25,14 +25,14 @@ npm install --global @openai/codex@0.158.0
 codex --version
 ```
 
-Check the command Hive actually resolves (`where.exe codex` on Windows or
+Check the command HiveTeam actually resolves (`where.exe codex` on Windows or
 `command -v codex` on Unix); the desktop application's bundled binary can differ
 from the CLI on `PATH`. Finish the current task and restart the affected member
 to load the replacement executable. An existing terminal keeps its old process
 and warning history until it is restarted. Preserve the saved native session;
 do not delete the account's configuration, authentication or conversations.
 
-Hive binds execution grants to executable bytes. A CLI upgrade invalidates the
+HiveTeam binds execution grants to executable bytes. A CLI upgrade invalidates the
 old grant; review the new CLI in **Execution permissions** before starting it.
 Version recognition and the fixed `login status` check do not establish sandbox
 support: the restricted Linux profile remains pinned to its separately tested

@@ -185,6 +185,7 @@ export const AppInner = () => {
     <>
       <MainLayout
         hideTopbarActions={!eff.effectiveActiveWorkspace}
+        updateCheckEnabled={!demoMode}
         onToggleTaskGraph={() => setTaskGraphOpen((value) => !value)}
         {...(!demoMode
           ? {

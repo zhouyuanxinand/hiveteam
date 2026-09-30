@@ -133,7 +133,7 @@ export const finishCandidateGit = async (candidate: IntegrationCandidate) => {
       throw new ConflictError('Candidate merge parents changed. Prepare a new candidate.')
     await candidateGit(candidate.checkout_path, hooks, [
       '-c',
-      'user.name=Hive integration',
+      'user.name=HiveTeam integration',
       '-c',
       'user.email=hive@localhost',
       'commit',

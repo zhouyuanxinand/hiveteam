@@ -68,7 +68,7 @@ describe('app shell with real server', () => {
 
     const banner = screen.getByRole('banner')
     expect(banner).toHaveClass('h-11')
-    expect(banner.textContent ?? '').toContain('Hive')
+    expect(banner.textContent ?? '').toContain('HiveTeam')
     // Workspace actions stay hidden until a workspace is selected, while the
     // global theme toggle remains available in the topbar.
     expect(screen.queryByTestId('topbar-settings')).toBeNull()

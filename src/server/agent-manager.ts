@@ -205,9 +205,12 @@ export const createAgentManager = ({
                   'Native exit cleanup or resource release could not be completed.'
                 )
               } catch (markError) {
-                console.error('[hive] could not persist exit recovery marker', { runId, markError })
+                console.error('[hiveteam] could not persist exit recovery marker', {
+                  runId,
+                  markError,
+                })
               }
-              console.error('[hive] cleanup or resource release failed after PTY exit', {
+              console.error('[hiveteam] cleanup or resource release failed after PTY exit', {
                 runId,
                 error,
               })

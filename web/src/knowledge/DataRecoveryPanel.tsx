@@ -69,8 +69,8 @@ export const DataRecoveryPanel = ({ workspaceId }: { workspaceId: string }) => {
       <summary>{zh ? '本地备份、恢复与归档' : 'Local backup, restore and archive'}</summary>
       <p>
         {zh
-          ? '备份包含 Hive 记录和托管附件。项目文件与外部 worktree 需另行备份；自然语言内容仍可能敏感。'
-          : 'Backups include Hive records and managed attachments. Back up projects and external worktrees separately; text may contain sensitive data.'}
+          ? '备份包含 HiveTeam 记录和托管附件。项目文件与外部 worktree 需另行备份；自然语言内容仍可能敏感。'
+          : 'Backups include HiveTeam records and managed attachments. Back up projects and external worktrees separately; text may contain sensitive data.'}
       </p>
       <fieldset disabled={busy}>
         <legend>{zh ? '创建备份' : 'Create backup'}</legend>
@@ -189,7 +189,7 @@ export const DataRecoveryPanel = ({ workspaceId }: { workspaceId: string }) => {
                   )
                   setRestoreConfirmed(false)
                   setReceipt(
-                    `${zh ? '恢复目录已准备；退出 Hive 后以 HIVE_DATA_DIR 指向此目录重新启动' : 'Restored directory is ready; exit Hive and restart with HIVE_DATA_DIR pointing here'}: ${result.target}`
+                    `${zh ? '恢复目录已准备；退出 HiveTeam 后以 HIVE_DATA_DIR 指向此目录重新启动' : 'Restored directory is ready; exit HiveTeam and restart with HIVE_DATA_DIR pointing here'}: ${result.target}`
                   )
                 })
               }

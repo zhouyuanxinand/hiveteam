@@ -55,8 +55,8 @@ export const buildEnvSyncMessage = ({
     return wrapSystemMessage(
       [
         english
-          ? 'Hive restarted your agent. Environment changes during the restart:'
-          : '你刚被 Hive 重启了。期间环境变化：',
+          ? 'HiveTeam restarted your agent. Environment changes during the restart:'
+          : '你刚被 HiveTeam 重启了。期间环境变化：',
         english ? `- Current workspace: ${workspace.name}` : `- 当前 workspace: ${workspace.name}`,
         english ? '- Current workers:' : '- 现有 worker:',
         ...formatWorkers(workers, language),
@@ -71,11 +71,11 @@ export const buildEnvSyncMessage = ({
         ...formatRestartWindow(restartWindowMessages, language),
         agent.role === 'orchestrator'
           ? english
-            ? '- Hive worker dispatch rules:'
-            : '- Hive worker 派单规则:'
+            ? '- HiveTeam worker dispatch rules:'
+            : '- HiveTeam worker 派单规则:'
           : english
-            ? '- Hive worker boundaries:'
-            : '- Hive worker 边界:',
+            ? '- HiveTeam worker boundaries:'
+            : '- HiveTeam worker 边界:',
         ...getHiveTeamRules(agent, language).map((rule) => `  - ${rule}`),
         english
           ? `Continue. If uncertain, use team list / Read ${TASKS_RELATIVE_PATH} to inspect or ask the user.`

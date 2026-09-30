@@ -133,7 +133,7 @@ describe('npm package tarball', () => {
       expect(existsSync(join(process.cwd(), 'dist', 'src', 'cli', 'hive.js'))).toBe(true)
       expect(existsSync(join(process.cwd(), 'web', 'dist', 'index.html'))).toBe(true)
 
-      const output = runNpm(['pack', '--dry-run', '--json'])
+      const output = runNpm(['pack', '--dry-run', '--json', '--ignore-scripts'])
       const result = parseSinglePackResult(output)
       const paths = result.files.map((file) => file.path)
 

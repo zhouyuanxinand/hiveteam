@@ -50,7 +50,7 @@ export const applySchemaVersion26 = (db: Database) => {
     );
   `)
 
-  // Databases created by newer official Hive builds can already report a
+  // Databases created by newer builds can already report a
   // schema version above v26 while using a different workflow_runs shape.
   // `CREATE TABLE IF NOT EXISTS` does not upgrade an existing table, so make
   // the columns required by this runtime available before creating indexes or

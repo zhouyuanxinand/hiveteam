@@ -40,12 +40,12 @@ export const HIVE_USAGE = [
   'Options:',
   `  --port <port>   Bind the local runtime to a specific port (default: ${DEFAULT_HIVE_PORT}).`,
   '  -h, --help      Print this help.',
-  '  -v, --version   Print the installed Hive version.',
+  '  -v, --version   Print the installed HiveTeam version.',
   '',
   'Commands:',
   '  remote         Link and manage remote access devices.',
   '  mcp            Run the local Supervisor MCP bridge over stdio.',
-  '  update          Explain how to update this source-controlled build.',
+  '  update         Print npm installation and upgrade instructions.',
 ].join('\n')
 
 export const handleHiveInfoCommand = (argv: string[]) => {
@@ -95,16 +95,16 @@ const isListenError = (error: unknown): error is ListenError =>
 
 const formatPortInUseMessage = (port: number) =>
   [
-    `Hive could not start because port ${port} is already in use.`,
+    `HiveTeam could not start because port ${port} is already in use.`,
     '',
-    'Another Hive instance may already be running:',
+    'Another HiveTeam instance may already be running:',
     `  http://127.0.0.1:${port}`,
     '',
     'Options:',
-    '  - Open the existing Hive window.',
+    '  - Open the existing HiveTeam window.',
     '  - Stop the process using that port:',
     `      lsof -tiTCP:${port} -sTCP:LISTEN | xargs kill`,
-    '  - Start Hive on another port:',
+    '  - Start HiveTeam on another port:',
     `      hive --port ${port + 1}`,
   ].join('\n')
 
@@ -118,7 +118,7 @@ const formatListenError = (error: unknown, requestedPort: number) => {
 export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResult> => {
   const port = parseHivePort(argv)
   const dataDir = resolveDataDir()
-  console.log(`[hive] Data directory: ${dataDir}`)
+  console.log(`[hiveteam] Data directory: ${dataDir}`)
   const app = createApp({
     store: createRuntimeStore({
       agentManager: createAgentManager(),
@@ -155,7 +155,7 @@ export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResu
     onStatus: (event) => {
       if (event.status === 'reconnecting') {
         console.warn(
-          `[hive] remote tunnel reconnecting${event.nextRetryInMs === undefined ? '' : ` in ${event.nextRetryInMs}ms`}: ${event.reason ?? 'connection lost'}`
+          `[hiveteam] remote tunnel reconnecting${event.nextRetryInMs === undefined ? '' : ` in ${event.nextRetryInMs}ms`}: ${event.reason ?? 'connection lost'}`
         )
       }
     },
@@ -205,10 +205,10 @@ export const runHiveCommand = async (argv: string[]): Promise<RunHiveCommandResu
   process.once('SIGTERM', gracefulShutdown)
   process.once('SIGINT', gracefulShutdown)
 
-  console.log(`Hive running at http://127.0.0.1:${address.port}`)
+  console.log(`HiveTeam running at http://127.0.0.1:${address.port}`)
   void app.store
     .autoResumeInterruptedAgents({ hivePort: String(address.port) })
-    .catch((error) => console.error('[hive] auto-resume bootstrap failed', error))
+    .catch((error) => console.error('[hiveteam] auto-resume bootstrap failed', error))
 
   return {
     port: address.port,
@@ -263,6 +263,13 @@ if (isMainModule) {
       })
   } else if (argv[0] === 'update') {
     runHiveUpdateCommand(argv.slice(1))
+      .then((code) => {
+        process.exitCode = code
+      })
+      .catch((error) => {
+        console.error(error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      })
   } else if (argv[0] === 'mcp') {
     runHiveMcpCommand(argv.slice(1))
       .then(() => process.exit(0))

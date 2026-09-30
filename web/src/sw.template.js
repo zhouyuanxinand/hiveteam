@@ -1,11 +1,11 @@
-// Hive PWA service worker.
+// HiveTeam PWA service worker.
 //
 // The single occurrence of the build-time version placeholder lives in the
 // VERSION constant directly below. `web/src/pwa/build-sw.ts` rewrites it at
-// `vite build` time so each Hive release writes to its own cache bucket. Old
+// `vite build` time so each HiveTeam release writes to its own cache bucket. Old
 // caches are kept intentionally — a tab still controlled by a previous SW
 // generation must be able to resolve its lazy-loaded hashed chunks, and
-// storage growth is bounded by Hive's release cadence.
+// storage growth is bounded by HiveTeam's release cadence.
 
 const VERSION = '__HIVE_VERSION__'
 const SHELL_CACHE = `hive-cache-v${VERSION}-shell`

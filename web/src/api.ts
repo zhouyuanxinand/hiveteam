@@ -811,7 +811,7 @@ export const restartAgentRun = async (
   // own; either way we proceed to start a fresh one. Swallowed errors land in
   // the dev console for diagnosis.
   await stopAgentRun(runId).catch((error: unknown) => {
-    console.error('[hive] swallowed:restartAgentRun.stop', error)
+    console.error('[hiveteam] swallowed:restartAgentRun.stop', error)
   })
   return startAgentRun(workspaceId, agentId)
 }

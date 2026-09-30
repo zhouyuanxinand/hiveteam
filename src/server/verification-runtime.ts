@@ -185,7 +185,7 @@ export const createVerificationRuntime = (input: {
           done: finished,
         })
         void finished.catch((error: unknown) =>
-          console.error('[hive] verification persistence failed', error)
+          console.error('[hiveteam] verification persistence failed', error)
         )
         return run
       } catch (error) {

@@ -11,14 +11,14 @@ interface RuntimeOfflinePageProps {
   sessionRequired?: boolean
   /**
    * Engage demo mode without leaving this view. Daemon-offline is exactly when
-   * users most want to evaluate Hive without installing a CLI, so we surface a
+   * users most want to evaluate HiveTeam without installing a CLI, so we surface a
    * Try Demo escape hatch alongside Retry.
    */
   onTryDemo?: () => void
 }
 
 /**
- * Full-screen replacement for the workspace content area when the Hive runtime
+ * Full-screen replacement for the workspace content area when the HiveTeam runtime
  * is unreachable or its UI session has expired at bootstrap. The session probe
  * only checks existing authorization; the trusted launcher must restore it.
  * Reload after recovery to fetch workspace data through the normal bootstrap.

@@ -16,7 +16,7 @@ export type WorkerRole = 'coder' | 'reviewer' | 'tester' | 'custom'
 
 export interface WorkspaceSummary {
   id: string
-  /** Language used for generated Hive role contracts and protocol prompts. */
+  /** Language used for generated HiveTeam role contracts and protocol prompts. */
   language?: WorkspaceLanguage
   name: string
   path: string
@@ -52,7 +52,7 @@ export interface TeamListItem extends WorkerLifecycleFields {
   pendingTaskCount: number
   /**
    * Last raw line printed to the worker's PTY. Surfaced on the worker card for UI hints only —
-   * not a worker reply. Real replies arrive as [Hive 系统消息] entries on orchestrator stdin.
+   * not a worker reply. Real replies arrive as [HiveTeam 系统消息] entries on orchestrator stdin.
    */
   lastPtyLine?: string
   /**

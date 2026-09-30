@@ -5,4 +5,7 @@ export const versionRoutes: RouteDefinition[] = [
   route('GET', '/api/version', async ({ response, versionService }) => {
     sendJson(response, 200, await versionService.getVersionInfo())
   }),
+  route('GET', '/api/version/latest', async ({ response, versionService }) => {
+    sendJson(response, 200, await versionService.getLatestVersionInfo())
+  }),
 ]

@@ -81,14 +81,14 @@ export const createGitTurnCoordinator = (input: {
         workspacePath: workspace.summary.path,
       })
       if (result.outcome === 'created' && result.commit) {
-        console.info('[hive] Orchestrator turn snapshot created', {
+        console.info('[hiveteam] Orchestrator turn snapshot created', {
           commitSha: result.commit.sha,
           turnId: turn.turnId,
           workspaceId: run.workspaceId,
         })
       }
     } catch (error) {
-      console.warn('[hive] Orchestrator turn snapshot skipped', {
+      console.warn('[hiveteam] Orchestrator turn snapshot skipped', {
         error: getErrorMessage(error),
         turnId: turn.turnId,
         workspaceId: run.workspaceId,
@@ -143,7 +143,7 @@ export const createGitTurnCoordinator = (input: {
         if (run.activeTurn !== turn) return
         run.activeTurn = null
         drainPendingInput(run)
-        console.warn('[hive] could not prepare Orchestrator turn snapshot', {
+        console.warn('[hiveteam] could not prepare Orchestrator turn snapshot', {
           error: getErrorMessage(error),
           turnId: turn.turnId,
           workspaceId: run.workspaceId,

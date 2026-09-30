@@ -38,7 +38,7 @@ node dist/src/cli/hive.js --port 4018
 ```
 
 Open `http://127.0.0.1:4018`. This uses separate runtime data from the normal
-Hive installation. Add a disposable Git project and configure real CLI workers
+HiveTeam installation. Add a disposable Git project and configure real CLI workers
 for the end-to-end checks below.
 
 The separately running local preview at port 4017 contains explicitly labeled
@@ -53,7 +53,7 @@ report controls; it does not perform coding or validation.
 3. Expand the item, enter the missing information, and return it to the worker.
    It should become in progress. Report again using `--outcome success`; it
    should show reported success and remain awaiting human acceptance.
-4. Accept the report. It should show report accepted. Restart Hive with the
+4. Accept the report. It should show report accepted. Restart HiveTeam with the
    same isolated data directory and verify that this state remains.
 5. Send feedback again. Acceptance should disappear. An old browser request
    attempting to accept the previous report revision must be rejected.

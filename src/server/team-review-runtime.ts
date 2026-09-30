@@ -61,7 +61,7 @@ export const createTeamReviewRuntime = (
       } catch (error) {
         if (error instanceof ConflictError) continue
         store.fail(record.id, error instanceof Error ? error.message : String(error))
-        console.error('[hive] temporary reviewer retirement failed', {
+        console.error('[hiveteam] temporary reviewer retirement failed', {
           requestId: record.id,
           error,
         })

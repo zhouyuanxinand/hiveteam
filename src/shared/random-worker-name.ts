@@ -33,7 +33,7 @@ export const generateWorkerName = ({
   // member here; callers that require a guaranteed unique name append a
   // suffix, or use generateRoleWorkerName for a unique role-based suggestion.
   const draw = available.length > 0 ? available : WORKER_NAME_POOL
-  return draw[nextUint32() % draw.length] ?? 'Hive member'
+  return draw[nextUint32() % draw.length] ?? 'HiveTeam member'
 }
 
 const roleNames: Record<WorkerRole, string> = {

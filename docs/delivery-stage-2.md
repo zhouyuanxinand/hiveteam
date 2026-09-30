@@ -8,7 +8,7 @@ separate from local `main` pending user acceptance.
 Each reported task now offers **Verify code version**. Enter a foreground check
 command, review its output, and accept the verified version after it passes.
 
-- Hive creates a detached temporary checkout of the requested commit and runs
+- HiveTeam creates a detached temporary checkout of the requested commit and runs
   the command there, at the same repository-relative workspace path. The source
   branch and index are not changed. Dependencies and ignored local files are
   not copied; include installation in the command when needed.
@@ -25,7 +25,7 @@ command, review its output, and accept the verified version after it passes.
 - Accepting a verified version also confirms its task report. The first-stage
   report-only confirmation remains available and retains its distinct meaning.
   Neither operation merges code or proves checks beyond the chosen command.
-- The two untracked files Hive itself creates, `.hive/tasks.md` and
+- The two untracked files HiveTeam itself creates, `.hive/tasks.md` and
   `.hive/PROTOCOL.md`, are coordination metadata and do not make the source dirty.
   Tracked modifications to those files still invalidate the clean version check.
 
@@ -72,7 +72,7 @@ by this record.
 Normal shutdown waits for cancellation and cleanup. After a hard runtime crash,
 unfinished persisted records become interrupted and cannot be accepted. A hard
 crash may leave a process or temporary worktree requiring inspection and cleanup;
-restarting Hive does not treat those records as completed or resume the command.
+restarting HiveTeam does not treat those records as completed or resume the command.
 
 The next stage will isolate concurrent coding tasks and integrate their output.
 

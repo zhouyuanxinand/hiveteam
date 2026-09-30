@@ -154,8 +154,8 @@ export const buildRecoverySummary = ({
           : `你是 ${workspace.name} 的 ${agent.name}（${agent.role}）。`,
         buildAgentSessionBindingMarker({ agent, workspace }),
         english
-          ? 'Hive restarted you, but the native session could not be resumed. The following is recovered context.'
-          : '你刚被 Hive 重启了，且无法通过原生 session resume 恢复。下面是接力上下文。',
+          ? 'HiveTeam restarted you, but the native session could not be resumed. The following is recovered context.'
+          : '你刚被 HiveTeam 重启了，且无法通过原生 session resume 恢复。下面是接力上下文。',
         '',
         english ? '## Conversation with the user in the last hour' : '## 最近 1 小时与 user 的对话',
         ...formatUserInputs(messages, language),
@@ -182,11 +182,11 @@ export const buildRecoverySummary = ({
         '',
         agent.role === 'orchestrator'
           ? english
-            ? '## Hive worker dispatch rules'
-            : '## Hive worker 派单规则'
+            ? '## HiveTeam worker dispatch rules'
+            : '## HiveTeam worker 派单规则'
           : english
-            ? '## Hive worker boundaries'
-            : '## Hive worker 边界',
+            ? '## HiveTeam worker boundaries'
+            : '## HiveTeam worker 边界',
         ...getHiveTeamRules(agent, language),
         '',
         english

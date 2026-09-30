@@ -8,7 +8,7 @@ export type GitHubRequest = (
   options?: { body?: Record<string, unknown>; paginate?: boolean }
 ) => Promise<unknown>
 
-/** Credentials remain in the user's GitHub CLI; Hive never reads or stores a token. */
+/** Credentials remain in the user's GitHub CLI; HiveTeam never reads or stores a token. */
 export const requestGitHub: GitHubRequest = (cwd, endpoint, options = {}) =>
   new Promise((resolve, reject) => {
     recheckRemoteAction()

@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 describe('team cli help', () => {
-  test('prints usage without requiring Hive agent environment', async () => {
+  test('prints usage without requiring HiveTeam agent environment', async () => {
     process.env = {}
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -43,7 +43,7 @@ describe('team cli help', () => {
     expect(output).not.toContain('--failed')
   })
 
-  test('prints a focused generated guide without requiring Hive agent environment', async () => {
+  test('prints a focused generated guide without requiring HiveTeam agent environment', async () => {
     process.env = {}
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
@@ -61,7 +61,7 @@ describe('team cli help', () => {
     )
   })
 
-  test('team report warns when Hive records the report but cannot live-deliver it', async () => {
+  test('team report warns when HiveTeam records the report but cannot live-deliver it', async () => {
     process.env = {
       HIVE_AGENT_ID: 'worker-1',
       HIVE_AGENT_TOKEN: 'token-1',

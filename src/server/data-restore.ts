@@ -111,7 +111,7 @@ export const restoreDataBackup = async (input: {
       remote_devices: 'requires_pairing',
       old_data: 'unchanged',
       rollback:
-        'Stop the restored runtime and restart Hive with the previous HIVE_DATA_DIR. Both directories remain intact.',
+        'Stop the restored runtime and restart HiveTeam with the previous HIVE_DATA_DIR. Both directories remain intact.',
     }
     await writeFile(join(stage, 'restore-receipt.json'), JSON.stringify(receipt, null, 2), {
       flag: 'wx',

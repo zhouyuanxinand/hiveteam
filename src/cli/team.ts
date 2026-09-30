@@ -83,7 +83,7 @@ const getHiveEnv = (): HiveEnv => {
   ) as Partial<Record<HiveEnvKey, string>>
 
   if (REQUIRED_ENV_KEYS.some((key) => !values[key])) {
-    throw new Error('Missing required Hive environment variables')
+    throw new Error('Missing required HiveTeam environment variables')
   }
 
   return values as HiveEnv

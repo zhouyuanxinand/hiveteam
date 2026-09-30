@@ -4,7 +4,7 @@ This fixture runs the actual pinned Linux Codex CLI against a loopback-only synt
 Responses server. It never loads the user's home, account configuration, or API key.
 The provider receives a synthetic key; no paid model request is made.
 
-Build Hive first, then run inside native Linux or WSL Linux with Node 22 and Python 3.11+:
+Build HiveTeam first, then run inside native Linux or WSL Linux with Node 22 and Python 3.11+:
 
 ```sh
 pnpm build
@@ -36,7 +36,7 @@ It checks actual behavior through `exec_command` and direct `apply_patch` calls:
 - Untrusted project settings cannot enable unrestricted permissions, MCP commands,
   or extra tools. The advertised tool set is checked explicitly.
 
-The HTTP receiver is synthetic; Hive's HTTP authorization, dispatch, and SQLite
+The HTTP receiver is synthetic; HiveTeam's HTTP authorization, dispatch, and SQLite
 semantics have separate runtime integration coverage. This evidence is limited to
 the recorded Linux binary, model tool metadata, profile, and Git view hashes. It does
 not certify Windows/macOS containment or purge secrets already present in Git history.

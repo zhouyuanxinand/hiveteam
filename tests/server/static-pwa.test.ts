@@ -79,7 +79,7 @@ describe('PWA static assets over HTTP', () => {
     expect(response.headers.get('content-type')).toBe('application/manifest+json; charset=utf-8')
     expect(response.headers.get('cache-control')).toBe('max-age=0, must-revalidate')
     const manifest = (await response.json()) as Record<string, unknown>
-    expect(manifest.name).toBe('Hive — Multi-agent CLI workbench')
+    expect(manifest.name).toBe('HiveTeam — Multi-agent CLI workbench')
     expect(manifest.start_url).toBe('/')
     expect(manifest.scope).toBe('/')
     expect(manifest.display).toBe('standalone')

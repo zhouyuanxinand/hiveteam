@@ -33,7 +33,7 @@ const en = {
   source: 'Source file',
   draft: 'Your draft',
   draftHint:
-    'Drafts are stored in Hive. Saving does not overwrite the project file or contact the model.',
+    'Drafts are stored in HiveTeam. Saving does not overwrite the project file or contact the model.',
   note: 'Instructions for this revision (optional)',
   save: 'Save draft',
   review: 'Send changes for review',
@@ -53,18 +53,18 @@ const en = {
   sending: 'Waiting for terminal submission… Do not resend in the terminal.',
   submitted: 'Submitted to the terminal. Check the model’s reply; this is not a review approval.',
   uncertain:
-    'Delivery is uncertain. Check the terminal before sending again; Hive will not retry automatically.',
+    'Delivery is uncertain. Check the terminal before sending again; HiveTeam will not retry automatically.',
   sendingButton: 'Submitting…',
   unresolved: 'Submission has not been verified. Check its status before resending.',
   retryStatus: 'Check submission status',
   storageError:
-    'Browser draft storage is unavailable. Keep this panel open and save your draft to Hive.',
+    'Browser draft storage is unavailable. Keep this panel open and save your draft to HiveTeam.',
   closeDirty: 'Keep editing',
   discard: 'Close without keeping browser draft',
   sourceMismatch:
     'Confirmation applies to the source file only. First ask the model to incorporate your draft, then reload.',
   confirmHint:
-    'Records this exact source version in Hive. Does not start implementation or send a command.',
+    'Records this exact source version in HiveTeam. Does not start implementation or send a command.',
   latestSource: 'Latest source (your draft has not been replaced)',
   networkError:
     'Could not read submission status. Your content is retained; check status before resending.',
@@ -98,7 +98,7 @@ const zh: typeof en = {
   changes: '修改差异',
   source: '项目原文',
   draft: '我的草稿',
-  draftHint: '草稿单独保存在 Hive。保存不会覆盖项目文件，也不会发送给模型。',
+  draftHint: '草稿单独保存在 HiveTeam。保存不会覆盖项目文件，也不会发送给模型。',
   note: '本次修改说明（可选）',
   save: '保存草稿',
   review: '发送修改供复核',
@@ -116,15 +116,15 @@ const zh: typeof en = {
   blocked: '尚未发送。请启动接收成员，或等待上一条提交完成后重试。',
   sending: '正在等待终端接收…请勿在终端重复发送。',
   submitted: '已提交到终端，请查看模型回复；这不代表方案已通过复核。',
-  uncertain: '发送结果不确定。请先查看终端确认；Hive 不会自动重发。',
+  uncertain: '发送结果不确定。请先查看终端确认；HiveTeam 不会自动重发。',
   sendingButton: '提交中…',
   unresolved: '尚未核实提交结果。请先检查状态，不要重复发送。',
   retryStatus: '检查提交状态',
-  storageError: '浏览器无法保留草稿。请勿关闭面板，并将草稿保存到 Hive。',
+  storageError: '浏览器无法保留草稿。请勿关闭面板，并将草稿保存到 HiveTeam。',
   closeDirty: '继续编辑',
   discard: '关闭且不保留浏览器草稿',
   sourceMismatch: '只能确认项目原文。请先让模型采纳草稿修改，再重新读取原文确认。',
-  confirmHint: '只在 Hive 记录原文此版本的确认，不开始实现，也不发送命令。',
+  confirmHint: '只在 HiveTeam 记录原文此版本的确认，不开始实现，也不发送命令。',
   latestSource: '最新原文（尚未替换你的草稿）',
   networkError: '无法查询提交状态。内容已保留，请先检查状态，不要重复发送。',
 }

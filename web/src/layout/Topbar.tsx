@@ -7,6 +7,7 @@ import { RemoteAccessButton } from '../remote/RemoteAccessButton.js'
 import { ResourceStatusButton } from '../resources/ResourceStatusButton.js'
 import { SupervisorAccessButton } from '../security/SupervisorAccessButton.js'
 import { Tooltip } from '../ui/Tooltip.js'
+import { NpmUpdateNotice } from '../updates/NpmUpdateNotice.js'
 import { APP_VERSION } from '../version.js'
 import { ThemeToggle } from './ThemeToggle.js'
 
@@ -27,6 +28,7 @@ type TopbarProps = {
   gitOpen?: boolean
   workflowsOpen?: boolean
   version?: string
+  updateCheckEnabled?: boolean
 }
 
 export const Topbar = ({
@@ -46,6 +48,7 @@ export const Topbar = ({
   gitOpen = false,
   workflowsOpen = false,
   version = APP_VERSION,
+  updateCheckEnabled = true,
 }: TopbarProps) => {
   const { t } = useI18n()
   const hasOpenTasks = openTaskCount > 0
@@ -72,6 +75,7 @@ export const Topbar = ({
         />
         <span className="topbar-brand-name font-semibold text-pri">HiveTeam</span>
         <span className="topbar-brand-version text-ter text-xs tabular-nums">v{version}</span>
+        <NpmUpdateNotice version={version} enabled={updateCheckEnabled} />
       </div>
       <div className="topbar-spacer min-w-0 flex-1" />
       <div className="topbar-actions flex min-w-0 items-center gap-1">

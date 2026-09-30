@@ -88,7 +88,7 @@ export const buildAgentStartupInstructions = ({
   const english = workspaceLanguage === 'en'
   const description = getLocalizedAgentDescription(agent, workspaceLanguage)
   const lines = [
-    english ? '[Hive system message: startup instructions]' : '[Hive 系统消息：启动说明]',
+    english ? '[HiveTeam system message: startup instructions]' : '[HiveTeam 系统消息：启动说明]',
     '',
     buildAgentLegacyIdentityMarker({ agent, language: workspaceLanguage, workspace }),
     english ? `Current workspace: ${workspace.name}` : `当前 workspace: ${workspace.name}`,
@@ -131,7 +131,7 @@ export const buildAgentStartupInstructions = ({
         ? 'Before non-trivial work, use `team guide <topic>` for focused runtime rules; `.hive/PROTOCOL.md` contains the full protocol.'
         : '处理非简单任务前，使用 `team guide <topic>` 获取对应运行规则；完整协议见 `.hive/PROTOCOL.md`。',
       '',
-      english ? 'Hive worker dispatch rules:' : 'Hive worker 派单规则：',
+      english ? 'HiveTeam worker dispatch rules:' : 'HiveTeam worker 派单规则：',
       ...getHiveTeamRules(agent, workspaceLanguage)
     )
     lines.push(...formatSkillCatalog(skillCatalog ?? [], english))
@@ -139,8 +139,8 @@ export const buildAgentStartupInstructions = ({
     if (agent.role === 'coder')
       lines.push(
         english
-          ? 'For an isolated worker branch, use `team git commit --expected-head <current-head-sha> "<message>"` to commit through Hive. A rejected expected HEAD requires inspecting the current branch before retrying.'
-          : '独立工位提交使用 `team git commit --expected-head <当前HEAD的SHA> "<提交说明>"`；由 Hive 校验自己的分支。HEAD 不匹配时先检查当前分支，再决定是否重试。',
+          ? 'For an isolated worker branch, use `team git commit --expected-head <current-head-sha> "<message>"` to commit through HiveTeam. A rejected expected HEAD requires inspecting the current branch before retrying.'
+          : '独立工位提交使用 `team git commit --expected-head <当前HEAD的SHA> "<提交说明>"`；由 HiveTeam 校验自己的分支。HEAD 不匹配时先检查当前分支，再决定是否重试。',
         ''
       )
     lines.push(
@@ -207,7 +207,7 @@ export const buildAgentStartupInstructions = ({
         ? 'Do not call `team send`; workers cannot dispatch to one another.'
         : '不要调用 team send；worker 之间不能直接派单。',
       '',
-      english ? 'Hive worker boundaries:' : 'Hive worker 边界：',
+      english ? 'HiveTeam worker boundaries:' : 'HiveTeam worker 边界：',
       ...getHiveTeamRules(agent, workspaceLanguage)
     )
   }

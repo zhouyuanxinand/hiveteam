@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -11,7 +11,7 @@ import {
   runHiveCommand,
 } from '../../src/cli/hive.js'
 import { DEFAULT_HIVE_PORT } from '../../src/cli/hive-defaults.js'
-import { HIVE_UPDATE_USAGE, runHiveUpdateCommand } from '../../src/cli/hive-update.js'
+import { HIVE_UPDATE_USAGE } from '../../src/cli/hive-update.js'
 
 let testDataDir = ''
 
@@ -65,83 +65,70 @@ describe('hive cli', () => {
 
     try {
       expect(result.port).toBeGreaterThan(0)
-      expect(logSpy).toHaveBeenCalledWith(`Hive running at http://127.0.0.1:${result.port}`)
+      expect(logSpy).toHaveBeenCalledWith(`HiveTeam running at http://127.0.0.1:${result.port}`)
     } finally {
       await result.close()
     }
   })
 })
 
-describe('hive update cli', () => {
-  test('--help prints update usage and exits 0 without invoking npm', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const code = await runHiveUpdateCommand(['--help'])
-
-    expect(code).toBe(0)
-    expect(logSpy).toHaveBeenCalledWith(HIVE_UPDATE_USAGE)
-  })
-
-  test('does not contact npm and explains the source-controlled update path', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
-
-    const code = await runHiveUpdateCommand([])
-
-    expect(code).toBe(0)
-    expect(logSpy).toHaveBeenCalledWith('Automatic updates are disabled in this self-hosted build.')
-    expect(logSpy).toHaveBeenCalledWith(
-      'Pull source changes from https://github.com/zhouyuanxinand/hiveteam and rebuild locally.'
-    )
-  })
-
-  test('unknown arguments are rejected without contacting npm', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const code = await runHiveUpdateCommand(['--bogus'])
-
-    expect(code).toBe(1)
-    expect(errorSpy).toHaveBeenCalledWith('Unknown argument: --bogus')
-  })
-})
-
-describe('hive cli dispatch (real subprocess)', () => {
-  // Pin the full chain `process.argv → src/cli/hive.ts dispatch →
-  // runHiveUpdateCommand`, including the fact that the compatibility command
-  // does not fall through to the runtime or invoke npm.
-  test('`hive update --help` exits 0 with the disabled-update usage on stdout', async () => {
-    const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>(
-      (resolve, reject) => {
-        const child = spawn(
-          process.execPath,
-          [
-            join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-            'src/cli/hive.ts',
-            'update',
-            '--help',
-          ],
-          {
-            stdio: ['ignore', 'pipe', 'pipe'],
-          }
-        )
-        const stdout: Buffer[] = []
-        const stderr: Buffer[] = []
-        child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-        child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-        child.on('error', reject)
-        child.on('close', (code) =>
-          resolve({
-            code,
-            stdout: Buffer.concat(stdout).toString('utf8'),
-            stderr: Buffer.concat(stderr).toString('utf8'),
-          })
-        )
+const runHiveCli = (argv: string[]) =>
+  new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'src/cli/hive.ts', ...argv],
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // tsx launches another Node process, so suppress its experimental SQLite
+        // warning through the environment while still checking CLI error output.
+        env: { ...process.env, NODE_NO_WARNINGS: '1' },
       }
     )
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.on('error', reject)
+    child.on('close', (code) =>
+      resolve({
+        code,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8'),
+      })
+    )
+  })
+
+describe('hive update cli (real subprocess)', () => {
+  test.each(['--help', '-h'])('`hive update %s` prints upgrade usage and exits 0', async (flag) => {
+    const result = await runHiveCli(['update', flag])
 
     expect(result.code).toBe(0)
-    expect(result.stdout).toContain('Automatic updates are disabled in this self-hosted build.')
-    expect(result.stdout).toContain('hive update')
-    expect(result.stdout).not.toContain('npm install')
-    // Update help must NOT print the generic `hive` usage with `--port`.
-    expect(result.stdout).not.toContain('--port <port>')
+    expect(result.stdout.trim()).toBe(HIVE_UPDATE_USAGE)
+    expect(result.stdout).toContain('npm install -g hiveteam@latest')
+    expect(result.stdout).toContain('npx --yes hiveteam@latest')
+    expect(result.stderr).toBe('')
+    expect(readdirSync(testDataDir)).toEqual([])
+  })
+
+  test('prints npm and source upgrade instructions without starting the runtime', async () => {
+    const result = await runHiveCli(['update'])
+
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('npm install -g hiveteam@latest')
+    expect(result.stdout).toContain('Then restart HiveTeam:\n  hive')
+    expect(result.stdout).toContain('npx --yes hiveteam@latest')
+    expect(result.stdout).toContain('git pull\n  pnpm install --frozen-lockfile\n  pnpm build')
+    expect(result.stderr).toBe('')
+    expect(readdirSync(testDataDir)).toEqual([])
+  })
+
+  test('rejects unknown arguments with exit code 1 and usage on stderr', async () => {
+    const result = await runHiveCli(['update', '--bogus'])
+
+    expect(result.code).toBe(1)
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toContain('Unknown argument: --bogus')
+    expect(result.stderr).toContain(HIVE_UPDATE_USAGE)
+    expect(readdirSync(testDataDir)).toEqual([])
   })
 })

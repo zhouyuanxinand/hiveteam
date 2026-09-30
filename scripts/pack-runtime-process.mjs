@@ -134,7 +134,7 @@ export const startInstalledRuntime = async ({ entry, cwd, dataDir }) => {
         const result = getResult()
         if (result)
           throw result.error ?? new Error(`Runtime exited: ${result.code ?? result.signal}`)
-        return output.stdout.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)?.[1]
+        return output.stdout.match(/HiveTeam running at http:\/\/127\.0\.0\.1:(\d+)/)?.[1]
       },
       'installed runtime startup',
       60_000

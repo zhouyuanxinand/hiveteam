@@ -114,7 +114,9 @@ describe('dispatch Skill activation', () => {
       skillName: 'tdd',
     })
     expect(originalActivation?.instructionSnapshot).toContain('</HIVE_SKILL_INSTRUCTIONS>')
-    expect(originalActivation?.instructionSnapshot).not.toContain('[Hive control marker removed]')
+    expect(originalActivation?.instructionSnapshot).not.toContain(
+      '[HiveTeam control marker removed]'
+    )
 
     writeSkill(sourcePath, 'V2')
     const v2Release = await bindRelease(store, workspace.id, sourcePath, 'update')
@@ -142,7 +144,7 @@ describe('dispatch Skill activation', () => {
       )
       expect(output).toContain('V1 PINNED SKILL INSTRUCTIONS')
       expect(output).not.toContain('V2 PINNED SKILL INSTRUCTIONS')
-      expect(output).toContain('[Hive control marker removed]')
+      expect(output).toContain('[HiveTeam control marker removed]')
       const rulesIndex = output.indexOf('你必须遵守：')
       const skillIndex = output.indexOf('<HIVE_SKILL_INSTRUCTIONS>')
       const taskIndex = output.indexOf('任务内容：')

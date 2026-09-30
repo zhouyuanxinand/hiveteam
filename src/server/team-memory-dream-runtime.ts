@@ -39,10 +39,10 @@ export const createTeamMemoryDreamRuntime = (services: RuntimeStoreServices) => 
         run.workspaceId,
         orchestratorId,
         [
-          '[Hive system message: Team memory Dream review]',
+          '[HiveTeam system message: Team memory Dream review]',
           'Review this memory plan as the Workspace Orchestrator.',
           ...reviewInputCommands(run.id),
-          'Leave the Dream in review state. Only the user may confirm application in the Hive UI.',
+          'Leave the Dream in review state. Only the user may confirm application in the HiveTeam UI.',
         ].join('\n\n'),
         { requireActiveRun: true }
       )
@@ -72,7 +72,7 @@ export const createTeamMemoryDreamRuntime = (services: RuntimeStoreServices) => 
         run.workspaceId,
         orchestratorId,
         [
-          '[Hive system message: Team memory Dream candidates]',
+          '[HiveTeam system message: Team memory Dream candidates]',
           'Extract reusable facts, decisions, preferences, pitfalls, or procedure references from the frozen protocol evidence.',
           'Omit temporary progress, unverified guesses, and facts already covered by existing memories. Preserve conflicting or uncertain evidence as uncertainty, not a confirmed fact.',
           `Read every input page: team dream input --dream ${run.id} --section generation`,
@@ -154,7 +154,7 @@ export const createTeamMemoryDreamRuntime = (services: RuntimeStoreServices) => 
           ...reviewInputCommands(dream.id),
           'Return findings in normal prose. If recommending replacement suggestions, append JSON after DREAM_REVIEW_JSON.',
           'The JSON shape is {"suggestions":[{"body":"...","kind":"decision|fact|preference|pitfall|procedure_ref","scope":"workspace|user","source_memory_ids":[],"tags":[]}]}.',
-          'Do not submit the Dream. The user must confirm application in the Hive UI.',
+          'Do not submit the Dream. The user must confirm application in the HiveTeam UI.',
         ].join('\n\n')
         const dispatch = await services.teamOps.dispatchTask(workspaceId, workerId, task, {
           fromAgentId: orchestratorId,

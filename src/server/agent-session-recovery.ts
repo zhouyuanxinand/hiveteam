@@ -25,7 +25,7 @@ const pinCaptureLocation = (capture: SessionIdCaptureConfig, root: string) => {
   }
 }
 
-// A cwd is not an agent identity: desktop conversations and other Hive members
+// A cwd is not an agent identity: desktop conversations and other HiveTeam members
 // can share it. Only recover unrecorded sessions carrying the member's marker.
 export const prepareAgentSessionRecovery = ({
   agentId,
@@ -76,7 +76,7 @@ export const prepareAgentSessionRecovery = ({
     )
     if (candidates.length > 1) {
       throw new ConflictError(
-        'Multiple native conversations match this member. Select the intended conversation in the harness before retrying; Hive has not opened a new conversation.'
+        'Multiple native conversations match this member. Select the intended conversation in the harness before retrying; HiveTeam has not opened a new conversation.'
       )
     }
     sessionId = candidates[0]

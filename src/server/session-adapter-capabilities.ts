@@ -63,7 +63,7 @@ const adapters: Record<SessionHarness, AdapterDefinition> = {
       delivery_receipt: evidence(
         'unverified',
         'https://cursor.com/docs/cli/reference/output-format',
-        'Headless structured output does not establish an acceptance receipt for Hive interactive PTY input.'
+        'Headless structured output does not establish an acceptance receipt for HiveTeam interactive PTY input.'
       ),
     },
     advertised: (name, help) =>
@@ -93,12 +93,12 @@ const adapters: Record<SessionHarness, AdapterDefinition> = {
       ownership: evidence(
         'unverified',
         GROK_REFERENCE,
-        'No verified native exclusive-writer mechanism for external processes; a Hive lock cannot prove global ownership.'
+        'No verified native exclusive-writer mechanism for external processes; a HiveTeam lock cannot prove global ownership.'
       ),
       delivery_receipt: evidence(
         'unverified',
         GROK_REFERENCE,
-        'Headless JSON/streaming-json and ACP do not establish an acceptance receipt for Hive interactive PTY input.'
+        'Headless JSON/streaming-json and ACP do not establish an acceptance receipt for HiveTeam interactive PTY input.'
       ),
     },
     advertised: (name, help) =>

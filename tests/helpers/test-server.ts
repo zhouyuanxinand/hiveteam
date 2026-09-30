@@ -10,6 +10,7 @@ import type { PickFolderResponse } from '../../src/server/fs-pick-folder.js'
 import type { GitHubClient } from '../../src/server/github-pull-requests.js'
 import type { OpenWorkspaceService } from '../../src/server/route-types.js'
 import { createRuntimeStore } from '../../src/server/runtime-store.js'
+import { createVersionService, type VersionService } from '../../src/server/version-service.js'
 import { installSyntheticAgentAuthorization } from './authorized-runtime.js'
 
 export interface TestServerContext {
@@ -65,6 +66,7 @@ export const startTestServer = async (
     openWorkspaceService?: OpenWorkspaceService
     pickFolderPath?: string
     pickFolderService?: () => Promise<PickFolderResponse>
+    versionService?: VersionService
   } = {}
 ): Promise<TestServerContext> => {
   const ownsDataDir = !input.dataDir
@@ -86,9 +88,14 @@ export const startTestServer = async (
           supported: true,
         })
       : undefined)
+  const localVersions = createVersionService()
   const app = createApp({
     ...(input.openWorkspaceService ? { openWorkspaceService: input.openWorkspaceService } : {}),
     ...(pickFolderService ? { pickFolderService } : {}),
+    versionService: input.versionService ?? {
+      getVersionInfo: localVersions.getVersionInfo,
+      getLatestVersionInfo: localVersions.getVersionInfo,
+    },
     store,
   })
 

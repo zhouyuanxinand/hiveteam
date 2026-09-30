@@ -58,7 +58,7 @@ describe('multi-CLI session capture', () => {
     expect(doesCapturedSessionExist(join(codexHome, 'other'), capture, sessionId)).toBe(false)
   })
 
-  test('only reuses Codex sessions bound to the Hive agent', () => {
+  test('only reuses Codex sessions bound to the HiveTeam agent', () => {
     const codexHome = makeTempDir('hive-codex-bound-session')
     const cwd = join(codexHome, 'workspace')
     mkdirSync(cwd, { recursive: true })

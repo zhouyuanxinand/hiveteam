@@ -9,7 +9,7 @@ Before a real-model run, select a dedicated account, repository and permitted
 external actions. Configure a hard account/CLI spending limit and a supervisor
 that stops the experiment at the time limit. Use the same task set, acceptance
 definition, model version and role prompts for all three team sizes. Keep failed
-and cancelled dispatch IDs in the set. Configure resource limits through Hive's
+and cancelled dispatch IDs in the set. Configure resource limits through HiveTeam's
 settings before each run and record them, including the Orchestrator's slot.
 
 Create an experiment JSON file with these fields (replace the placeholder IDs and

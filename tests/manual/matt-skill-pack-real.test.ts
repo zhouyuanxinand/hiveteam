@@ -74,7 +74,7 @@ describe('real Matt Skill Pack smoke', () => {
           '  reportTimer = setTimeout(() => {',
           "    const markers = input.split('<HIVE_SKILL_INSTRUCTIONS>').length - 1",
           "    const qualified = input.includes('qualified_name: matt/to-goal')",
-          "    const task = input.includes('Turn this request into a verifiable Hive goal')",
+          "    const task = input.includes('Turn this request into a verifiable HiveTeam goal')",
           "    process.stdout.write('\\nMATT_PROBE markers=' + markers + ' qualified=' + qualified + ' task=' + task + '\\n')",
           '  }, 50)',
           '})',
@@ -220,7 +220,7 @@ describe('real Matt Skill Pack smoke', () => {
         await runTeamCommand([
           'send',
           'Alice',
-          'Turn this request into a verifiable Hive goal',
+          'Turn this request into a verifiable HiveTeam goal',
           '--skill',
           'matt/to-goal',
         ])

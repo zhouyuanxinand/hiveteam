@@ -1,13 +1,27 @@
 import { PROJECT_REPOSITORY_URL } from '../server/package-version.js'
 
+const HIVE_UPDATE_GUIDANCE = [
+  'To update a global npm installation, stop HiveTeam and run:',
+  '  npm install -g hiveteam@latest',
+  'Then restart HiveTeam:',
+  '  hive',
+  '',
+  'If you start HiveTeam with npx, stop HiveTeam and run:',
+  '  npx --yes hiveteam@latest',
+  '',
+  `For a source checkout, pull changes from ${PROJECT_REPOSITORY_URL} and rebuild locally:`,
+  '  git pull',
+  '  pnpm install --frozen-lockfile',
+  '  pnpm build',
+  '',
+  'This command only prints instructions; it does not download or install updates.',
+].join('\n')
+
 export const HIVE_UPDATE_USAGE = [
   'Usage:',
   '  hive update',
   '',
-  'Automatic updates are disabled in this self-hosted build.',
-  `Pull source changes from ${PROJECT_REPOSITORY_URL} and rebuild locally.`,
-  '',
-  'This command never contacts npm or the original Hive release channel.',
+  HIVE_UPDATE_GUIDANCE,
   '',
   'Options:',
   '  -h, --help      Print this help.',
@@ -28,7 +42,6 @@ export const runHiveUpdateCommand = async (argv: string[]): Promise<number> => {
     return 1
   }
 
-  console.log('Automatic updates are disabled in this self-hosted build.')
-  console.log(`Pull source changes from ${PROJECT_REPOSITORY_URL} and rebuild locally.`)
+  console.log(HIVE_UPDATE_GUIDANCE)
   return 0
 }

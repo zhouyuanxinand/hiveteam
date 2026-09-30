@@ -15,7 +15,7 @@ describe('ORCHESTRATOR_REMINDER_TAIL', () => {
   })
 
   test('names the role and the exact dispatch verb so a post-/compact agent can re-anchor', () => {
-    expect(ORCHESTRATOR_REMINDER_TAIL).toContain('Hive Orchestrator')
+    expect(ORCHESTRATOR_REMINDER_TAIL).toContain('HiveTeam Orchestrator')
     expect(ORCHESTRATOR_REMINDER_TAIL).toContain('team send "<worker-name>" "<task>"')
     expect(ORCHESTRATOR_REMINDER_TAIL).toContain('team cancel --dispatch <id> "<reason>"')
   })
@@ -60,7 +60,7 @@ describe('buildWorkerReminderTail', () => {
 
   test('names the role and forbids nested subagents', () => {
     const tail = buildWorkerReminderTail('disp-x')
-    expect(tail).toContain('Hive Worker')
+    expect(tail).toContain('HiveTeam Worker')
     expect(tail).toContain('Do not launch nested CLI subagents')
   })
 })
@@ -82,7 +82,7 @@ describe('buildProtocolDoc', () => {
 
   test('starts with an H1 heading so a tail of the file is still self-identifying', () => {
     const doc = buildProtocolDoc()
-    expect(doc.split('\n')[0]).toBe('# Hive Team Protocol')
+    expect(doc.split('\n')[0]).toBe('# HiveTeam Protocol')
   })
 
   test('renders rule entries as a bulleted list (one bullet per rule, not a single paragraph)', () => {

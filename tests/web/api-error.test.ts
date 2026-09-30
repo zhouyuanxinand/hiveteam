@@ -61,7 +61,7 @@ describe('api error messages', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(startAgentRun('workspace-1', 'workspace-1:orchestrator')).rejects.toThrow(
-      'Reopen Hive from its launcher'
+      'Reopen HiveTeam from its launcher'
     )
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -93,7 +93,7 @@ describe('api error messages', () => {
     for (const result of results) {
       expect(result.status).toBe('rejected')
       if (result.status === 'rejected') {
-        expect(result.reason.message).toContain('Reopen Hive from its launcher')
+        expect(result.reason.message).toContain('Reopen HiveTeam from its launcher')
       }
     }
 

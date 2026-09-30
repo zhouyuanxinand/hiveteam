@@ -42,7 +42,7 @@ export const createUiAuth = (now: () => number = Date.now): UiAuth => {
       bootstraps.delete(bootstrap)
       if (expiresAt === undefined || expiresAt <= now()) {
         throw new ForbiddenError(
-          'UI bootstrap is invalid or expired; reopen Hive from its launcher'
+          'UI bootstrap is invalid or expired; reopen HiveTeam from its launcher'
         )
       }
       const session = randomUUID()

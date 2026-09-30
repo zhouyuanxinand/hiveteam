@@ -364,8 +364,8 @@ export const ExecutionPolicyButton = ({
                         onChange={(event) => setAcknowledged(event.target.checked)}
                       />
                       {zh
-                        ? '我信任这个 CLI，允许此成员不受 Hive 文件、网络和 Git 隔离限制。它可能使用当前系统账户能访问的文件与凭据。'
-                        : 'I trust this CLI and allow this agent to run without Hive file, network, or Git isolation. It may access files and credentials available to my system account.'}
+                        ? '我信任这个 CLI，允许此成员不受 HiveTeam 文件、网络和 Git 隔离限制。它可能使用当前系统账户能访问的文件与凭据。'
+                        : 'I trust this CLI and allow this agent to run without HiveTeam file, network, or Git isolation. It may access files and credentials available to my system account.'}
                     </label>
                     <button
                       type="button"

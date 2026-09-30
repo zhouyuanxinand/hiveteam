@@ -1,10 +1,10 @@
 # 在团队成员窗口完成需求澄清
 
-在主线程请求使用 `grill`、`grilling`、`grill-me` 或 `grill-with-docs` 时，Hive 的启动说明要求 Orchestrator 先把访谈交给成员。主线程不执行访谈，收到最终结论后才拆解和分派任务。
+在主线程请求使用 `grill`、`grilling`、`grill-me` 或 `grill-with-docs` 时，HiveTeam 的启动说明要求 Orchestrator 先把访谈交给成员。主线程不执行访谈，收到最终结论后才拆解和分派任务。
 
 ## 在 Codex 主控终端直接触发
 
-在本机浏览器的 Codex 主控输入框中提交 `$grill-with-docs`（也支持 `$grill`、`$grilling`、`$grill-me`），Hive 会直接接管明确的访谈命令。可以在同一行追加需求简述，或写成 `$matt/grill-with-docs 需求简述`。没有附带简述时，由访谈成员向用户确认主题。无需提前添加成员，也无需等待主控自行生成 `team grill` 命令。
+在本机浏览器的 Codex 主控输入框中提交 `$grill-with-docs`（也支持 `$grill`、`$grilling`、`$grill-me`），HiveTeam 会直接接管明确的访谈命令。可以在同一行追加需求简述，或写成 `$matt/grill-with-docs 需求简述`。没有附带简述时，由访谈成员向用户确认主题。无需提前添加成员，也无需等待主控自行生成 `team grill` 命令。
 
 平台在当前输入框确认该命令后，复用或创建需求访谈员，并投递工作区已绑定的固定版本 Skill。主控不会收到原始 Skill 调用。终端上方显示交接进度和成员名称；排队状态只表示任务已保存，需等待实际投递后在成员窗口回答。
 
@@ -18,7 +18,7 @@
 
 ## 使用流程
 
-1. Workspace 绑定包含访谈 Skill 的 Pack，并在 Orchestrator 的 Profile 中启用该 Skill。新绑定 Matt Pack 时，会推荐可用的 grill 入口；既有 Profile 不会自动改写。更新 Hive 后，需要重启 Orchestrator 才能加载新的启动说明。
+1. Workspace 绑定包含访谈 Skill 的 Pack，并在 Orchestrator 的 Profile 中启用该 Skill。新绑定 Matt Pack 时，会推荐可用的 grill 入口；既有 Profile 不会自动改写。更新 HiveTeam 后，需要重启 Orchestrator 才能加载新的启动说明。
 2. 在主线程提出需求，例如：“用 grilling 澄清邮件原型的需求，由一位成员负责访谈。”无需预先添加成员。
 3. 主线程执行 `team skill list` 确认可用的访谈 Skill，然后转交：
 
@@ -26,7 +26,7 @@
    team grill "澄清邮件原型的目标、边界和验收标准" --skill "matt/grilling"
    ```
 
-4. Hive 复用合适的空闲成员；没有可用成员时，沿用 Orchestrator 的 CLI 预设和模型创建专用需求访谈员，再派发访谈。此操作无需开启通用动态增员，仍受临时成员上限和执行授权约束，不打断已有任务。命令成功返回成员名称和 `dispatch_id`；主线程告知用户应进入哪位成员的窗口。`status=queued` 表示任务已保存、等待启动或投递，不表示成员已经收到；应等待成员就绪后回答。
+4. HiveTeam 复用合适的空闲成员；没有可用成员时，沿用 Orchestrator 的 CLI 预设和模型创建专用需求访谈员，再派发访谈。此操作无需开启通用动态增员，仍受临时成员上限和执行授权约束，不打断已有任务。命令成功返回成员名称和 `dispatch_id`；主线程告知用户应进入哪位成员的窗口。`status=queued` 表示任务已保存、等待启动或投递，不表示成员已经收到；应等待成员就绪后回答。
 5. 点击主界面的“进入成员窗口回答”，在该成员终端或下方具名的自由回答框中答复。支持多行文字；Ctrl/⌘ + Enter 发送。关闭窗口保留该成员的浏览器草稿，不与其他成员或主线程混用。
 6. 成员展示最终方案并等待用户明确确认，然后通过正式的 `team report --stdin --dispatch <id> --outcome success` 回传精简结论。等待用户答复不算任务阻塞。
 
@@ -40,13 +40,13 @@
 team grill "澄清邮件原型的目标、边界和验收标准" --skill "matt/grilling" --request-id "<先前打印的 UUID>"
 ```
 
-不要为同一次交接另造请求 ID。更改同一 ID 的需求或 Skill 会被拒绝。HTTP 401/403、网络错误和派发失败都不表示“团队为空”；主线程应停止并报告故障，不得改在主线程自行访谈。出现 401 时，可从 Hive 重新启动 Orchestrator 以重新注入当前凭据；若仍失败，应检查其运行时连接。此提示不代表重启一定能修复故障，也不会自动重启正在运行的终端。权限或执行授权问题需先解决，再使用原 ID 重试。
+不要为同一次交接另造请求 ID。更改同一 ID 的需求或 Skill 会被拒绝。HTTP 401/403、网络错误和派发失败都不表示“团队为空”；主线程应停止并报告故障，不得改在主线程自行访谈。出现 401 时，可从 HiveTeam 重新启动 Orchestrator 以重新注入当前凭据；若仍失败，应检查其运行时连接。此提示不代表重启一定能修复故障，也不会自动重启正在运行的终端。权限或执行授权问题需先解决，再使用原 ID 重试。
 
 ### Codex shared daemon 与 401
 
-本次排查确认：Codex 0.159.0 未被旧的 CLI 版本识别逻辑识别，启动时遗漏了 `--no-daemon`。Codex 的共享 daemon 可以跨 Hive 重启继续运行；由它执行的工具可能沿用旧的 Workspace、Agent 和凭据环境，导致当前主控窗口中的 `team skill list` 被 Hive 返回 401。此时请求尚未进入 `team grill` 的自动建员流程，不能据此判断团队成员是否存在。
+本次排查确认：Codex 0.159.0 未被旧的 CLI 版本识别逻辑识别，启动时遗漏了 `--no-daemon`。Codex 的共享 daemon 可以跨 HiveTeam 重启继续运行；由它执行的工具可能沿用旧的 Workspace、Agent 和凭据环境，导致当前主控窗口中的 `team skill list` 被 HiveTeam 返回 401。此时请求尚未进入 `team grill` 的自动建员流程，不能据此判断团队成员是否存在。
 
-修复后的启动路径会在 CLI 已获得执行授权、并确认支持 `--no-daemon` 时，为 Hive 管理的 Codex 会话启用独立进程，恢复会话时也保持隔离，使工具使用本次启动注入的身份。旧版或能力未知的 CLI 不会被盲目添加该参数。更新后须从 Hive 重新启动受影响的 Orchestrator，再执行 `team skill list` 验证连接；只有成功后才运行上述 `team grill --skill` 命令。若已取得交接请求 ID，仍使用原 ID 重试。
+修复后的启动路径会在 CLI 已获得执行授权、并确认支持 `--no-daemon` 时，为 HiveTeam 管理的 Codex 会话启用独立进程，恢复会话时也保持隔离，使工具使用本次启动注入的身份。旧版或能力未知的 CLI 不会被盲目添加该参数。更新后须从 HiveTeam 重新启动受影响的 Orchestrator，再执行 `team skill list` 验证连接；只有成功后才运行上述 `team grill --skill` 命令。若已取得交接请求 ID，仍使用原 ID 重试。
 
 身份校验保持不变：失效、缺失或属于其他成员的凭据仍会被拒绝，不会从报错中自动找回凭据，也不会把鉴权失败当作空团队继续建员。无需输出或复制凭据内容来排查。
 
@@ -58,6 +58,6 @@ team grill "澄清邮件原型的目标、边界和验收标准" --skill "matt/g
 - 访谈记录应放在 `docs/clarifications/<dispatch-id>/interview.md`，最终方案放在同目录 `final.md`。只报告目标、范围、决策、约束、验收标准、风险和最终文档路径，不附逐轮问答。主线程不读取访谈记录。
 - 最终报告沿用持久化 outbox。主线程暂时离线时，报告保留，恢复后继续投递。
 
-这是 Hive 的路由与上下文管理，不是文件系统安全沙箱。成员仍共享项目文件；原生 CLI 在 Hive API 之外直接读取全局 Skill/文件的行为由该 CLI 控制。主线程遵循路由说明、成员遵循最终汇报合同仍是必要条件。不要手动把访谈答案粘贴到主线程。
+这是 HiveTeam 的路由与上下文管理，不是文件系统安全沙箱。成员仍共享项目文件；原生 CLI 在 HiveTeam API 之外直接读取全局 Skill/文件的行为由该 CLI 控制。主线程遵循路由说明、成员遵循最终汇报合同仍是必要条件。不要手动把访谈答案粘贴到主线程。
 
-回答发送显示“不确定”时，先检查接收成员的终端，再查询提交状态。Hive 不自动重发，避免重复回答。已有旧版全局 Skill 或启动说明导致主线程自行访谈时，重启 Orchestrator，并显式要求使用上述 `team grill --skill` 路径。
+回答发送显示“不确定”时，先检查接收成员的终端，再查询提交状态。HiveTeam 不自动重发，避免重复回答。已有旧版全局 Skill 或启动说明导致主线程自行访谈时，重启 Orchestrator，并显式要求使用上述 `team grill --skill` 路径。

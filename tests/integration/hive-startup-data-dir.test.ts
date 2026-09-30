@@ -192,7 +192,7 @@ const start = async (
   const ready =
     mode === 'desktop' || mode === 'web'
       ? /STARTUP_READY=(http:\/\/127\.0\.0\.1:\d+)/
-      : /Hive running at (http:\/\/127\.0\.0\.1:\d+)/
+      : /HiveTeam running at (http:\/\/127\.0\.0\.1:\d+)/
   await expect
     .poll(
       () => {

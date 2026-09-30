@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for proposing an idea.
 
-        Hive is local-first and deliberately narrow on scope. For larger ideas,
+        HiveTeam is local-first and deliberately narrow on scope. For larger ideas,
         please open an issue first to align before sending a PR.
   - type: textarea
     id: problem
@@ -20,7 +20,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What would you like Hive to do?
+      description: What would you like HiveTeam to do?
     validations:
       required: true
   - type: textarea

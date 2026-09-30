@@ -19,7 +19,7 @@ export const dispatchMessageGuidance = (dispatchId: string) =>
 
 export const buildDispatchMessagePayload = (message: DispatchMessage) =>
   [
-    '[Hive system message: dispatch conversation]',
+    '[HiveTeam system message: dispatch conversation]',
     `dispatch_id: ${message.dispatch_id}`,
     `message_id: ${message.id}`,
     `sequence: ${message.sequence}`,

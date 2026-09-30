@@ -10,7 +10,7 @@ Enable dynamic staffing in the member panel first and authorize the CLI presets 
 
 The source must have a report and a clean, committed version available to the existing code-review service. The request records the source dispatch, report revision, full source and comparison SHAs, repository identity, and focus. The reviewer starts at that recorded commit even if the source advances while it waits for capacity. Its checkout is checked again before launch. Changes to that checkout block another start and remain available for inspection.
 
-`--cli` is optional. Without it, Hive prefers an authorized preset different from the source worker's preset, then the first available authorized preset. A different preset does not guarantee a different model. A new reviewer uses the usual role, launch, Skill-readiness and execution-policy paths; it does not inherit the Orchestrator's execution grants.
+`--cli` is optional. Without it, HiveTeam prefers an authorized preset different from the source worker's preset, then the first available authorized preset. A different preset does not guarantee a different model. A new reviewer uses the usual role, launch, Skill-readiness and execution-policy paths; it does not inherit the Orchestrator's execution grants.
 
 ## Retries and failures
 
@@ -30,7 +30,7 @@ Inside the reviewer:
 
 Findings never accept the source report, pass verification, or integrate code. The existing verification and explicit acceptance/integration gates remain in force. If the source report revision, commit, comparison baseline, repository or cleanliness changes, the history marks earlier findings as stale while preserving their text.
 
-After the review is reported or cancelled and the reviewer has no other open dispatches, Hive retires it and stops its PTY. Retirement preserves the child report, pending report delivery, identity, configuration and worktree. A pending report can still be delivered after restart. Cleanup remains explicit, including when the reviewer left modified or untracked files.
+After the review is reported or cancelled and the reviewer has no other open dispatches, HiveTeam retires it and stops its PTY. Retirement preserves the child report, pending report delivery, identity, configuration and worktree. A pending report can still be delivered after restart. Cleanup remains explicit, including when the reviewer left modified or untracked files.
 
 Expand **Temporary reviewer tasks** in the source report's code-review panel to see the latest 50 requests, their fixed versions, findings, retirement, and retained-directory details. Desktop users can open the existing worktree resources panel from there. Older requests remain available by ID through the authenticated UI endpoint:
 

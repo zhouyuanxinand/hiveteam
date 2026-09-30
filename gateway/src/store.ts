@@ -211,7 +211,7 @@ export const createGatewayStore = (options: {
       const record: DeviceRecord = {
         id: input.id,
         daemonId: input.daemonId,
-        name: input.name.trim().slice(0, 80) || 'Hive device',
+        name: input.name.trim().slice(0, 80) || 'HiveTeam device',
         devicePubkey: input.devicePubkey,
         createdAt: existing?.createdAt ?? input.now ?? Date.now(),
         revokedAt: null,

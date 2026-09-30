@@ -6,7 +6,7 @@ let initialization: Promise<void> | null = null
 
 export class UiSessionRequiredError extends Error {
   constructor() {
-    super('UI session expired or unavailable. Reopen Hive from its launcher to sign in.')
+    super('UI session expired or unavailable. Reopen HiveTeam from its launcher to sign in.')
     this.name = 'UiSessionRequiredError'
   }
 }

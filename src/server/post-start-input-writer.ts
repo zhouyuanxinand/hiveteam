@@ -71,7 +71,7 @@ const hasCodexHooksReviewPrompt = (output: string) =>
 /**
  * Codex can render its normal input line before asynchronously showing its
  * first-run directory and hook trust screens. Handle those screens before
- * treating a `›` line as a prompt, otherwise the Hive bootstrap message is
+ * treating a `›` line as a prompt, otherwise the HiveTeam bootstrap message is
  * written into the confirmation menu and the orchestrator never reaches its
  * usable prompt.
  */
@@ -184,7 +184,7 @@ const getOpenCodePromptReadyState = (output: string) => {
 /**
  * OpenCode sometimes finishes rendering a turn with its compact `▣ … · … ·
  * 12ms` footer before it draws the visible composer. Treat that footer as a
- * prompt-ready signal, but wait for one stable second so the Hive envelope is
+ * prompt-ready signal, but wait for one stable second so the HiveTeam envelope is
  * not pasted into a still-updating TUI frame.
  */
 const isOpenCodePromptStillSettling = (
@@ -280,7 +280,7 @@ const submitPastedInteractiveInput = (
       checkPendingRemoteInput(runId, 1)
     } catch (error) {
       if (!(error instanceof RemotePermissionError))
-        console.error('[hive] pending terminal input validation failed', error)
+        console.error('[hiveteam] pending terminal input validation failed', error)
       return
     }
     if (!waitForPasteAck) {
@@ -475,7 +475,7 @@ export const createAwaitablePostStartInputWriter = (
           return
         }
         // Interactive CLIs can stop here for first-run trust, login, consent,
-        // or update prompts. Never use a timer fallback: injecting the Hive
+        // or update prompts. Never use a timer fallback: injecting the HiveTeam
         // contract into one of those screens corrupts onboarding and can make
         // the process look hung. The writer keeps polling until the CLI shows
         // its actual input prompt or the PTY exits.
@@ -549,7 +549,7 @@ export const createPostStartInputWriter = (
       if (text.trim().length === 0) return
       checkPendingRemoteInput(runId, Buffer.byteLength(text))
       void write(runId, text).catch((error: unknown) => {
-        console.error('[hive] Codex automatic input stopped', { runId, error })
+        console.error('[hiveteam] Codex automatic input stopped', { runId, error })
       })
     }
   }
@@ -567,7 +567,7 @@ export const createPostStartInputWriter = (
       } catch (error) {
         if (isInitialAttempt) throw error
         if (!(error instanceof RemotePermissionError))
-          console.error('[hive] pending terminal input validation failed', error)
+          console.error('[hiveteam] pending terminal input validation failed', error)
         return
       }
       let output: string | null
@@ -612,7 +612,7 @@ export const createPostStartInputWriter = (
               'screen'
             )
           ).catch((error: unknown) => {
-            console.error('[hive] Codex automatic input stopped', { runId, error })
+            console.error('[hiveteam] Codex automatic input stopped', { runId, error })
           })
           return
         }

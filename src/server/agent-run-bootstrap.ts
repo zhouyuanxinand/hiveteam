@@ -168,7 +168,7 @@ export const startAgentRunCapture = ({
     SESSION_CAPTURE_INTERVAL_MS,
     controller.signal
   ).catch((error: unknown) => {
-    console.error(`[hive] session capture failed for ${agentId}`, error)
+    console.error(`[hiveteam] session capture failed for ${agentId}`, error)
   })
   return () => controller.abort()
 }

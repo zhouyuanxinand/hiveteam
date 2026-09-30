@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Pull the two upstream agent prompt repos and materialize them into
-// vendor/marketplace/<lang>/ as a snapshot the hive runtime serves locally.
+// vendor/marketplace/<lang>/ as a snapshot the HiveTeam runtime serves locally.
 // Run before each release: pnpm sync:marketplace
 //
 // Strategy: download the entire repo as a tarball in one gh-authenticated
@@ -226,9 +226,9 @@ This directory mirrors [${sourceInfo.owner}/${sourceInfo.repo}](https://github.c
 - Synced: ${new Date().toISOString()}
 - License: MIT (see LICENSE in this directory)
 
-All markdown content is unmodified from upstream. Hive only filters out top-level
+All markdown content is unmodified from upstream. HiveTeam only filters out top-level
 meta files (READMEs, CATALOG, etc.) and parses YAML frontmatter to build the
-manifest. To refresh, run \`pnpm sync:marketplace\` at the hive repo root.
+manifest. To refresh, run \`pnpm sync:marketplace\` at the HiveTeam repo root.
 `
 
 const syncOne = async (lang, options) => {

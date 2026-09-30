@@ -184,7 +184,7 @@ test('the configured OS startup entry launches the real platform and shuts down 
     .poll(
       () => {
         if (entry.child.exitCode !== null) throw new Error(entry.output())
-        return entry.output().includes(`Hive running at http://127.0.0.1:${port}`)
+        return entry.output().includes(`HiveTeam running at http://127.0.0.1:${port}`)
       },
       { timeout: 15000 }
     )

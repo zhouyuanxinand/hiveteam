@@ -8,7 +8,7 @@ export class RuntimeAlreadyOwnedError extends Error {
 
   constructor(readonly dataDir: string) {
     super(
-      `Another Hive runtime owns this data directory: ${dataDir}. Close it before starting another runtime.`
+      `Another HiveTeam runtime owns this data directory: ${dataDir}. Close it before starting another runtime.`
     )
     this.name = 'RuntimeAlreadyOwnedError'
   }

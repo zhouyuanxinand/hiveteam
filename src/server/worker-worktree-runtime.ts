@@ -90,7 +90,7 @@ export const createWorkerWorktreeRuntime = (db: Database, dataDir: string | null
     create(workspace: WorkspaceSummary, workerId: string, pin?: PinnedWorkerCommit) {
       return exclusive(workspace.id, async () => {
         if (!dataDir)
-          throw new ConflictError('Isolated workers require a persistent Hive data directory.')
+          throw new ConflictError('Isolated workers require a persistent HiveTeam data directory.')
         const version = await readVerificationVersion(workspace.path)
         if (
           !version.repoRoot ||
@@ -123,7 +123,7 @@ export const createWorkerWorktreeRuntime = (db: Database, dataDir: string | null
         const rootReal = await realpath(root)
         if (rootReal === version.repoRoot || rootReal.startsWith(`${version.repoRoot}${sep}`))
           throw new ConflictError(
-            'Hive data must be outside the project repository to create isolated workers.'
+            'HiveTeam data must be outside the project repository to create isolated workers.'
           )
         const id = randomUUID()
         const checkoutPath = join(rootReal, id)

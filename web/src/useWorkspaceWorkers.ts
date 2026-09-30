@@ -78,7 +78,7 @@ export const useWorkspaceWorkers = (workspaceIds: readonly string[]) => {
         .catch((error: unknown) => {
           if (!cancelled) {
             failureCount = Math.min(failureCount + 1, 4)
-            console.error('[hive] swallowed:workspaceWorkers.list', error)
+            console.error('[hiveteam] swallowed:workspaceWorkers.list', error)
           }
         })
         .finally(() => {

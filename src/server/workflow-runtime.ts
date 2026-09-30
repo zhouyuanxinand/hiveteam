@@ -235,7 +235,7 @@ export const createWorkflowRuntime = ({
       return
     }
     void dispatchReady(runId).catch((error: unknown) => {
-      console.error('[hive] workflow reconciliation failed', { runId, error })
+      console.error('[hiveteam] workflow reconciliation failed', { runId, error })
     })
   }
 
@@ -258,9 +258,9 @@ export const createWorkflowRuntime = ({
         artifacts: candidate.artifacts,
       }))
     const lines = [
-      `[Hive Workflow: ${sanitizePromptData(run.name, 100)}]`,
+      `[HiveTeam Workflow: ${sanitizePromptData(run.name, 100)}]`,
       `Workflow step: ${sanitizePromptData(step.id, 100)}`,
-      'Complete only this step and report through the normal Hive team protocol.',
+      'Complete only this step and report through the normal HiveTeam team protocol.',
       'Include the dispatch_id supplied with this attempt in every report; never reuse a previous attempt id.',
       step.quality
         ? `Declare --outcome success|failed|blocked|partial when reporting. Dependencies require ALL of: ${step.quality.all_of.join(', ')}. A report is separate from review and verification.`
@@ -402,7 +402,7 @@ export const createWorkflowRuntime = ({
           )
             failRun(reconciled ?? run, error)
           else
-            console.error('[hive] workflow dispatch failed; original responsibility retained', {
+            console.error('[hiveteam] workflow dispatch failed; original responsibility retained', {
               runId,
               stepId: candidate.id,
               dispatchId: owned,
@@ -601,7 +601,7 @@ export const createWorkflowRuntime = ({
       if (step?.quality) schedule(run.id)
       else if (step?.status === 'completed' && run.status === 'running') {
         void dispatchReady(run.id).catch((error: unknown) => {
-          console.error('[hive] workflow dependency dispatch failed', error)
+          console.error('[hiveteam] workflow dependency dispatch failed', error)
           const latest = get(workspaceId, run.id)
           if (latest) failRun(latest, error)
         })

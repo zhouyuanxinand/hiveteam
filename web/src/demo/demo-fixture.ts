@@ -11,7 +11,7 @@ export const DEMO_WORKSPACE: WorkspaceSummary = {
  * The orchestrator is split out from `DEMO_WORKERS` to match production:
  * `listWorkers` excludes the orchestrator from the team list. Threading it
  * into the workers array would render queen as a worker card alongside alice
- * and bob, which is not how Hive actually behaves.
+ * and bob, which is not how HiveTeam actually behaves.
  */
 export const DEMO_ORCHESTRATOR = {
   id: 'demo-orch',

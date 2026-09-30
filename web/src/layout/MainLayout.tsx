@@ -11,6 +11,7 @@ import {
 type MainLayoutProps = {
   children: ReactNode
   hideTopbarActions?: boolean
+  updateCheckEnabled?: boolean
   onToggleTaskGraph?: (() => void) | undefined
   onToggleActivity?: (() => void) | undefined
   onToggleMemory?: (() => void) | undefined
@@ -31,6 +32,7 @@ type MainLayoutProps = {
 export const MainLayout = ({
   children,
   hideTopbarActions = false,
+  updateCheckEnabled = true,
   onToggleTaskGraph,
   onToggleActivity,
   onToggleMemory,
@@ -58,6 +60,7 @@ export const MainLayout = ({
       <Topbar
         actions={topbarActions}
         hideActions={hideTopbarActions}
+        updateCheckEnabled={updateCheckEnabled}
         onToggleTaskGraph={onToggleTaskGraph}
         onToggleActivity={onToggleActivity}
         onToggleMemory={onToggleMemory}

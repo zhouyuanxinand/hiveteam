@@ -264,7 +264,7 @@ export const createRemotePairing = (deps: RemotePairingDeps): RemotePairing => {
       }
       const record = deps.deviceStore.insert({
         id: entry.deviceId,
-        name: normalizeName(opts.name) ?? entry.deviceName ?? 'Hive device',
+        name: normalizeName(opts.name) ?? entry.deviceName ?? 'HiveTeam device',
         keys: entry.sessionKeys,
         devicePublicKey: entry.devicePublicKey,
       })

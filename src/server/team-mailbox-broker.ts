@@ -59,7 +59,7 @@ export const createTeamMailboxBroker = async (input: {
   hivePort: string
   isActive: () => boolean
 }) => {
-  if (!/^\d+$/u.test(input.hivePort)) throw new BadRequestError('Invalid Hive runtime port')
+  if (!/^\d+$/u.test(input.hivePort)) throw new BadRequestError('Invalid HiveTeam runtime port')
   const root = join(input.root, randomUUID())
   const requests = join(root, 'requests')
   const responses = join(root, 'responses')
@@ -205,7 +205,7 @@ export const createTeamMailboxBroker = async (input: {
     draining = drain()
       .catch((error: unknown) => {
         closed = true
-        console.error('[hive] team mailbox stopped', error)
+        console.error('[hiveteam] team mailbox stopped', error)
       })
       .finally(() => {
         draining = undefined

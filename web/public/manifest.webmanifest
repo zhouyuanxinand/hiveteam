@@ -1,6 +1,6 @@
 {
-  "name": "Hive — Multi-agent CLI workbench",
-  "short_name": "Hive",
+  "name": "HiveTeam — Multi-agent CLI workbench",
+  "short_name": "HiveTeam",
   "description": "Browser-native multi-CLI agent collaboration workbench. Coordinate Claude Code, Codex, Gemini, OpenCode as a real PTY team.",
   "start_url": "/",
   "scope": "/",
@@ -38,7 +38,7 @@
       "sizes": "1672x941",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Hive multi-agent workspace overview"
+      "label": "HiveTeam multi-agent workspace overview"
     }
   ],
   "shortcuts": [
@@ -52,7 +52,7 @@
     {
       "name": "Try Demo",
       "short_name": "Demo",
-      "description": "Open Hive with a pre-recorded demo team",
+      "description": "Open HiveTeam with a pre-recorded demo team",
       "url": "/?action=try-demo",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }

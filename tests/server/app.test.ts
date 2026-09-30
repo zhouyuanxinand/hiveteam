@@ -42,17 +42,19 @@ const startServer = async () => {
 
 const startServerWithVersionInfo = async () => {
   const store = createRuntimeStore({ agentManager: createAgentManager() })
+  const versionInfo = {
+    current_version: '1.4.0',
+    install_hint: 'npm install -g hiveteam@latest',
+    latest_version: '1.4.0',
+    package_name: 'hiveteam',
+    release_url: 'https://github.com/zhouyuanxinand/hiveteam',
+    update_available: false,
+  }
   const app = createApp({
     store,
     versionService: {
-      getVersionInfo: async () => ({
-        current_version: '1.4.0',
-        install_hint: 'git pull',
-        latest_version: '1.4.0',
-        package_name: 'hiveteam',
-        release_url: 'https://github.com/zhouyuanxinand/hiveteam',
-        update_available: false,
-      }),
+      getVersionInfo: async () => versionInfo,
+      getLatestVersionInfo: async () => versionInfo,
     },
   })
 
@@ -110,7 +112,7 @@ describe('runtime http app', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       current_version: '1.4.0',
-      install_hint: 'git pull',
+      install_hint: 'npm install -g hiveteam@latest',
       latest_version: '1.4.0',
       package_name: 'hiveteam',
       release_url: 'https://github.com/zhouyuanxinand/hiveteam',

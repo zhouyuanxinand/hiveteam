@@ -379,7 +379,7 @@ export const initializeRuntimeDatabase = (db: Database) => {
     applySchemaVersion23(db)
     db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(23, Date.now())
   } else {
-    // Published Hive builds used v23 before Team Memory arrived in v26.
+    // Earlier published builds used v23 before Team Memory arrived in v26.
     // Keep this idempotent bootstrap so a database moving to HiveTeam still
     // receives the compatible memory tables without depending on official
     // later-version migrations.

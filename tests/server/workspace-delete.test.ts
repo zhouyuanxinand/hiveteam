@@ -79,7 +79,7 @@ const configureAndStartAgent = async (
 }
 
 describe('workspace delete API', () => {
-  test('DELETE /api/workspaces/:id stops active agents and removes workspace records only from Hive', async () => {
+  test('DELETE /api/workspaces/:id stops active agents and removes workspace records only from HiveTeam', async () => {
     const server = await startTestServer()
     try {
       const cookie = await getUiCookie(server.baseUrl)

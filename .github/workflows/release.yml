@@ -36,6 +36,36 @@ jobs:
           path: ${{ runner.temp }}/hive-release/
           if-no-files-found: error
 
+  publish:
+    name: Publish to npm
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [build-artifact, verify, installed-package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.14.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/hive-release/
+      - name: Publish the verified archive without rebuilding
+        env:
+          HIVE_RELEASE_MANIFEST: ${{ runner.temp }}/hive-release/release-manifest.json
+          HIVE_RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          node scripts/publish-release-artifact.mjs
+          --artifact "$HIVE_RELEASE_MANIFEST"
+          --release-tag "$HIVE_RELEASE_TAG"
+
   verify:
     name: Source (${{ matrix.os }}, ${{ matrix.arch }})
     needs: build-artifact

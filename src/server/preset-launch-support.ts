@@ -57,18 +57,18 @@ export const withPresetResumeArgs = (
     !doesCapturedSessionExist(cwd, sessionIdCapture, lastSessionId, discriminator)
   ) {
     throw new ConflictError(
-      `Saved native session ${lastSessionId} is unavailable or does not belong to this member. Restore its original harness session files and retry. Hive retained the binding and did not start a new conversation.`
+      `Saved native session ${lastSessionId} is unavailable or does not belong to this member. Restore its original harness session files and retry. HiveTeam retained the binding and did not start a new conversation.`
     )
   }
   // Do not treat the presence of a Codex `thread-writer-locks/<id>.lock`
   // file as proof that another process still owns the session. Codex uses an
   // OS-level file lock, and its own startup path probes that lock and removes
   // files left behind by a crashed process. A plain existence check here made
-  // every machine restart look like an active-writer conflict, so Hive skipped
+  // every machine restart look like an active-writer conflict, so HiveTeam skipped
   // `codex resume` and silently opened a new conversation instead.
   //
   // The native CLI remains the authority for genuine concurrent ownership: it
-  // will return its active-writer error without causing Hive to discard the
+  // will return its active-writer error without causing HiveTeam to discard the
   // persisted session pointer.
   const args = config.args ?? []
   const codex = sessionIdCapture?.source === 'codex_session_jsonl_dir'

@@ -52,7 +52,7 @@ else
   )
 if (mode === 'delayed-composer') {
   // Native Codex can briefly draw a prompt, switch to onboarding/loading,
-  // then paint its actual composer after Hive has seen that first prompt.
+  // then paint its actual composer after HiveTeam has seen that first prompt.
   setTimeout(() => {
     composerVisible = false
     process.stdout.write('\x1b[2J\x1b[HLoading Codex...\r\n')

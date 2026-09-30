@@ -242,7 +242,10 @@ export const createRemotePermissionStore = (
     },
     blockAfterAuditFailure(error: unknown) {
       auditFailed = true
-      console.error('[Hive] Remote execution audit failed; new remote writes are disabled.', error)
+      console.error(
+        '[HiveTeam] Remote execution audit failed; new remote writes are disabled.',
+        error
+      )
     },
     canRead(deviceId: string, workspaceId: string) {
       try {

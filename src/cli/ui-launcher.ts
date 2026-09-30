@@ -12,7 +12,7 @@ const openBrowser = (url: string): Promise<void> =>
           : ['xdg-open', [url]]
     execFile(command, args, { windowsHide: true }, (error) => {
       // The OS error includes argv (and therefore the one-time token).
-      if (error) reject(new Error('Could not open the browser. Use the Hive desktop launcher.'))
+      if (error) reject(new Error('Could not open the browser. Use the HiveTeam desktop launcher.'))
       else resolve()
     })
   })
@@ -32,7 +32,7 @@ export const installUiLauncher = (store: RuntimeStore, port: number) => {
   }
   const reopen = () => {
     const url = `http://127.0.0.1:${port}/#hive_bootstrap=${store.createUiBootstrap()}`
-    void openBrowser(url).catch((error: Error) => console.error(`[hive] ${error.message}`))
+    void openBrowser(url).catch((error: Error) => console.error(`[hiveteam] ${error.message}`))
   }
   const handleInput = (input: Buffer) => {
     if (input.toString().trim().toLowerCase() === 'o') reopen()
@@ -43,7 +43,7 @@ export const installUiLauncher = (store: RuntimeStore, port: number) => {
   } else {
     reopen()
     if (process.stdin.isTTY) {
-      console.log('[hive] Enter o to reopen an authenticated browser window.')
+      console.log('[hiveteam] Enter o to reopen an authenticated browser window.')
       process.stdin.on('data', handleInput)
     }
   }

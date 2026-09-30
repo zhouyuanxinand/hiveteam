@@ -25,13 +25,13 @@ test('inherited launcher IPC authenticates HTTP without exposing bootstrap in lo
   })
   try {
     const deadline = Date.now() + 15_000
-    while (!/Hive running at http:\/\/127\.0\.0\.1:\d+/.test(output)) {
+    while (!/HiveTeam running at http:\/\/127\.0\.0\.1:\d+/.test(output)) {
       if (child.exitCode !== null || Date.now() > deadline) {
         throw new Error(`Runtime did not start: ${output}`)
       }
       await new Promise((resolve) => setTimeout(resolve, 25))
     }
-    const port = output.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)?.[1]
+    const port = output.match(/HiveTeam running at http:\/\/127\.0\.0\.1:(\d+)/)?.[1]
     const origin = `http://127.0.0.1:${port}`
     const anonymous = await fetch(`${origin}/api/ui/session`)
     expect(anonymous.status).toBe(403)

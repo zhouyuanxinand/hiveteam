@@ -27,6 +27,7 @@ describe('remote access routes', () => {
       connected: false,
       enabled: false,
       logged_in: false,
+      gateway_url: null,
       status: 'disabled',
     })
 

@@ -211,7 +211,7 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
           : []),
         ...(!validGrant && privateHome
           ? [
-              `Restricted CLI authentication directory: ${privateHome}. Log in locally with CODEX_HOME set to this directory; Hive never copies an existing account.`,
+              `Restricted CLI authentication directory: ${privateHome}. Log in locally with CODEX_HOME set to this directory; HiveTeam never copies an existing account.`,
               'Restricted support is pinned to Linux x64, Codex 0.155.1 and gpt-5.4. The local sandbox backend is checked immediately before launch.',
               'Sensitive-path restrictions apply to current files. Existing Git history can still contain previously committed secrets.',
             ]
@@ -435,7 +435,7 @@ export const createExecutionPolicyRuntime = (input: ExecutionPolicyRuntimeInput)
           )
           if (policyRoot === cwd || policyRoot.startsWith(`${cwd}${sep}`))
             throw new ExecutionPolicyError(
-              'Hive policy data must be outside the writable workspace.',
+              'HiveTeam policy data must be outside the writable workspace.',
               ['policy_directory_overlaps_workspace']
             )
           const cliHome = join(policyRoot, 'codex-home')

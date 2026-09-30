@@ -1,5 +1,5 @@
 /**
- * Wire constants shared with the Hive desktop remote tunnel.
+ * Wire constants shared with the HiveTeam desktop remote tunnel.
  *
  * The gateway must not inspect or transform binary data frames. It only
  * originates the small control band and relays opaque bytes between peers.

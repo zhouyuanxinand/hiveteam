@@ -2,7 +2,7 @@
 
 Public coding rules for AI-assisted work in this repository.
 
-Hive's unpublished implementation plans and product strategy are not published
+HiveTeam's unpublished implementation plans and product strategy are not published
 here. For public contributions, use the current code, README, tests, and issue
 discussion as the source of truth. If behavior is unclear, ask before changing
 protocol semantics.

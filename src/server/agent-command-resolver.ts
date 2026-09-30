@@ -31,7 +31,7 @@ const isPackagedDesktopAppExecutable = (path: string) => {
 const canExecute = (path: string, platform = process.platform): boolean => {
   if (platform === 'win32') {
     // WindowsApps contains protected desktop-app resources. They can appear
-    // on PATH but cannot be spawned as a child PTY by Hive. A standalone CLI
+    // on PATH but cannot be spawned as a child PTY by HiveTeam. A standalone CLI
     // shim (for example a .cmd) is required instead.
     if (isWindowsAppPackagePath(path)) return false
     // CreateProcess does not treat arbitrary extensionless files as CLI

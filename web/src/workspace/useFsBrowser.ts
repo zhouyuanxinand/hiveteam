@@ -61,7 +61,7 @@ export const useFsBrowser = (enabled: boolean) => {
         // Probe is racy by design — newer selections cancel older ones via the
         // probeTokenRef gate, so a stale probe rejecting is expected, not a bug.
         // Log to dev console anyway so genuine network failures are visible.
-        console.debug('[hive] discarded:fsBrowser.probe (likely stale token)', error)
+        console.debug('[hiveteam] discarded:fsBrowser.probe (likely stale token)', error)
       })
   }, [selected])
 

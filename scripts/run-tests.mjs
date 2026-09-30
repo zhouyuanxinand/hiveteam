@@ -70,14 +70,14 @@ try {
   const signal = interrupted ?? result.signal
   process.exitCode = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : (result.code ?? 1)
 } catch (error) {
-  console.error('[hive test runner]', error)
+  console.error('[hiveteam test runner]', error)
   process.exitCode = 1
 } finally {
   process.off('SIGINT', onInterrupt)
   process.off('SIGTERM', onTerminate)
   // Never clean the inherited HIVE_DATA_DIR or a caller-supplied directory.
   if (dirname(resolve(root)) !== temporaryParent || !basename(root).startsWith('hive-tests-')) {
-    console.error(`[hive test runner] Refusing to remove an unexpected test directory: ${root}`)
+    console.error(`[hiveteam test runner] Refusing to remove an unexpected test directory: ${root}`)
     process.exitCode = 1
   } else {
     try {
@@ -85,7 +85,7 @@ try {
       // moment to release directory handles, so retry cleanup without hiding failure.
       await rm(root, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 })
     } catch (error) {
-      console.error(`[hive test runner] Could not remove ${root}`, error)
+      console.error(`[hiveteam test runner] Could not remove ${root}`, error)
       process.exitCode = process.exitCode || 1
     }
   }

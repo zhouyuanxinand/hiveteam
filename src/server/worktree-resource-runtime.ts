@@ -62,7 +62,7 @@ export const createWorktreeResourceRuntime = (input: {
           !/^[0-9a-f-]{36}$/u.test(basename(checkout))
         )
           throw new ConflictError(
-            'The recorded directory is outside Hive’s owned worktree directory.'
+            'The recorded directory is outside HiveTeam’s owned worktree directory.'
           )
         const repository = (await runGit(checkout, ['rev-parse', '--show-toplevel'])).trim()
         const common = async (cwd: string) =>

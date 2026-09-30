@@ -226,7 +226,7 @@ export const createResourceStartQueue = (input: {
         scheduled = false
         if (closed) return
         running = drain()
-          .catch((error) => console.error('[hive] resource queue failed', error))
+          .catch((error) => console.error('[hiveteam] resource queue failed', error))
           .finally(() => {
             running = null
             if (wakeAgain) {
@@ -263,7 +263,7 @@ export const createResourceStartQueue = (input: {
     if (callback) {
       const pending = Promise.resolve()
         .then(() => callback(dto(cancelled)))
-        .catch((error) => console.error('[hive] queued execution cancellation failed', error))
+        .catch((error) => console.error('[hiveteam] queued execution cancellation failed', error))
         .finally(() => pendingCancellations.delete(pending))
       pendingCancellations.add(pending)
     }

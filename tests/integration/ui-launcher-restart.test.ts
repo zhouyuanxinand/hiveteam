@@ -28,7 +28,7 @@ const startRuntime = (dataDir: string) => {
     async ready() {
       const deadline = Date.now() + 15_000
       while (Date.now() < deadline && child.exitCode === null) {
-        const origin = output.match(/Hive running at (http:\/\/127\.0\.0\.1:\d+)/)?.[1]
+        const origin = output.match(/HiveTeam running at (http:\/\/127\.0\.0\.1:\d+)/)?.[1]
         if (origin) return origin
         await new Promise((resolve) => setTimeout(resolve, 25))
       }

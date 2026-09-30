@@ -40,8 +40,8 @@ export const SupervisorAccessButton = () => {
       )
       setMessage(
         zh
-          ? '配置已复制。Hive 重启后请重新获取。'
-          : 'Configuration copied. Get a new capability after restarting Hive.'
+          ? '配置已复制。HiveTeam 重启后请重新获取。'
+          : 'Configuration copied. Get a new capability after restarting HiveTeam.'
       )
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Authorization failed')
@@ -87,8 +87,8 @@ export const SupervisorAccessButton = () => {
             </div>
             <Dialog.Description className="mt-3 text-sm text-sec">
               {zh
-                ? '复制的配置允许受信任的 MCP 客户端查看工作区、派发和取消目标。仅放入你选择的客户端配置；授权在 Hive 重启时失效。'
-                : 'The copied configuration lets your trusted MCP client inspect workspaces, start goals, and cancel goals. Add it only to your chosen client. Authorization expires when Hive restarts.'}
+                ? '复制的配置允许受信任的 MCP 客户端查看工作区、派发和取消目标。仅放入你选择的客户端配置；授权在 HiveTeam 重启时失效。'
+                : 'The copied configuration lets your trusted MCP client inspect workspaces, start goals, and cancel goals. Add it only to your chosen client. Authorization expires when HiveTeam restarts.'}
             </Dialog.Description>
             <button
               type="button"

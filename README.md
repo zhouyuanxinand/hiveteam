@@ -16,21 +16,14 @@ Use HiveTeam when one agent is not enough, but a pile of terminal windows is not
 
 [![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
 [![Node](https://img.shields.io/badge/node-22.18%2B%20%2822.x%29%20%7C%2024.x-3c873a.svg)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#platform-support)
 
 English · [简体中文](./README.zh.md)
 
-> This repository is a source-controlled, self-hosted HiveTeam fork. It runs on
-> `127.0.0.1` by default and does not query npm or the original Hive release
-> channel for updates.
->
-> Build and update it from this repository so the running code always matches
-> the commit you selected.
-
-<p align="center">
-  <img src="./assets/hive-team-view.png" alt="Hive workbench with a 4-agent team — orchestrator dispatching while workers run" />
-</p>
+> HiveTeam is self-hosted and runs on `127.0.0.1` by default. Install a published
+> release from npm, or build a chosen commit from this repository. Updates are
+> explicit; the runtime does not automatically install new releases.
 
 ## Why HiveTeam
 
@@ -44,9 +37,9 @@ awkward:
 - Worker progress disappears into scrollback.
 - Restart recovery depends on each CLI's native session behavior.
 
-Hive adds the coordination layer without replacing the CLIs. The Orchestrator
+HiveTeam adds the coordination layer without replacing the CLIs. The Orchestrator
 is a real `agy` / `claude` / `codex` / `opencode` / `gemini` / `hermes` /
-`qwen` process, not a scripted PM. Workers are real CLI agents too. Hive
+`qwen` process, not a scripted PM. Workers are real CLI agents too. HiveTeam
 injects a small `team` command into their shells, so they can dispatch,
 report, and keep a shared markdown task graph at `<workspace>/.hive/tasks.md`.
 
@@ -100,19 +93,26 @@ Prerequisites:
 - Node.js 22.18 or newer within 22.x, or Node.js 24.x.
 - To run real tasks, at least one supported agent CLI installed, authenticated,
   and available on `PATH`. Basic workspaces can be created before installing a CLI.
+- Git and GitHub access for the default Skill Packs; choose Basic workspace mode
+  to start without downloading them.
 
-Clone, install, and start this fork:
+Download and start the published npm package with:
 
 ```bash
-git clone https://github.com/zhouyuanxinand/hiveteam.git
-cd hiveteam
-npm install
-npm start
+npx --yes hiveteam@latest
 ```
 
-`npm start` launches both the local HiveTeam runtime and the Vite web app, then
-opens an authenticated browser window, normally on `http://127.0.0.1:5180/`. The existing
-`pnpm dev` command remains available for pnpm-based development.
+Or install the `hive` command for repeated use:
+
+```bash
+npm install -g hiveteam@latest
+hive
+```
+
+The npm package includes the built runtime and web UI. You do not need a source
+checkout, pnpm, or a frontend build step. See [Development](#development) to
+run from a source checkout, and [npm releases](./docs/npm-release.md) for the
+maintainer publishing setup.
 
 The platform launcher recovers unexpectedly stopped services. **Resources → Platform recovery** also offers current-user sign-in startup on Windows and macOS, off by default. Changes apply at the next sign-in; a normal exit does not restart the platform immediately. See [Platform recovery and sign-in startup](./docs/platform-recovery.md) for recovery limits and CLI path setup.
 
@@ -129,11 +129,21 @@ For a packaged installation, `hive` starts the production UI and opens an
 authenticated browser window. Use `hive --port 4010` for a specific local port.
 The launcher delivers a one-time sign-in link that expires after 60 seconds;
 the UI removes it from the address bar when signing in. The printed localhost
-URL alone does not issue a management session. After restarting Hive or opening
+URL alone does not issue a management session. After restarting HiveTeam or opening
 a different browser profile, enter `o` in the launcher's terminal or reopen from
 the desktop tray. Existing windows can refresh while their runtime is running.
 
-To update the source-controlled build:
+To update a global npm installation, stop HiveTeam and run:
+
+```bash
+npm install -g hiveteam@latest
+hive
+```
+
+For an `npx` installation, stop HiveTeam and run `npx --yes hiveteam@latest` again.
+You can select a specific release with `hiveteam@<version>` in either command.
+
+To update a source checkout:
 
 ```bash
 git pull origin main
@@ -141,10 +151,15 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-Restart the running Hive process after rebuilding. The compatibility command
-`hive update` is intentionally local-only and never installs from npm.
+Restart the running HiveTeam process after rebuilding. `hive update` prints the
+npm and source update commands; it does not install an update automatically.
 
-Install Hive as an app (optional):
+When a newer npm release is available, an **Upgrade to latest** hint appears next
+to the page's version number. Open it to copy the global-install or `npx` command,
+then stop HiveTeam, upgrade, and restart it. The page checks in the background;
+an unavailable registry does not interrupt your work.
+
+Install HiveTeam as an app (optional):
 
 Open `http://127.0.0.1:3000/` in Chrome, Edge, or Brave and click the install
 icon at the right edge of the browser's omnibox. The PWA launches in its own
@@ -153,25 +168,25 @@ dock-anchored window without browser chrome and shows **Add Workspace** /
 currently don't implement the install-prompt protocol, so the omnibox icon
 only appears in Chromium-based browsers.
 
-The Hive daemon must still be running for the PWA to do anything; if the
-runtime isn't reachable when you launch the app, you'll see a "Hive runtime
+The HiveTeam daemon must still be running for the PWA to do anything; if the
+runtime isn't reachable when you launch the app, you'll see a "HiveTeam runtime
 is not running" page that auto-reloads once `hive` is back on `127.0.0.1`.
 The PWA install scope is keyed by origin, so `hive --port 4011` installs as
 a separate app from `hive --port 3000`. To uninstall, visit `chrome://apps`,
-right-click the Hive tile, and choose **Remove from Chrome…**.
+right-click the HiveTeam tile, and choose **Remove from Chrome…**.
 
-Hive asks the browser to confirm before closing the tab or PWA window so an
+HiveTeam asks the browser to confirm before closing the tab or PWA window so an
 accidental close shortcut (Cmd-W on macOS, Ctrl-W on Windows/Linux) doesn't
 drop your session. Modern browsers gate that prompt on prior page interaction
 — if you open the PWA and immediately press the close shortcut without
 clicking or typing anywhere first, it still closes cleanly. That's a browser
-policy, not a Hive bug.
+policy, not a HiveTeam bug.
 
 First-run flow:
 
 1. Create a workspace from a project folder.
 2. Keep the default installation of `matt` and `code-janitor`, or explicitly choose Basic mode to skip default packs and create offline.
-3. Hive creates `<workspace>/.hive/tasks.md`. Choose and check an Orchestrator preset,
+3. HiveTeam creates `<workspace>/.hive/tasks.md`. Choose and check an Orchestrator preset,
    then start it explicitly (or select the creation dialog's start option). Its session receives the internal `team` command.
 4. Add workers from the Team Members panel.
 5. Ask the Orchestrator to delegate work. It sends tasks with
@@ -226,7 +241,7 @@ defaults are added on creation. Existing workspaces are not migrated. Pack-name 
 directory conflicts fail visibly without overwriting user files or starting an
 agent. If a later default Pack fails, earlier bindings from this creation are undone;
 an unsafe rollback retains the workspace and receipts for recovery. Other CLIs use
-Hive's role catalogs and `team skill` on demand; binding a
+HiveTeam's role catalogs and `team skill` on demand; binding a
 Pack does not execute its scripts.
 
 Open **Skills** in the active Workspace topbar to bind one locked Skill source
@@ -234,7 +249,7 @@ for the whole team:
 
 1. In **Packs**, choose GitHub and enter
    `tt-a1i/matt-skills-with-to-goal` with ref `main`.
-2. Click **Resolve release**. Hive fetches without Git submodules or hooks,
+2. Click **Resolve release**. HiveTeam fetches without Git submodules or hooks,
    inventories scripts without running them, and previews the exact commit and
    full-tree digest.
 3. Assign only the relevant Skills to each role profile. Native exposure is an
@@ -260,10 +275,10 @@ read an authorized text reference with
 
 For Codex, a natively exposed Skill can also be invoked as `$to-goal` after
 restarting the affected member. Other CLIs and custom commands remain fully
-functional through Hive prompt delivery even when their native Skill directory
+functional through HiveTeam prompt delivery even when their native Skill directory
 is unknown. Matt Skills that assume Codex forks or built-in subagents
 (`spec-executor`, `roundtable`, and `execute-spec-in-fork`) are marked as
-requiring a Hive adapter and are not selected by default.
+requiring a HiveTeam adapter and are not selected by default.
 
 ## How It Works
 
@@ -273,7 +288,7 @@ Browser UI on 127.0.0.1
           |
           | HTTP + WebSocket
           v
-Hive runtime
+HiveTeam runtime
   SQLite metadata, PTY lifecycle, task dispatch
           |
           +-- Orchestrator PTY
@@ -292,7 +307,7 @@ Workspace task graph:
 Three details matter:
 
 - Agents are real CLI processes, not simulated subagents.
-- `team` is injected only inside Hive-managed agent sessions by prepending the
+- `team` is injected only inside HiveTeam-managed agent sessions by prepending the
   package's internal bin directory to `PATH`; it is not installed as a global
   command.
 - The task graph is a markdown file in the workspace, so you can inspect or
@@ -313,8 +328,8 @@ Three details matter:
 | Grok Build | `grok` | Managed identity and recovery adapters; native releases remain unverified |
 | Custom | Any executable | User configured |
 
-Hive does not install these CLIs for you. Install and authenticate them in the
-same shell environment you use to start Hive.
+HiveTeam does not install these CLIs for you. Install and authenticate them in the
+same shell environment you use to start HiveTeam.
 
 Presets do not add bypass flags. Agents default to a restricted execution policy;
 the **Permissions** control shows whether that CLI/platform combination can enforce
@@ -322,7 +337,7 @@ it. Unsupported combinations require a local user's explicit unsafe exception fo
 that agent. Restricted Codex uses a separate CLI home, so authentication must be
 configured for that home. See [SECURITY.md](SECURITY.md) for the verified boundary.
 
-## What Hive Provides
+## What HiveTeam Provides
 
 - Workspace sidebar for switching between local projects.
 - Orchestrator and worker terminals backed by real PTYs.
@@ -333,11 +348,11 @@ configured for that home. See [SECURITY.md](SECURITY.md) for the verified bounda
   reviews, and verification; the Workflows panel shows results and provides
   stop and rerun controls. Scheduled workflows are not available.
 - Team memory: keep workspace constraints, long-running context, and team
-  decisions in Hive so later dispatches can carry the right background.
+  decisions in HiveTeam so later dispatches can carry the right background.
   [Dream](./docs/memory-dream.md) prepares explicit memory changes or extracts
   candidates from new protocol messages through the workspace Orchestrator.
   Inspect the sources and apply manually; changes have receipts and conflict-aware rollback.
-- Dispatch change review: in Git workspaces Hive records the HEAD commit when
+- Dispatch change review: in Git workspaces HiveTeam records the HEAD commit when
   a dispatch is created, so the Activity center can show the working-tree diff
   produced while that dispatch was being worked on, including new untracked
   files. Reviewing changes no longer means trusting a worker's report at face
@@ -349,25 +364,30 @@ configured for that home. See [SECURITY.md](SECURITY.md) for the verified bounda
 - Local SQLite metadata under `%USERPROFILE%\.config\hive` on Windows and `~/.config/hive`
   on macOS / Linux by default, or `$HIVE_DATA_DIR` when set.
 
-Hive relies on verified CLI sandbox capabilities for restricted execution; it does
+HiveTeam relies on verified CLI sandbox capabilities for restricted execution; it does
 not implement its own OS sandbox, multi-user auth, or any bundled agent model.
 It coordinates the CLIs you already run locally.
 
 ## Remote Access (optional, off by default)
 
-If you want to reach your running Hive from your phone while you're away,
+If you want to reach your running HiveTeam from your phone while you're away,
 enable optional **Remote access**. After the phone signs in and pairs with the
-desktop, it reaches the Hive Web UI through an end-to-end encrypted tunnel.
+desktop, it reaches the HiveTeam Web UI through an end-to-end encrypted tunnel.
 The desktop selects each device's visible workspaces. Remote access starts
 read-only; write actions require a local approval lasting at most ten minutes.
 
+Remote access requires a self-hosted gateway; HiveTeam has no default gateway
+address. On first login, run `hive remote login --gateway <url>` with your gateway
+URL. Once that URL is saved, `hive remote login` reuses it. See
+[self-hosted gateway setup](./gateway/README.md).
+
 Important boundaries:
 
-- **Off by default.** If you never enable Remote access, Hive remains
+- **Off by default.** If you never enable Remote access, HiveTeam remains
   local-first.
-- **A gateway is required.** Hive relays the phone-to-daemon connection through
-  a gateway; your machine connects outbound and does not require opening a
-  public port.
+- **A self-hosted gateway is required.** HiveTeam relays the phone-to-daemon
+  connection through your gateway. Your machine connects outbound and does not
+  require opening a public port.
 - **Data and execution stay local.** The gateway routes authenticated
   connections; it does not run your agents or store workspace contents.
 - **The desktop is the trust root.** New device pairing must be confirmed at
@@ -398,24 +418,24 @@ on exit, so a CLI that fails during that startup is not reported as successful.
 
 ## Safety Model
 
-Hive is a local development tool, not a hosted service.
+HiveTeam is a local development tool, not a hosted service.
 
 - When Remote access is off, the runtime binds to `127.0.0.1`. Do not expose
-  the Hive port through a public tunnel, reverse proxy, or shared network
+  the HiveTeam port through a public tunnel, reverse proxy, or shared network
   interface.
 - Remote devices have explicit workspace scopes and temporary action grants;
   they cannot approve their own permissions or change execution security policy.
 - Restricted workers start only when the required CLI sandbox capabilities are
-  verified. Unsafe exceptions run with the authority of the account running Hive.
+  verified. Unsafe exceptions run with the authority of the account running HiveTeam.
 - Open only trusted workspaces. Worktrees alone are not filesystem sandboxes.
 - Agent tokens are session scoped, generated by the local runtime, injected into
   agent process environments, and not intended as internet-facing credentials.
-- Hive authenticates local users, agents, and remote devices separately. It does
+- HiveTeam authenticates local users, agents, and remote devices separately. It does
   not provide an OS boundary against unrestricted processes under the same user.
 - The browser UI token is a local session guard, not protection against other
   processes already running as your OS user.
 
-Read [SECURITY.md](SECURITY.md) before using Hive with sensitive repositories.
+Read [SECURITY.md](SECURITY.md) before using HiveTeam with sensitive repositories.
 
 The local **Resources** panel controls execution limits: eight globally, four per
 workspace, twelve worker members per workspace, and one verification per workspace
@@ -443,15 +463,15 @@ Use an absolute path to select the same data from different launch locations:
 
 ```powershell
 $env:HIVE_DATA_DIR = 'D:\HiveData'
-npm start
+hive
 ```
 
 ```bash
-HIVE_DATA_DIR=/absolute/path/to/hive-data npm start
+HIVE_DATA_DIR=/absolute/path/to/hive-data hive
 ```
 
 Windows and WSL have separate home directories and environment settings, so each
-has its own default. Hive does not translate paths between them or automatically
+has its own default. HiveTeam does not translate paths between them or automatically
 find, copy, or merge databases from other directories. An explicit override is
 honored even when another directory already contains saved data.
 
@@ -484,7 +504,7 @@ same shell, and available on `PATH`.
 
 **Port already in use**
 
-Start Hive with another local port:
+Start HiveTeam with another local port:
 
 ```bash
 hive --port 4020
@@ -492,7 +512,7 @@ hive --port 4020
 
 **Source changes do not appear after pulling**
 
-Stop the running Hive process, pull the selected branch, rebuild, and start the
+Stop the running HiveTeam process, pull the selected branch, rebuild, and start the
 local runtime again:
 
 ```bash
@@ -509,7 +529,7 @@ hive` and use the built `node dist/src/cli/hive.js` entry point explicitly.
 
 Check `node --version`, `node -p "process.platform + '/' + process.arch"`, and
 that optional dependencies were installed. Remove `--omit=optional` or equivalent
-package-manager settings and reinstall for the machine running Hive. Do not copy
+package-manager settings and reinstall for the machine running HiveTeam. Do not copy
 `node_modules` between operating systems or architectures.
 
 The built package supports `npm install --ignore-scripts <archive.tgz>` and
@@ -525,14 +545,14 @@ Install `zenity`, or paste the workspace path manually.
 
 **Folder picker on Windows**
 
-Windows uses Hive's in-browser server filesystem browser when adding a
+Windows uses HiveTeam's in-browser server filesystem browser when adding a
 workspace. It starts from "This PC" and lets you enter drives such as `C:\` or
 `D:\`. If the target folder is not listed, expand the advanced path entry and
 paste the absolute path.
 
-**A global Hive command is still starting the old build on Windows**
+**A global HiveTeam command is still starting the old build on Windows**
 
-Use the source build directly while developing this fork:
+Use the source build directly while developing HiveTeam:
 
 ```powershell
 pnpm build
@@ -545,7 +565,7 @@ repository in `PATH`.
 **Codex reports missing model metadata**
 
 Codex 0.155.1 can fall back to missing metadata for `gpt-6-sol` on a cold start.
-Update the CLI Hive actually launches and restart the member after its task finishes.
+Update the CLI HiveTeam actually launches and restart the member after its task finishes.
 See [model metadata troubleshooting](docs/codex-model-metadata.md) for version checks
 and execution-permission implications.
 
@@ -559,24 +579,28 @@ that still point at `node.exe ...\@openai\codex\bin\codex.js`.
 
 **Tasks file conflict banner appears**
 
-Hive detected a newer `.hive/tasks.md` on disk. Use `Reload` to accept the file
+HiveTeam detected a newer `.hive/tasks.md` on disk. Use `Reload` to accept the file
 from disk, or `Keep Local` to keep the editor contents and save again.
 
 **Worker appears stuck in `working`**
 
-Hive does not guess task completion from process activity. Workers move back to
+HiveTeam does not guess task completion from process activity. Workers move back to
 `idle` when they call `team report`. If a worker is blocked, stop or restart it
 from the UI.
 
 ## Development
 
 ```bash
-pnpm install
+git clone https://github.com/zhouyuanxinand/hiveteam.git
+cd hiveteam
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
 Development mode runs the runtime on `127.0.0.1:4010`; Vite runs on
 `127.0.0.1:5180` and proxies API and WebSocket traffic to the runtime.
+`npm start` uses the same development launcher and opens an authenticated
+browser window.
 
 ### Optional desktop shell
 
@@ -614,7 +638,7 @@ pnpm test
 `pnpm check` runs Biome. `pnpm typecheck` checks the runtime, web UI, tests,
 and gateway without emitting build output. `pnpm build` verifies the production
 build. `pnpm test` runs the full suite through the shared runner with an isolated
-temporary Hive data directory, as CI does on macOS, Linux, and Windows.
+temporary HiveTeam data directory, as CI does on macOS, Linux, and Windows.
 `pnpm test:windows` is an alias for the same full suite.
 
 To run one test file with the same isolation:
@@ -667,7 +691,10 @@ Source checks run on the same three runners with Node 24.14.0. They restore
 `dist/` and `web/dist/` from the verified archive for integration tests. Each
 installed-package job uploads its report even when acceptance fails. This table
 describes the configured coverage; the workflow run and its reports provide the
-pass/fail evidence. The workflow does not publish a package.
+pass/fail evidence. After all build, source verification, and installed-package
+checks pass, a `v*` tag triggers npm publishing of that same archive. Stable
+versions use `latest`; prereleases use `next`. Package ownership and trusted
+publishing must be configured first; see [npm releases](./docs/npm-release.md).
 
 Production-style local run:
 
@@ -679,15 +706,15 @@ node dist/src/cli/hive.js --port 4010
 The production server serves the built web UI directly. No Vite server is
 needed after `pnpm build`.
 
-## Source-controlled build
+## Release channels
 
-This fork is intentionally maintained from Git. There is no official npm
-update channel in the application; pull the repository and rebuild when you
-choose to move to a newer commit.
+Use `hiveteam@latest` for a stable npm release and `hiveteam@next` for a published
+prerelease. Source checkouts remain available for development or running a
+specific Git commit. The runtime does not automatically update either installation.
 
 ## Status
 
-Hive is in alpha. This repository includes multi-CLI agent presets, member
+HiveTeam is in alpha. This repository includes multi-CLI agent presets, member
 management, JSON Workflows, team memory, PWA installation, and optional Remote
 access. The checked-out commit is the source of truth for the running build.
 
@@ -698,7 +725,7 @@ run on a remote SSH box**, [squad](https://github.com/mco-org/squad) takes the
 same idea down a different path — SQLite as the protocol layer, one terminal
 per agent. The two projects don't replace each other; pick by workflow:
 
-- **Hive** — visual workbench, one-click restart, workspace sidebar, easier to demo to a team
+- **HiveTeam** — visual workbench, one-click restart, workspace sidebar, easier to demo to a team
 - **squad** — lives in tmux, SSH remote dev, no extra background process, Windows servers
 
 ## Acknowledgements
@@ -708,8 +735,8 @@ The built-in template marketplace ships snapshots of two community-maintained pr
 - English (used when the UI is set to EN): [`msitarzewski/agency-agents`](https://github.com/msitarzewski/agency-agents)
 - Chinese (used when the UI is set to 中文): [`jnMetaCode/agency-agents-zh`](https://github.com/jnMetaCode/agency-agents-zh)
 
-Upstream content is mirrored verbatim, license files are kept under `vendor/marketplace/<lang>/LICENSE`, and snapshots are refreshed by `pnpm sync:marketplace` before each Hive release.
+Upstream content is mirrored verbatim, license files are kept under `vendor/marketplace/<lang>/LICENSE`, and snapshots are refreshed by `pnpm sync:marketplace` before each HiveTeam release.
 
 ## License
 
-Hive is open source under the Business Source License 1.1. Personal use, internal deployment, embedding, and forks are permitted — see [LICENSE.BSL](LICENSE.BSL) for the exact boundary. Use of the Hive name, logo, and visual identity is covered by [TRADEMARK.md](TRADEMARK.md).
+HiveTeam is distributed under the [MIT License](./LICENSE).

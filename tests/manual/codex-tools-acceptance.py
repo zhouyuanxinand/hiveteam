@@ -1,4 +1,4 @@
-"""Offline acceptance of the pinned real Codex CLI and Hive's generated profile.
+"""Offline acceptance of the pinned real Codex CLI and HiveTeam's generated profile.
 
 Run under native Linux/WSL with --codex <absolute binary> --report <absolute JSON>.
 Only a synthetic loopback Responses server is used. No user home/config is read.
@@ -391,7 +391,7 @@ def main():
                 require(observed[key] in BLOCKED, f"{role} {key} escaped")
             for key in ["private_parent_environment_visible", "model_key_visible", "supervisor_environment_visible", "parent_proc_secret_visible"]:
                 require(observed[key] is False, f"{role} {key} leaked")
-            require(observed["hive_workspace"] == "synthetic-workspace", "Allowed Hive environment missing")
+            require(observed["hive_workspace"] == "synthetic-workspace", "Allowed HiveTeam environment missing")
             require(observed["direct_tcp"] == "EPERM", "Tool network was not denied")
             require(observed["team_token_is_unprivileged"] is True, "The host team token was exposed to the tool")
             require(observed["mailbox_ack"] is True, "Production team CLI did not receive report/status ACK")

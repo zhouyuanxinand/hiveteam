@@ -92,7 +92,7 @@ describe('hive cli end to end', () => {
 
       expect(exitCode).toBe(1)
       expect(stderr).toContain(
-        `Hive could not start because port ${address.port} is already in use.`
+        `HiveTeam could not start because port ${address.port} is already in use.`
       )
       expect(stderr).toContain(`http://127.0.0.1:${address.port}`)
       expect(stderr).toContain(`hive --port ${address.port + 1}`)
@@ -308,7 +308,7 @@ describe('hive cli end to end', () => {
       }
       const onStdout = (chunk: Buffer) => {
         stdout += chunk.toString()
-        const match = stdout.match(/Hive running at (http:\/\/127\.0\.0\.1:\d+)\r?\n/)
+        const match = stdout.match(/HiveTeam running at (http:\/\/127\.0\.0\.1:\d+)\r?\n/)
         if (!match?.[1]) return
         cleanup()
         resolveReady(match[1])
@@ -318,11 +318,13 @@ describe('hive cli end to end', () => {
       }
       const onError = (error: Error) => {
         cleanup()
-        rejectReady(new Error(`Hive CLI failed before readiness: ${error.message}\n${stderr}`))
+        rejectReady(new Error(`HiveTeam CLI failed before readiness: ${error.message}\n${stderr}`))
       }
       const onClose = (code: number | null, signal: NodeJS.Signals | null) => {
         cleanup()
-        rejectReady(new Error(`Hive CLI closed before readiness (${code ?? signal}):\n${stderr}`))
+        rejectReady(
+          new Error(`HiveTeam CLI closed before readiness (${code ?? signal}):\n${stderr}`)
+        )
       }
       output.on('data', onStdout)
       errorOutput.on('data', onStderr)

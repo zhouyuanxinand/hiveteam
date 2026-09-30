@@ -1,1 +1,1 @@
-export const wrapSystemMessage = (content: string) => `[Hive 系统消息：${content}]`
+export const wrapSystemMessage = (content: string) => `[HiveTeam 系统消息：${content}]`

@@ -307,7 +307,7 @@ export const useTerminalRun = (
         // to redraw its native composer after a restored TUI. Calling focus()
         // before the snapshot is parsed is ineffective because xterm does not
         // yet know it should emit that sequence. A deliberate blur/focus after
-        // the write callback makes the CLI redraw its own input row; Hive does
+        // the write callback makes the CLI redraw its own input row; HiveTeam does
         // not fabricate a prompt in the browser.
         if (activeElement && container.contains(activeElement)) terminal.blur()
         terminal.focus()

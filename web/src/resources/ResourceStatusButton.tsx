@@ -136,8 +136,8 @@ export const ResourceStatusButton = () => {
                 />
                 <p className="text-xs text-ter">
                   {zh
-                    ? '等待验证时，可以显式停止闲置成员或提高上限。验证执行可在对应任务的交付面板取消。此处限制 Hive 管理的执行数量，不是 CPU 或内存限额。'
-                    : 'To unblock a verification, stop an idle agent or raise the limits. Cancel active verifications in their task delivery panel. These limits count Hive-managed executions; they are not CPU or memory limits.'}
+                    ? '等待验证时，可以显式停止闲置成员或提高上限。验证执行可在对应任务的交付面板取消。此处限制 HiveTeam 管理的执行数量，不是 CPU 或内存限额。'
+                    : 'To unblock a verification, stop an idle agent or raise the limits. Cancel active verifications in their task delivery panel. These limits count HiveTeam-managed executions; they are not CPU or memory limits.'}
                 </p>
                 <ResourceOccupants
                   status={status}

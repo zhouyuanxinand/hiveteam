@@ -99,7 +99,7 @@ const finalizeWithProbe = async (path: string): Promise<PickFolderResponse> => {
 }
 
 const macOsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => {
-  const script = 'POSIX path of (choose folder with prompt "Select Hive workspace")'
+  const script = 'POSIX path of (choose folder with prompt "Select HiveTeam workspace")'
   const result = await run('osascript', ['-e', script], {})
 
   if (result.spawnError?.code === 'ENOENT') {
@@ -125,7 +125,7 @@ const macOsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => {
 const linuxPick = async (run: RunPickCommand): Promise<PickFolderResponse> => {
   const result = await run(
     'zenity',
-    ['--file-selection', '--directory', '--title=Select Hive workspace'],
+    ['--file-selection', '--directory', '--title=Select HiveTeam workspace'],
     {}
   )
   if (result.spawnError?.code === 'ENOENT') {
@@ -161,7 +161,7 @@ const windowsPick = async (run: RunPickCommand): Promise<PickFolderResponse> => 
     '$owner.Opacity = 0',
     '$owner.Show()',
     '$dialog.RootFolder = [System.Environment+SpecialFolder]::MyComputer',
-    '$dialog.Description = "Select Hive workspace folder. Documents inside it are detected after you click OK."',
+    '$dialog.Description = "Select HiveTeam workspace folder. Documents inside it are detected after you click OK."',
     '$dialog.ShowNewFolderButton = $false',
     '$result = $dialog.ShowDialog($owner)',
     `if ($result -eq [System.Windows.Forms.DialogResult]::OK) { $encodedPath = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($dialog.SelectedPath)); [Console]::Out.WriteLine("${WINDOWS_PICKER_PATH_PREFIX}" + $encodedPath); exit 0 }`,

@@ -934,7 +934,7 @@ describe('schema version', () => {
         'orchestrator',
         'Orchestrator',
         'orchestrator',
-        '你是 Hive 的 Orchestrator。维护 tasks.md。',
+        '你是 HiveTeam 的 Orchestrator。维护 tasks.md。',
         'claude',
         '[]',
         '{}',

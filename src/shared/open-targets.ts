@@ -44,7 +44,7 @@ export const isOpenTargetSupported = (
 /**
  * The id the server will actually attempt to launch. If the user's saved
  * preference is unsupported on the current platform (e.g. they picked iTerm2
- * on a Mac, then opened Hive on Windows), fall back to the platform default
+ * on a Mac, then opened HiveTeam on Windows), fall back to the platform default
  * rather than erroring out — a stale preference shouldn't break the button.
  */
 export const getEffectiveOpenTargetId = (

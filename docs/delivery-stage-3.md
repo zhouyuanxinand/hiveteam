@@ -6,7 +6,7 @@ explicit integration action for accepted code. It extends stages 1 and 2 on
 
 ## Working directories
 
-Select **Use an isolated working directory** when adding a worker. Hive requires
+Select **Use an isolated working directory** when adding a worker. HiveTeam requires
 a clean, committed Git branch and a persistent data directory outside the project
 repository. It creates a `hive/worker-<uuid>` branch at the current commit and a
 Git worktree under `<HIVE_DATA_DIR>/worker-worktrees/`. A workspace opened at a
@@ -48,7 +48,7 @@ verification ID again. Integration requires:
   using the shared project directory. Other isolated workers may keep running.
 - A target commit that is an ancestor of the source commit.
 
-The operation is serialized with Hive's workspace Git operations and agent
+The operation is serialized with HiveTeam's workspace Git operations and agent
 starts. Git uses `merge --ff-only` with hooks disabled, so the result is the
 verified commit itself. SQLite records the integrated verification and time;
 repeating an already completed integration preserves its receipt.
@@ -77,7 +77,7 @@ node dist/src/cli/hive.js --port 4018
 1. Create two workers with isolated directories and dispatch independent tasks.
    Confirm their `pwd`/`Get-Location` values and branches differ, and that edits
    leave the original project unchanged.
-2. Restart Hive. Start a worker and confirm it returns to its recorded directory.
+2. Restart HiveTeam. Start a worker and confirm it returns to its recorded directory.
 3. Commit an isolated change, report success, verify, and accept it. Inspect both
    the task diff and integration diff; confirm they contain the isolated change.
 4. Stop the source worker and agents using the shared directory. Refresh the
@@ -91,7 +91,7 @@ node dist/src/cli/hive.js --port 4018
 ## Lifecycle and limits
 
 Worker worktrees are retained across shutdown and worker/workspace deletion.
-Deletion removes Hive's records, not the code. Use `git worktree list` to inspect
+Deletion removes HiveTeam's records, not the code. Use `git worktree list` to inspect
 retained checkouts and standard Git worktree removal after reviewing their output.
 Failed or interrupted preparation remains visible and cannot start in a shared
 directory as a fallback. A hard crash can leave a checkout requiring inspection.

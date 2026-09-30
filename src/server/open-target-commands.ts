@@ -135,7 +135,7 @@ type WindowsCommandMetadata = {
 }
 
 /**
- * Windows GUI installers normally put these shims on PATH, but Hive may be
+ * Windows GUI installers normally put these shims on PATH, but HiveTeam may be
  * started by a shortcut, a service, or an older shell whose PATH predates the
  * editor installation. Keep the app names here rather than accepting a path
  * from the web client, then resolve the launcher from PATH, standard install
@@ -246,7 +246,7 @@ const findWindowsAppExecutableFromRegistry = async (
 }
 
 /**
- * Resolve a Windows command shim without trusting that the Hive process was
+ * Resolve a Windows command shim without trusting that the HiveTeam process was
  * launched with the user's interactive PATH. The returned value is still a
  * fixed launcher discovered from the machine; no workspace input participates
  * in the lookup.

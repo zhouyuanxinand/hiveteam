@@ -2,7 +2,6 @@ export const REMOTE_GATEWAY_URL_KEY = 'remote_gateway_url'
 export const REMOTE_DAEMON_TOKEN_KEY = 'remote_daemon_token'
 export const REMOTE_DAEMON_ID_KEY = 'remote_daemon_id'
 export const REMOTE_ENABLED_KEY = 'remote_enabled'
-export const DEFAULT_GATEWAY_URL = 'https://app.hivehq.dev'
 
 export interface RemoteAppStateReader {
   get(key: string): { value: string | null } | undefined

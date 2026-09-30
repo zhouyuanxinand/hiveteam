@@ -6,7 +6,7 @@ export interface AgentSessionContext {
   cwd: string
   knownSessionIds: string[]
   platform: NodeJS.Platform
-  /** Explicit offline recovery of an old session that never received its Hive marker. */
+  /** Explicit offline recovery of an old session that never received its HiveTeam marker. */
   recoveredSessionId?: string
 }
 

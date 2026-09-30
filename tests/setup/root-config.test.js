@@ -15,7 +15,7 @@ test('root project config exists', () => {
 test('public package metadata is ready for external users', () => {
   const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
 
-  expect(packageJson.license).toBe('BUSL-1.1')
+  expect(packageJson.license).toBe('MIT')
   expect(packageJson.description).toBe(
     'HiveTeam runs Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.'
   )
@@ -23,14 +23,7 @@ test('public package metadata is ready for external users', () => {
     expect.arrayContaining(['ai-agents', 'cli', 'collaboration', 'multi-agent', 'workspace'])
   )
   expect(packageJson.files).toEqual(
-    expect.arrayContaining([
-      'CHANGELOG.md',
-      'LICENSE',
-      'LICENSE.BSL',
-      'README.md',
-      'README.zh.md',
-      'SECURITY.md',
-    ])
+    expect.arrayContaining(['CHANGELOG.md', 'LICENSE', 'README.md', 'README.zh.md', 'SECURITY.md'])
   )
 })
 
@@ -38,16 +31,13 @@ test('public support documents describe license, safety, and release scope', () 
   const changelog = readRequiredFile('CHANGELOG.md')
   const englishReadme = readRequiredFile('README.en.md')
   const license = readRequiredFile('LICENSE')
-  const licenseBsl = readRequiredFile('LICENSE.BSL')
   const readme = readRequiredFile('README.md')
   const zhReadme = readRequiredFile('README.zh.md')
   const security = readRequiredFile('SECURITY.md')
 
-  expect(changelog).toContain('0.6.0-alpha.0')
-  expect(license).toContain('Apache License')
-  expect(license).toContain('Version 2.0')
-  expect(licenseBsl).toContain('Business Source License 1.1')
-  expect(licenseBsl).toContain('2030-05-16')
+  expect(changelog).toContain('2.1.19')
+  expect(license).toContain('MIT License')
+  expect(license).toContain('Permission is hereby granted')
   expect(readme).toContain('Quick Start')
   expect(readme).toContain('Platform Support')
   expect(readme).toContain('Safety Model')

@@ -208,7 +208,7 @@ export const createTeamDeliveryRuntime = (input: {
                 )
                 const sender = dispatch.fromAgentId
                   ? input.workspaceStore.getAgent(record.workspace_id, dispatch.fromAgentId).name
-                  : 'Hive'
+                  : 'HiveTeam'
                 await input.agentRuntime.writeSendPrompt(
                   record.workspace_id,
                   record.recipient_id,
@@ -304,11 +304,11 @@ export const createTeamDeliveryRuntime = (input: {
           )
         } else
           void deliver(record.id).catch((error) =>
-            console.error('[hive] delivery persistence failed', error)
+            console.error('[hiveteam] delivery persistence failed', error)
           )
       }
     } catch (error) {
-      console.error('[hive] delivery scheduler failed', error)
+      console.error('[hiveteam] delivery scheduler failed', error)
     }
     if (!closing && !timer) {
       timer = setTimeout(tick, 1000)
@@ -345,7 +345,7 @@ export const createTeamDeliveryRuntime = (input: {
       if (!entry || !input.agentRuntime.getActiveRunByAgentId(workspaceId, targetAgentId))
         return { attempted: 0, firstSyncError: null }
       void deliver(entry.receiptId).catch((error) =>
-        console.error('[hive] report delivery persistence failed', error)
+        console.error('[hiveteam] report delivery persistence failed', error)
       )
       return { attempted: active.has(entry.receiptId) ? 1 : 0, firstSyncError: null }
     },

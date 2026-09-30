@@ -28,7 +28,7 @@ const NATIVE_PICKERS: Record<string, string> = {
 
 /**
  * Open each CLI's documented native picker instead of guessing model IDs or
- * provider-specific request payloads in Hive.
+ * provider-specific request payloads in HiveTeam.
  */
 export const getModelSwitchCapability = (command: string): ModelSwitchCapability | undefined => {
   const pickerCommand = NATIVE_PICKERS[normalizeCommand(command)]

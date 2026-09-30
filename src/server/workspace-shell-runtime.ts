@@ -162,7 +162,7 @@ export const createWorkspaceShellRuntime = (
     const pending = closeRunAndWait(runId).finally(() => pendingCloses.delete(pending))
     pendingCloses.add(pending)
     void pending.catch((error: unknown) =>
-      console.error('[hive] workspace shell close failed', error)
+      console.error('[hiveteam] workspace shell close failed', error)
     )
     detachRun(runId)
   }

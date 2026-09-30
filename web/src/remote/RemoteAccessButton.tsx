@@ -169,6 +169,9 @@ const LocalRemoteAccessButton = ({ inlinePanel }: { inlinePanel: boolean }) => {
   const { language, t } = useI18n()
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<RemoteStatus | null>(null)
+  const loginCommand = status?.gatewayUrl
+    ? 'hive remote login'
+    : 'hive remote login --gateway https://your-gateway.example'
   const [devices, setDevices] = useState<RemoteDevice[]>([])
   const [pending, setPending] = useState<RemotePendingPairing[]>([])
   const [ticket, setTicket] = useState<RemotePairingTicket | null>(null)
@@ -375,16 +378,19 @@ const LocalRemoteAccessButton = ({ inlinePanel }: { inlinePanel: boolean }) => {
                     {t('remote.loginRequired')}
                   </div>
                   <div className="mt-1 text-xs text-ter">{t('remote.loginCommand')}</div>
+                  {!status?.gatewayUrl ? (
+                    <div className="mt-1 text-xs text-ter">{t('remote.gatewayRequired')}</div>
+                  ) : null}
                   <div
                     className="mt-2 flex items-center gap-2 rounded border px-2.5 py-2"
                     style={{ background: 'var(--bg-2)', borderColor: 'var(--border)' }}
                   >
-                    <code className="mono min-w-0 flex-1 text-xs text-sec">hive remote login</code>
+                    <code className="mono min-w-0 flex-1 text-xs text-sec">{loginCommand}</code>
                     <button
                       type="button"
                       className="icon-btn h-7 w-7 justify-center p-0"
                       aria-label={t('remote.copyCommand')}
-                      onClick={() => void handleCopy('hive remote login')}
+                      onClick={() => void handleCopy(loginCommand)}
                     >
                       {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
                     </button>

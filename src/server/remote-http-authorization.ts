@@ -49,6 +49,7 @@ register(
   'GET',
   [
     '/api/version',
+    '/api/version/latest',
     '/api/workspaces',
     '/api/ui/team',
     '/api/settings/command-presets',

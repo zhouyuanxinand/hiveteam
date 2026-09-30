@@ -5,7 +5,6 @@ import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, resolve, win32 } from 'node:path'
 import { promisify } from 'node:util'
 import { npmCommand } from './npm-command.mjs'
-import { preparePackagePermissions } from './package-permissions.mjs'
 
 const runFile = promisify(execFile)
 const manifestFilename = 'release-manifest.json'
@@ -110,6 +109,7 @@ export const createReleaseArtifact = async ({ repository, outputDirectory }) => 
     throw new Error('npm pack returned invalid release package metadata')
   }
   const tarballPath = join(destination, result.filename)
+  const { preparePackagePermissions } = await import('./package-permissions.mjs')
   await preparePackagePermissions(tarballPath)
   const fingerprint = await fingerprintTarball(tarballPath)
   const manifest = {

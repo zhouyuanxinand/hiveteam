@@ -361,7 +361,7 @@ describe('Workspace Skill Pack drawer', () => {
     expect(screen.getByText('1 added')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Script inventory · 1'))
     expect(screen.getByText('skills/to-goal/scripts/run.sh')).toBeInTheDocument()
-    expect(screen.getByText(/never executed by Hive/u)).toBeInTheDocument()
+    expect(screen.getByText(/never executed by HiveTeam/u)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Review plan' }))
 
     expect(await screen.findByText('Change Plan ready')).toBeInTheDocument()

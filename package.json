@@ -1,13 +1,13 @@
 {
   "name": "hiveteam",
-  "version": "2.1.19",
+  "version": "2.1.20",
   "description": "HiveTeam runs Claude Code, Codex, Gemini, OpenCode, Qwen, and other CLI agents as a visible local team in your browser.",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
   "allowScripts": {
     "esbuild": true
   },
-  "license": "BUSL-1.1",
+  "license": "MIT",
   "keywords": [
     "ai-agents",
     "cli",
@@ -43,13 +43,10 @@
     "desktop/service-environment.mjs",
     "CHANGELOG.md",
     "LICENSE",
-    "LICENSE.BSL",
-    "NOTICE",
     "README.md",
     "README.en.md",
     "README.zh.md",
     "SECURITY.md",
-    "TRADEMARK.md",
     "dist/bin/",
     "dist/src/",
     "dist/vendor/",
@@ -65,7 +62,8 @@
     "scripts/managed-node.mjs"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "bin": {
     "hive": "dist/src/cli/hive.js"
@@ -87,8 +85,10 @@
     "check": "pnpm exec biome check .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p gateway/tsconfig.json",
     "format": "pnpm exec biome format --write .",
-    "pack:check": "npm pack --dry-run --json",
+    "prepack": "pnpm build",
+    "pack:check": "npm pack --dry-run --json --ignore-scripts",
     "pack:artifact": "node scripts/create-release-artifact.mjs",
+    "publish:artifact": "node scripts/publish-release-artifact.mjs",
     "pack:smoke": "node scripts/pack-smoke.mjs",
     "release:compat": "node scripts/cli-compat-report.mjs",
     "release:dry": "pnpm check && pnpm typecheck && pnpm release:compat && pnpm build && pnpm test && pnpm pack:check && pnpm pack:smoke",

@@ -609,7 +609,7 @@ export const TaskGraphDrawer = ({
     const line = content.split(/\r?\n/)[lineIndex]
     if (typeof line !== 'string') return
     void navigator.clipboard?.writeText(line).catch((error: unknown) => {
-      console.error('[hive] swallowed:tasks.copyLine', error)
+      console.error('[hiveteam] swallowed:tasks.copyLine', error)
     })
   }
   const taskHandlers: TaskItemHandlers = {

@@ -14,7 +14,7 @@ export const requestUiBootstrap = (child) =>
     }
     const fail = () => {
       cleanup()
-      reject(new Error('The Hive runtime could not authenticate the launcher'))
+      reject(new Error('The HiveTeam runtime could not authenticate the launcher'))
     }
     const receive = (message) => {
       if (
@@ -53,7 +53,7 @@ export const openUiBrowser = (url) =>
           ? ['open', [url]]
           : ['xdg-open', [url]]
     execFile(command, args, { windowsHide: true }, (error) => {
-      if (error) reject(new Error('Could not open the browser. Use the Hive desktop launcher.'))
+      if (error) reject(new Error('Could not open the browser. Use the HiveTeam desktop launcher.'))
       else resolve()
     })
   })

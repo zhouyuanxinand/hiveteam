@@ -7,6 +7,6 @@ This directory mirrors [jnMetaCode/agency-agents-zh](https://github.com/jnMetaCo
 - Synced: 2026-05-22T12:26:26.371Z
 - License: MIT (see LICENSE in this directory)
 
-All markdown content is unmodified from upstream. Hive only filters out top-level
+All markdown content is unmodified from upstream. HiveTeam only filters out top-level
 meta files (READMEs, CATALOG, etc.) and parses YAML frontmatter to build the
-manifest. To refresh, run `pnpm sync:marketplace` at the hive repo root.
+manifest. To refresh, run `pnpm sync:marketplace` at the HiveTeam repository root.

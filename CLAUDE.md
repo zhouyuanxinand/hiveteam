@@ -1,14 +1,14 @@
 # CLAUDE.md
 
-This file gives AI coding tools public-safe project context for Hive. It stays
+This file gives AI coding tools public-safe project context for HiveTeam. It stays
 brief by design: unpublished implementation plans and product strategy are not
 published in this repository.
 
-## What Hive Is
+## What HiveTeam Is
 
-Hive is a browser-native workbench for coordinating multiple local CLI agents.
+HiveTeam is a browser-native workbench for coordinating multiple local CLI agents.
 Users create a workspace, start one Orchestrator agent, add worker agents, and
-let them communicate through Hive's injected `team` protocol.
+let them communicate through HiveTeam's injected `team` protocol.
 
 Key properties:
 
@@ -19,7 +19,7 @@ Key properties:
 - Workspace metadata is stored locally in SQLite.
 - Workspace task state lives in `<workspace>/.hive/tasks.md`.
 - `team send`, `team report`, `team status`, and related commands are only
-  injected into Hive-managed agent sessions.
+  injected into HiveTeam-managed agent sessions.
 
 ## Public Development Source Of Truth
 

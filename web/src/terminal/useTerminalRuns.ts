@@ -55,7 +55,7 @@ export const useTerminalRuns = (workspaceId: string | null): TerminalRunSummary[
             failureCount = Math.min(failureCount + 1, 4)
             setTerminalRuns((current) => (current.length === 0 ? current : []))
           }
-          console.error('[hive] swallowed:terminalRuns.list', error)
+          console.error('[hiveteam] swallowed:terminalRuns.list', error)
         })
         .finally(() => {
           inFlight = false

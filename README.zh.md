@@ -14,18 +14,13 @@
 
 [![ci](https://img.shields.io/github/actions/workflow/status/zhouyuanxinand/hiveteam/release.yml?branch=main&label=ci)](https://github.com/zhouyuanxinand/hiveteam/actions/workflows/release.yml)
 [![Node](https://img.shields.io/badge/node-22.18%2B%20%2822.x%29%20%7C%2024.x-3c873a.svg)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/license-BUSL--1.1-orange.svg)](./LICENSE.BSL)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20(best--effort)-lightgrey.svg)](#平台支持)
 
 [English](./README.md) · 简体中文
 
-> 这是一个由 Git 源码驱动的自托管 Hive 分支，默认只监听 `127.0.0.1`，不会查询 npm 或原版 Hive 的更新渠道。
->
-> 构建和更新都以你选中的 Git 提交为准，运行代码与源码保持一致。
-
-<p align="center">
-  <img src="./assets/hive-team-view.png" alt="Hive 工作台：4 个 CLI Agent 团队，Orchestrator 派单、Worker 各自开工" />
-</p>
+> HiveTeam 是自托管工具，默认只监听 `127.0.0.1`。可以从 npm 安装已发布版本，
+> 也可以从本仓库构建指定的 Git 提交。升级由你主动执行，Runtime 不会自动安装新版。
 
 ## 为什么需要 HiveTeam
 
@@ -36,7 +31,7 @@ CLI Agent 各自都很强，但同时管几个就有点别扭：
 - Worker 的进度淹在 scrollback 里，回头看找不到。
 - 想重启接着干，全看每个 CLI 自己的 session 恢复行为，散乱不可控。
 
-Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在你电脑上的终端进程，Hive 只是它们外面的"团队 shell"。
+HiveTeam 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在你电脑上的终端进程，HiveTeam 只是它们外面的"团队 shell"。
 
 ## 三个开箱场景
 
@@ -75,18 +70,22 @@ Hive 加上这一层调度，**不替换**任何 CLI。Agent 还是真实跑在�
 - Node.js 22.x（至少 22.18），或 Node.js 24.x
 - 执行真实任务时，至少一个支持的 Agent CLI 已安装、已登录且在 `PATH` 上可调用；基础工作区可在安装 CLI 前创建
 
-克隆、安装并启动本分支：
+发布到 npm 后，可以直接下载并启动：
 
 ```bash
-git clone https://github.com/zhouyuanxinand/hiveteam.git
-cd hiveteam
-npm install
-npm start
+npx --yes hiveteam@latest
 ```
 
-`npm start` 会同时启动本机 HiveTeam Runtime 和 Vite Web 页面，并自动打开已认证的浏览器窗口，
-地址通常是 `http://127.0.0.1:5180/`。原有的 `pnpm dev` 仍可用于
-习惯 pnpm 的开发流程。
+也可以全局安装，以后通过 `hive` 启动：
+
+```bash
+npm install -g hiveteam@latest
+hive
+```
+
+npm 包已经包含构建好的 Runtime 和 Web UI，无需拉取源码、安装 pnpm 或自行构建前端。
+默认 Skill Packs 首次下载仍需要 Git 和 GitHub 网络连接；可以选择「基础模式」跳过。
+源码启动方式见[开发](#开发)，维护者的首次发布和 CI 配置见 [npm 发布说明](./docs/npm-release.md)。
 
 平台启动器会恢复意外退出的服务。**资源 → 平台恢复** 提供 Windows / macOS 的当前用户登录自启动开关，默认关闭；切换只影响下次登录，正常退出不会立即重启。详见[平台恢复与登录自启动](./docs/platform-recovery.md)。
 
@@ -99,10 +98,20 @@ SQLite 使用 Node 内置的 `node:sqlite`，PTY 使用精确锁定版本的
 
 通过安装包运行时，`hive` 会启动生产页面并自动打开已认证的浏览器窗口。如果你想指定端口，可以用 `hive --port 4010`。
 启动器通过有效期 60 秒的一次性链接完成登录，页面登录时会清除地址栏中的引导凭据。
-仅打开终端打印的 localhost 地址不会获得新的管理会话。Hive 重启后或换用浏览器配置时，
+仅打开终端打印的 localhost 地址不会获得新的管理会话。HiveTeam 重启后或换用浏览器配置时，
 在启动器终端输入 `o`，或从桌面托盘重新打开；同一 Runtime 运行期间，已有窗口可直接刷新。
 
-更新源码驱动的构建：
+更新全局 npm 安装时，先停止 HiveTeam，然后执行：
+
+```bash
+npm install -g hiveteam@latest
+hive
+```
+
+通过 `npx` 运行时，停止 HiveTeam 后再次执行 `npx --yes hiveteam@latest`。
+两种命令都可以把 `hiveteam@latest` 换成 `hiveteam@<version>` 来选择具体版本。
+
+更新源码安装：
 
 ```bash
 git pull origin main
@@ -110,21 +119,25 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-重建后重启正在运行的 Hive。兼容保留的 `hive update` 命令只会提示本地源码更新方式，不会从 npm 安装任何内容。
+重建后重启正在运行的 HiveTeam。`hive update` 会显示 npm 与源码升级命令，不会自动安装更新。
 
-把 Hive 装为应用（可选）：
+npm 有新版本时，页面顶部的版本号旁会出现“升级到最新版”提示。点击可复制全局安装或
+`npx` 升级命令；先停止 HiveTeam，完成升级后再启动。页面会在后台检查版本，无法连接
+npm 时不影响正常工作。
 
-在 Chrome / Edge / Brave 里打开 `http://127.0.0.1:3000/`，点浏览器地址栏右侧的安装图标即可。装好后 Hive 会以独立窗口启动、有自己的 dock 图标，且 dock 右键菜单上会显示 **添加 Workspace** / **试用演示** 两个快捷入口。Firefox 和 Safari 暂未实现 PWA install-prompt 协议，浏览器地址栏的安装图标只在 Chromium 系浏览器里出现。
+把 HiveTeam 装为应用（可选）：
 
-PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA 时后端没起，会看到 “Hive 后端未启动” 页面，等你跑起 `hive` 后会自动刷新。PWA 的 install scope 按 origin（含端口）划分，所以 `hive --port 4011` 跟 `hive --port 3000` 在浏览器看来是两个独立应用。卸载方法：浏览器地址栏访问 `chrome://apps`，右键 Hive 图标，选 **从 Chrome 中移除…**。
+在 Chrome / Edge / Brave 里打开 `http://127.0.0.1:3000/`，点浏览器地址栏右侧的安装图标即可。装好后 HiveTeam 会以独立窗口启动、有自己的 dock 图标，且 dock 右键菜单上会显示 **添加 Workspace** / **试用演示** 两个快捷入口。Firefox 和 Safari 暂未实现 PWA install-prompt 协议，浏览器地址栏的安装图标只在 Chromium 系浏览器里出现。
 
-关闭 PWA 窗口或 tab 时 Hive 会主动请求浏览器弹原生确认对话框，避免关闭快捷键（macOS 上是 Cmd+W、Windows / Linux 上是 Ctrl+W）误关丢失会话。但现代浏览器要求你跟页面"交互过"（点击 / 滚动 / 输入）才会真的弹这个对话框——刚打开 PWA 立刻按关闭快捷键仍会直接关闭，这是浏览器策略，不是 Hive 的 bug。
+PWA 只是 UI 壳，HiveTeam 后端仍需要在终端里跑着。如果启动 PWA 时后端没起，会看到 “HiveTeam 后端未启动” 页面，等你跑起 `hive` 后会自动刷新。PWA 的 install scope 按 origin（含端口）划分，所以 `hive --port 4011` 跟 `hive --port 3000` 在浏览器看来是两个独立应用。卸载方法：浏览器地址栏访问 `chrome://apps`，右键 HiveTeam 图标，选 **从 Chrome 中移除…**。
+
+关闭 PWA 窗口或 tab 时 HiveTeam 会主动请求浏览器弹原生确认对话框，避免关闭快捷键（macOS 上是 Cmd+W、Windows / Linux 上是 Ctrl+W）误关丢失会话。但现代浏览器要求你跟页面"交互过"（点击 / 滚动 / 输入）才会真的弹这个对话框——刚打开 PWA 立刻按关闭快捷键仍会直接关闭，这是浏览器策略，不是 HiveTeam 的 bug。
 
 首次使用流程：
 
 1. 选择一个项目目录作为 workspace。
 2. 默认安装 `matt` 和 `code-janitor`；如需离线创建并跳过默认技能包，可明确选择基础模式。
-3. Hive 创建 `<workspace>/.hive/tasks.md`。挑选并检查 Orchestrator 预设后手动启动，或勾选创建弹窗的启动选项；启动后注入内部 `team` 命令。
+3. HiveTeam 创建 `<workspace>/.hive/tasks.md`。挑选并检查 Orchestrator 预设后手动启动，或勾选创建弹窗的启动选项；启动后注入内部 `team` 命令。
 4. 在 Team Members 面板里添加 Worker。
 5. 跟 Orchestrator 说一声让它派活，它会用 `team send <worker-name> "<task>"` 发任务，Worker 完事后用 `team report` 回报。
 
@@ -149,16 +162,16 @@ PWA 只是 UI 壳，Hive 后端仍需要在终端里跑着。如果启动 PWA �
 使用该模式导入项目时保留已有绑定的别名、版本和角色选择，仅补齐缺少的默认 Pack；不会迁移现有 Workspace。
 同名 Pack 或原生目录冲突会明确报错，不会覆盖用户文件。后续 Pack 初始化失败会撤销本次已完成的绑定，
 且不会启动 Orchestrator；无法安全撤销时保留工作区和回执供恢复，可以修复原因后重试。
-其他 CLI 继续通过 Hive 的按角色 Skill 目录和 `team skill` 按需读取，绑定不会执行 Pack 脚本。
+其他 CLI 继续通过 HiveTeam 的按角色 Skill 目录和 `team skill` 按需读取，绑定不会执行 Pack 脚本。
 
 在当前 Workspace 顶栏打开 **Skills**，即可让全队使用同一份锁定来源：
 
 1. 在 **Packs** 选择 GitHub，输入
    `tt-a1i/matt-skills-with-to-goal`，ref 填 `main`。
-2. 点击 **解析 Release**。Hive 不加载 submodule、不运行 Git hook 或仓库脚本，只清点脚本并预览精确 commit 与完整树摘要。
+2. 点击 **解析 Release**。HiveTeam 不加载 submodule、不运行 Git hook 或仓库脚本，只清点脚本并预览精确 commit 与完整树摘要。
 3. 按角色只勾选需要的 Skills。原生暴露是 Workspace 级的 Codex 便利入口，最多 12 个；它不是按成员隔离的权限边界。
 4. 查看包含精确路径的 Change Plan，再点 **Apply**。在明确 Apply 之前，绑定和锁文件都不会变化。
-5. 在 **成员** 页分别查看通用提示词交付与原生发现状态；在 **变更** 页查看 Receipt，或 Undo 由 Hive 创建且指纹仍匹配的改动。
+5. 在 **成员** 页分别查看通用提示词交付与原生发现状态；在 **变更** 页查看 Receipt，或 Undo 由 HiveTeam 创建且指纹仍匹配的改动。
 
 绑定这些 Pack 后，在 Orchestrator 终端中使用：
 
@@ -174,9 +187,9 @@ team send "Alice" "用测试先行实现已批准的改动" --skill matt/tdd
 `team skill read --dispatch <id> <relative-path>` 读取获准的文本引用。
 
 Codex 成员重启后，还可以用 `$to-goal` 调用已选择的原生 Skill。其他 CLI
-和自定义命令即使没有已验证的原生目录，也仍可通过 Hive 提示词交付使用
+和自定义命令即使没有已验证的原生目录，也仍可通过 HiveTeam 提示词交付使用
 Skills。依赖 Codex fork 或内建 subagent 的 Matt Skills（`spec-executor`、
-`roundtable`、`execute-spec-in-fork`）会标记为“需要 Hive 适配”，默认不勾选。
+`roundtable`、`execute-spec-in-fork`）会标记为“需要 HiveTeam 适配”，默认不勾选。
 
 ## 工作方式
 
@@ -186,7 +199,7 @@ Skills。依赖 Codex fork 或内建 subagent 的 Matt Skills（`spec-executor`�
           |
           | HTTP + WebSocket
           v
-Hive Runtime
+HiveTeam Runtime
   SQLite 元数据 · PTY 生命周期 · 任务派单
           |
           +-- Orchestrator PTY
@@ -205,7 +218,7 @@ Workspace 任务图：
 三个细节值得记住：
 
 - Agent 是真正的 CLI 进程，不是模拟的 subagent。
-- `team` 命令**只**在 Hive 管理的 agent 会话里可用——通过把包内 bin 目录 prepend 到 PATH 实现，不会装成全局命令。
+- `team` 命令**只**在 HiveTeam 管理的 agent 会话里可用——通过把包内 bin 目录 prepend 到 PATH 实现，不会装成全局命令。
 - 任务图就是 workspace 里的一份 markdown 文件，你可以在编辑器里直接看或者改。
 
 ## Agent 预设
@@ -223,33 +236,35 @@ Workspace 任务图：
 | Grok Build | `grok` | 已有身份与恢复适配，真实发行版未认证，自动恢复保持阻止 |
 | 自定义 | 任意可执行文件 | 自己配 |
 
-Hive 不替你安装这些 CLI。请在启动 Hive 的同一个 shell 环境里先装好、登录好。
+HiveTeam 不替你安装这些 CLI。请在启动 HiveTeam 的同一个 shell 环境里先装好、登录好。
 
 预设不再自动添加 bypass 参数。Agent 默认使用受限执行策略；「执行权限」中可查看当前 CLI 与平台能否强制落实。未验证组合默认拒绝启动，需要本机用户明确授权该 Agent 的不受限例外。受限 Codex 使用独立 CLI 目录，认证也须配置在对应目录。实际边界见 [SECURITY.md](SECURITY.md)。
 
-## Hive 提供什么
+## HiveTeam 提供什么
 
 - Workspace 侧边栏，方便在多个本机项目之间切换。
 - Orchestrator 和 Worker 终端都是真实 PTY 支撑的。
 - Add Worker 预置 coder / reviewer / tester 等角色模板，也支持完全自定义 prompt 与命令——把任何 CLI agent 编排成你需要的角色。
 - Workflows：运行最多 20 步的 JSON 定义，向已有成员派单。步骤支持依赖，以及报告、评审和验证的质量条件；面板展示结果，并提供停止和重跑入口。当前不提供定时任务。
-- 团队记忆：把 workspace 约束、长期上下文和团队共识留在 Hive 里，后续派单时更容易把背景带给正确的 agent。[Dream](./docs/memory-dream.md) 可整理现有记忆，也可由工作区 Orchestrator 从新增协议消息生成候选；核对来源后手动应用，保留变更回执，回滚会检查后续编辑冲突。
-- 派单改动审查：在 Git 工作区里，Hive 会在创建派单时记录 HEAD 提交，活动中心可以查看该派单处理期间产生的工作区 diff（含新增未跟踪文件），不必再盲信成员的口头汇报；审查反馈可以直接发回该成员的终端，派单会重新打开、让成员改完再次汇报。
+- 团队记忆：把 workspace 约束、长期上下文和团队共识留在 HiveTeam 里，后续派单时更容易把背景带给正确的 agent。[Dream](./docs/memory-dream.md) 可整理现有记忆，也可由工作区 Orchestrator 从新增协议消息生成候选；核对来源后手动应用，保留变更回执，回滚会检查后续编辑冲突。
+- 派单改动审查：在 Git 工作区里，HiveTeam 会在创建派单时记录 HEAD 提交，活动中心可以查看该派单处理期间产生的工作区 diff（含新增未跟踪文件），不必再盲信成员的口头汇报；审查反馈可以直接发回该成员的终端，派单会重新打开、让成员改完再次汇报。
 - `.hive/tasks.md` 编辑器，带外部文件冲突处理。
 - PTY 后台保留 + 尽力使用各 CLI 原生 session 恢复。
 - 升级后的 What's New 弹窗，用简短 release highlights 告诉你新版改了什么。
 - 元数据存在本机 SQLite，Windows 默认在 `%USERPROFILE%\.config\hive`，macOS / Linux 默认在 `~/.config/hive`，也可以通过 `$HIVE_DATA_DIR` 指定。
 
-Hive 的受限执行复用经过验证的 CLI 沙箱能力；它不自研操作系统沙箱、不提供多用户认证，也不自带任何 agent 模型。
+HiveTeam 的受限执行复用经过验证的 CLI 沙箱能力；它不自研操作系统沙箱、不提供多用户认证，也不自带任何 agent 模型。
 
 ## 远程访问（可选，默认关闭）
 
-如果想在外面用手机查看、操作正在本机跑着的 Hive，可以开启可选的 **Remote access**。手机配对后，由本机选择该设备可见的工作区。远程默认只读；写操作须由本机按设备、工作区和具体动作批准，最长十分钟，通过端到端加密隧道访问 Hive Web UI。
+如果想在外面用手机查看、操作正在本机跑着的 HiveTeam，可以开启可选的 **Remote access**。手机配对后，由本机选择该设备可见的工作区。远程默认只读；写操作须由本机按设备、工作区和具体动作批准，最长十分钟，通过端到端加密隧道访问 HiveTeam Web UI。
+
+远程访问需要自建网关，HiveTeam 不提供默认网关地址。首次登录执行 `hive remote login --gateway <url>`，将 `<url>` 替换为你的网关地址；地址保存后，执行 `hive remote login` 会复用它。部署步骤见[自建网关说明](./gateway/README.md)。
 
 需要清楚的几点：
 
 - **默认关闭**。不开就没有远程通路，行为仍然是本机优先。
-- **需要一个网关**。Hive 通过网关中转手机和本机 daemon 的连接；本机主动出站连接，不要求你打开公网端口。
+- **需要自建网关**。HiveTeam 通过你的网关中转手机和本机 daemon 的连接；本机主动出站连接，不要求你打开公网端口。
 - **数据和执行永远在本机**。网关只负责登录后的路由与中转，不运行你的 agent，也不保存 workspace 内容。
 - **信任根在桌面**。新设备配对必须人在电脑前确认；已配对手机不能凭自己批准新设备。设备随时可吊销。
 
@@ -267,22 +282,22 @@ Windows 后台启动可能先经历约三秒的终端能力协商。自动启动
 
 ## 安全模型
 
-Hive 是本机开发工具，**不是**托管服务。
+HiveTeam 是本机开发工具，**不是**托管服务。
 
-- Remote access 关闭时，runtime 只监听 `127.0.0.1`。不要把 Hive 端口通过公网隧道、反向代理或任何共享网络接口暴露出去。
+- Remote access 关闭时，runtime 只监听 `127.0.0.1`。不要把 HiveTeam 端口通过公网隧道、反向代理或任何共享网络接口暴露出去。
 - 远程设备按工作区授权可见范围，按动作临时授权写操作；不能批准自己的权限，也不能更改执行安全策略。
-- 受限 Worker 只在 CLI 沙箱能力验证通过后启动。不受限例外拥有启动 Hive 的账户权限，须由本机明确授权。
+- 受限 Worker 只在 CLI 沙箱能力验证通过后启动。不受限例外拥有启动 HiveTeam 的账户权限，须由本机明确授权。
 - 只打开你信任的 workspace。worktree 本身不构成文件系统沙箱。
 - Agent token 是 session 级的，由本机 runtime 生成，注入到 agent 进程环境变量里，**不**用于跨网络通信。
-- Hive 分别认证本机用户、Agent 与远程设备；它不提供针对同一系统账户下不受限进程的 OS 安全边界。
+- HiveTeam 分别认证本机用户、Agent 与远程设备；它不提供针对同一系统账户下不受限进程的 OS 安全边界。
 - 浏览器 UI token 只是本机会话保护，不是用来防同一系统账户下其他进程的安全边界。
 
-在敏感仓库里用 Hive 之前，请先读 [SECURITY.md](SECURITY.md)。
+在敏感仓库里用 HiveTeam 之前，请先读 [SECURITY.md](SECURITY.md)。
 
 本机顶部的**资源**面板显示并设置运行上限：默认全局 8 个执行、每工作区 4 个执行、
 12 个 Worker 成员和 1 个验证执行。Orchestrator、Worker、工作区终端与验证共享执行额度。
 idle 进程退出后才释放执行额度，stopped 成员删除后才释放成员名额；等待资源的任务由后台队列调度。
-这限制的是 Hive 管理的执行数量，不是 CPU 或内存。每个数据目录只允许一个活动 Runtime。
+这限制的是 HiveTeam 管理的执行数量，不是 CPU 或内存。每个数据目录只允许一个活动 Runtime。
 
 ## 数据位置
 
@@ -301,15 +316,15 @@ CLI、`npm start` / `pnpm dev` 和桌面启动器的两种模式统一默认使�
 
 ```powershell
 $env:HIVE_DATA_DIR = 'D:\HiveData'
-npm start
+hive
 ```
 
 ```bash
-HIVE_DATA_DIR=/absolute/path/to/hive-data npm start
+HIVE_DATA_DIR=/absolute/path/to/hive-data hive
 ```
 
 Windows 与 WSL 使用各自的用户主目录和环境变量，因此默认数据目录彼此独立。
-Hive 不会在两者之间转换路径，也不会自动查找、复制或合并其他目录中的数据库。
+HiveTeam 不会在两者之间转换路径，也不会自动查找、复制或合并其他目录中的数据库。
 即使其他目录已有数据，显式设置的 `HIVE_DATA_DIR` 也会优先使用。
 
 重启后的成员恢复、原生会话绑定与恢复失败处理，参见
@@ -332,7 +347,7 @@ Hive 不会在两者之间转换路径，也不会自动查找、复制或合并
 
 **找不到 Agent CLI**
 
-确认选中的命令已经安装好、登录好、在启动 Hive 那个 shell 里能直接调用，且在 `PATH` 上。
+确认选中的命令已经安装好、登录好、在启动 HiveTeam 那个 shell 里能直接调用，且在 `PATH` 上。
 
 **端口被占用**
 
@@ -344,7 +359,7 @@ hive --port 4020
 
 **拉取后源码变更没有生效**
 
-停止正在运行的 Hive，拉取目标分支、重建并重新启动本地 runtime：
+停止正在运行的 HiveTeam，拉取目标分支、重建并重新启动本地 runtime：
 
 ```bash
 git pull origin main
@@ -359,7 +374,7 @@ node dist/src/cli/hive.js --port 4010
 
 检查 `node --version`、`node -p "process.platform + '/' + process.arch"`，
 以及安装时是否保留了 optional dependencies。移除 `--omit=optional` 或包管理器中
-对应的禁用选项，在运行 Hive 的机器上重新安装；不要跨系统或架构复制 `node_modules`。
+对应的禁用选项，在运行 HiveTeam 的机器上重新安装；不要跨系统或架构复制 `node_modules`。
 
 已构建的安装包支持 `npm install --ignore-scripts <archive.tgz>`，无需原生模块重编译。
 源码构建仍需要前端工具；如果它的安装被阻止，在源码项目中审查并批准 `esbuild`。
@@ -374,7 +389,7 @@ Electron 通过 `pnpm desktop:install` 单独安装。在源码目录运行 `pnp
 
 Windows 版默认使用浏览器内的服务器文件系统浏览器来添加 Workspace，不再弹 PowerShell 原生目录选择器。浏览器会从“此电脑”开始列出可访问盘符，所以可以进入 `C:\`、`D:\` 等其他盘；如果目标目录不在浏览器列表里，可以展开“高级：粘贴路径”直接输入绝对路径。
 
-**Windows 上全局 Hive 命令仍然启动旧版本**
+**Windows 上全局 HiveTeam 命令仍然启动旧版本**
 
 开发本分支时直接使用源码构建：
 
@@ -397,20 +412,23 @@ node dist/src/cli/hive.js --port 4010
 
 **Tasks 文件冲突 banner 出现**
 
-Hive 检测到磁盘上的 `.hive/tasks.md` 比 UI 里的新。`Reload` 接受磁盘版本，`Keep Local` 保留 UI 编辑并覆盖保存。
+HiveTeam 检测到磁盘上的 `.hive/tasks.md` 比 UI 里的新。`Reload` 接受磁盘版本，`Keep Local` 保留 UI 编辑并覆盖保存。
 
 **Worker 卡在 `working` 状态**
 
-Hive 不通过进程活动猜测任务完成。Worker 只有在调 `team report` 时才会回到 `idle`。如果它确实卡了，从 UI 里 Stop 或 Restart。
+HiveTeam 不通过进程活动猜测任务完成。Worker 只有在调 `team report` 时才会回到 `idle`。如果它确实卡了，从 UI 里 Stop 或 Restart。
 
 ## 开发
 
 ```bash
-pnpm install
+git clone https://github.com/zhouyuanxinand/hiveteam.git
+cd hiveteam
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
 开发模式下 runtime 跑在 `127.0.0.1:4010`，Vite 跑在 `127.0.0.1:5180`，把 API 和 WebSocket 代理到 runtime。
+`npm start` 使用相同的开发启动器，并自动打开已认证的浏览器窗口。
 
 ### 可选桌面入口
 
@@ -442,7 +460,7 @@ pnpm test
 
 `pnpm check` 运行 Biome；`pnpm typecheck` 检查 runtime、Web UI、测试和 gateway 的
 TypeScript 类型，不生成构建产物；`pnpm build` 检查生产构建。`pnpm test` 通过统一
-runner 运行完整测试，并使用隔离的临时 Hive 数据目录；macOS、Linux 和 Windows CI
+runner 运行完整测试，并使用隔离的临时 HiveTeam 数据目录；macOS、Linux 和 Windows CI
 也使用这个入口。`pnpm test:windows` 是同一套完整测试的别名。
 
 如需在相同隔离环境中只运行一个测试文件：
@@ -487,7 +505,10 @@ HTTP、WebSocket、原生 PTY、团队交付、停止和重启流程。JSON 报�
 
 源码检查在相同的三个 runner 上使用 Node 24.14.0，先校验归档，再从中恢复
 `dist/` 和 `web/dist/` 供集成测试使用。每个安装包验收 job 即使失败也会上传报告。
-上表描述 CI 的配置覆盖范围，是否通过以工作流运行结果和报告为准。此工作流不会发布包。
+上表描述 CI 的配置覆盖范围，是否通过以工作流运行结果和报告为准。构建、源码验证和安装包
+验收全部通过后，`v*` 标签会触发 npm 发布，上传的就是经过验收的同一份归档。
+稳定版使用 `latest`，预发布版使用 `next`。首次需要先配置 npm 包所有权和可信发布，
+步骤见 [npm 发布说明](./docs/npm-release.md)。
 
 预演 production 构建：
 
@@ -498,30 +519,31 @@ node dist/src/cli/hive.js --port 4010
 
 Production 模式下 runtime 直接服务构建好的 web UI，不需要单独的 Vite。
 
-## 源码驱动的构建
+## 发布渠道
 
-本分支刻意以 Git 源码为维护入口。应用中没有官方 npm 更新渠道；需要更新时拉取仓库并按自己的节奏重新构建。
+`hiveteam@latest` 用于安装稳定的 npm 版本，`hiveteam@next` 用于安装已发布的预发布版本。
+源码安装仍适合开发或运行指定 Git 提交。两种安装方式都需要主动升级，Runtime 不会自动更新。
 
 ## 状态
 
-Hive 目前处于 alpha 阶段，核心流程已可用。本仓库包含多 CLI agent 预设、成员管理、JSON Workflows、团队记忆、PWA 安装和可选 Remote access；当前检出的提交就是运行构建的唯一依据。
+HiveTeam 目前处于 alpha 阶段，核心流程已可用。本仓库包含多 CLI agent 预设、成员管理、JSON Workflows、团队记忆、PWA 安装和可选 Remote access；当前检出的提交就是运行构建的唯一依据。
 
 ## 另一种形态：squad
 
 如果你更喜欢 **纯 CLI、零后台进程、能直接在 SSH 进的远端服务器上跑** 的形态，[squad](https://github.com/mco-org/squad) 是同一个想法的另一条路线——SQLite 当通信层，每个 agent 各自开一个终端。两个项目互不替代，按工作流挑就行：
 
-- **Hive** — 想要可视化工作台、一键重启、侧边栏切 workspace、给团队演示
+- **HiveTeam** — 想要可视化工作台、一键重启、侧边栏切 workspace、给团队演示
 - **squad** — 活在 tmux 里、SSH 远端开发、不想跑额外后台进程、Windows server
 
 ## 鸣谢
 
-Hive 的"模板市场"内置了两份社区角色 prompt 库的快照，两份都按各自上游的 MIT 许可分发：
+HiveTeam 的"模板市场"内置了两份社区角色 prompt 库的快照，两份都按各自上游的 MIT 许可分发：
 
 - 英文版（界面切到 EN 时使用）：[`msitarzewski/agency-agents`](https://github.com/msitarzewski/agency-agents)
 - 中文版（界面切到中文时使用）：[`jnMetaCode/agency-agents-zh`](https://github.com/jnMetaCode/agency-agents-zh)
 
-上游内容未做修改，许可证文本保留在 `vendor/marketplace/<lang>/LICENSE`；快照通过 `pnpm sync:marketplace` 在 hive 发版前刷新。
+第三方内容未做修改，许可证文本保留在 `vendor/marketplace/<lang>/LICENSE`；快照通过 `pnpm sync:marketplace` 在 HiveTeam 发版前刷新。
 
 ## License
 
-Hive 在 Business Source License 1.1 下开源。个人使用、内部部署、嵌入、fork 都可以；详细边界见 [LICENSE.BSL](LICENSE.BSL)。Hive 名称、logo 和视觉标识的使用边界见 [TRADEMARK.md](TRADEMARK.md)。
+HiveTeam 使用 [MIT 许可证](./LICENSE)。

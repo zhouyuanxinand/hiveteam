@@ -59,9 +59,9 @@ describe('hive static smoke', () => {
 
     try {
       await waitFor(() => {
-        expect(stdout).toContain('Hive running at http://127.0.0.1:')
+        expect(stdout).toContain('HiveTeam running at http://127.0.0.1:')
       })
-      const match = stdout.match(/Hive running at http:\/\/127\.0\.0\.1:(\d+)/)
+      const match = stdout.match(/HiveTeam running at http:\/\/127\.0\.0\.1:(\d+)/)
       expect(match?.[1]).toBeTruthy()
       const port = Number(match?.[1])
       const cookieJar = join(dataDir, 'cookie.jar')

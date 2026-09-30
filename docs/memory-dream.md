@@ -25,7 +25,7 @@ Changing filters, loading history and refreshing generation preserve local edits
 
 ## Agent commands and control
 
-Hive supplies the exact Dream, attempt and input-hash values in its generation request. An authenticated workspace agent may read the complete paged input:
+HiveTeam supplies the exact Dream, attempt and input-hash values in its generation request. An authenticated workspace agent may read the complete paged input:
 
 ```sh
 team dream input --dream <id> --section generation --offset 0 --limit 5

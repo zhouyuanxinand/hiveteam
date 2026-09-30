@@ -59,7 +59,7 @@ export interface RemoteAuditRecord {
 export const createRemoteAuditStore = (
   db: Database,
   onBackgroundFailure: (error: unknown) => void = (error) =>
-    console.error('[hive] remote transport audit failed', error)
+    console.error('[hiveteam] remote transport audit failed', error)
 ) => {
   const columns = new Set(
     (db.prepare('PRAGMA table_info(remote_audit)').all() as Array<{ name: string }>).map(

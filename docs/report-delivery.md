@@ -32,7 +32,7 @@ report outcome, or replace human acceptance.
 ## Codex acknowledgement
 
 For a Codex Orchestrator, the durable outbox attaches a unique receipt marker.
-Hive waits for an empty composer, pastes once, then waits for either the pasted
+HiveTeam waits for an empty composer, pastes once, then waits for either the pasted
 content indicator or the visible multi-line receipt before pressing Enter.
 If Enter is ignored, it can retry submission of that same paste up to three
 times. It does not blindly paste the entire report again.
@@ -55,11 +55,11 @@ center exposes the pending-delivery diagnostic through the existing
 `report_delivery.last_error` field. Reports do not expire.
 
 - Missing session binding or a non-empty composer: no report is pasted.
-- User input during delivery: automatic Enter stops; Hive will not submit the
+- User input during delivery: automatic Enter stops; HiveTeam will not submit the
   user's draft. Focus notifications and terminal capability replies are not edits.
 - No receipt after the bounded wait: the report remains pending, not delivered.
 - A different terminal run with uncertain prior acceptance: inspect the prior
-  session before manually resending. Hive cannot promise exactly-once model
+  session before manually resending. HiveTeam cannot promise exactly-once model
   execution when the native application cannot prove whether it accepted input.
 
 The schema migration adds receipts and checkpoints without replaying historical

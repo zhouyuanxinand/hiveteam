@@ -48,7 +48,7 @@ export const createIntegrationCandidateRuntime = (input: {
   const integrations = createWorkerWorktreeStore(input.db)
   const dataDirectory = () => {
     if (!input.dataDir)
-      throw new ConflictError('Candidates require a persistent Hive data directory.')
+      throw new ConflictError('Candidates require a persistent HiveTeam data directory.')
     return input.dataDir
   }
   const markIntegrated = (c: IntegrationCandidate) =>
@@ -276,7 +276,7 @@ export const createIntegrationCandidateRuntime = (input: {
     view,
     async prepare(workspaceId: string, dispatchId: string, version: CodeReviewVersion) {
       if (!input.dataDir)
-        throw new ConflictError('Candidates require a persistent Hive data directory.')
+        throw new ConflictError('Candidates require a persistent HiveTeam data directory.')
       const source = await input.reviews.view(workspaceId, dispatchId)
       const dispatch = input.getDispatch(workspaceId, dispatchId)
       const tree = dispatch && input.worktrees.get(workspaceId, dispatch.toAgentId)

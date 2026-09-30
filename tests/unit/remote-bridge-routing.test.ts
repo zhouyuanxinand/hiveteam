@@ -4,7 +4,7 @@ import { classifyOpen, isCanonicalPath } from '../../src/shared/remote-bridge-ro
 import { StreamTransport } from '../../src/shared/remote-protocol.js'
 
 describe('remote bridge routing', () => {
-  test('allows only Hive API HTTP paths', () => {
+  test('allows only HiveTeam API HTTP paths', () => {
     expect(
       classifyOpen({
         transport: StreamTransport.Http,

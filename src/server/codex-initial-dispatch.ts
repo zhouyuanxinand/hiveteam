@@ -69,7 +69,7 @@ export const createCodexInitialDispatch =
     const worker = input.workspaceStore.getWorker(workspaceId, agentId)
     const sender = dispatch.fromAgentId
       ? input.workspaceStore.getAgent(workspaceId, dispatch.fromAgentId).name
-      : 'Hive'
+      : 'HiveTeam'
     const body = buildWorkerDispatchPayload(
       sender,
       worker.description,

@@ -143,7 +143,7 @@ const stageLocalSource = async (cacheRoot: string, sourcePath: string, sourceDir
   ) {
     throw new SkillPackResolutionError(
       'source_path_unsafe',
-      'Local source must not contain or be contained by the Hive Skill Pack cache'
+      'Local source must not contain or be contained by the HiveTeam Skill Pack cache'
     )
   }
   await cp(canonicalSource, sourceDirectory, {

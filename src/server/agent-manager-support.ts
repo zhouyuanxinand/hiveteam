@@ -79,7 +79,7 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
     )
       return
     ioFailed = true
-    console.error('[hive] PTY I/O failed', { error, runId: run.runId, pid: pty.pid })
+    console.error('[hiveteam] PTY I/O failed', { error, runId: run.runId, pid: pty.pid })
     if (!stopped()) run.process.stop()
   }
   if (process.platform === 'win32') {
@@ -214,8 +214,8 @@ export const attachAgentPty = (run: AgentRunRecord, pty: IPty, ptyOutputBus: Pty
       if (!stopRequested && pty.pid > 0) pty.kill()
       windowsAgent?._conoutSocketWorker?.dispose()
     }
-    // The native PTY may report a forced-termination code when Hive closes a
-    // healthy agent. An explicit Hive stop is a clean lifecycle transition;
+    // The native PTY may report a forced-termination code when HiveTeam closes a
+    // healthy agent. An explicit HiveTeam stop is a clean lifecycle transition;
     // only spontaneous non-zero exits should mark the run as failed.
     finishAgentRun(run, ioFailed ? 1 : stopRequested ? 0 : event.exitCode, ptyOutputBus)
   })

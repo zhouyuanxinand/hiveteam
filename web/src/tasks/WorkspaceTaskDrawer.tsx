@@ -32,7 +32,7 @@ type Props = {
 }
 
 /**
- * Dormant Task Graph/Blueprint adapter. Early Hive treated `.hive/tasks.md`
+ * Dormant Task Graph/Blueprint adapter. Early HiveTeam treated `.hive/tasks.md`
  * as a first-class planning surface, but current usage relies on the
  * Orchestrator agent's own planning more than a second visible task system.
  * Keep this adapter wired and tested for existing workspaces and future revival.

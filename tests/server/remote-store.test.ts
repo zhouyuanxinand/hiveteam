@@ -51,7 +51,7 @@ describe('remote persistence', () => {
     db.close()
   })
 
-  test('supports the legacy remote device schema used by Hive 2.1.19', () => {
+  test('supports the legacy remote device schema used by HiveTeam 2.1.19', () => {
     const db = new BetterSqlite3(':memory:')
     db.exec(`
       CREATE TABLE remote_devices (

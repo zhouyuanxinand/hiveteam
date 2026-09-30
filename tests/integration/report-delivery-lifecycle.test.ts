@@ -179,7 +179,7 @@ test('queued reports survive runtime reopen; subsequent restarts and team querie
   // Recovery context may quote the historical result. Count actual report
   // notifications rather than treating that context as a second delivery.
   expect(
-    readFileSync(target.marker, 'utf8').split('[Hive 系统消息：来自 @Coder 的汇报]')
+    readFileSync(target.marker, 'utf8').split('[HiveTeam 系统消息：来自 @Coder 的汇报]')
   ).toHaveLength(2)
   expect(server.store.dispatchDelivery.records.get(receipt.id)).toMatchObject({
     state: 'unknown',

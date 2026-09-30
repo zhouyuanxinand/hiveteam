@@ -250,7 +250,7 @@ describe('Layer A native resume integration', () => {
         expect(state.status).toBe('running')
         expect(state.output).toContain(`--resume ${sessionId}`)
         expect(state.output).not.toContain('STDIN:')
-        expect(state.output).not.toContain('[Hive 系统消息')
+        expect(state.output).not.toContain('[HiveTeam 系统消息')
       })
 
       expect(listSystemMessages(server.dataDir, 'system_env_sync')).toHaveLength(0)

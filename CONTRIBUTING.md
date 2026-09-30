@@ -1,6 +1,6 @@
-# Contributing to Hive
+# Contributing to HiveTeam
 
-Hive is in alpha public preview. Bug reports, design discussions, and PRs
+HiveTeam is in alpha public preview. Bug reports, design discussions, and PRs
 that fit the current project scope are very welcome.
 
 ## Before you file something
@@ -66,4 +66,4 @@ calling out:
 ## License
 
 By contributing you agree your contributions will be licensed under the
-project's current [Business Source License 1.1](./LICENSE.BSL) license.
+project's [MIT License](./LICENSE).

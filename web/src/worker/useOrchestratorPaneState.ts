@@ -131,7 +131,7 @@ export const useOrchestratorPaneState = ({
   const stop = useCallback(() => {
     if (!orchestratorRun) return
     void stopAgentRun(orchestratorRun.run_id).catch((error: unknown) => {
-      console.error('[hive] swallowed:orchestrator.stop', error)
+      console.error('[hiveteam] swallowed:orchestrator.stop', error)
     })
   }, [orchestratorRun])
 
@@ -142,7 +142,7 @@ export const useOrchestratorPaneState = ({
         .catch((error: unknown) => {
           // Best-effort stop before restart; failure is reported via the
           // subsequent .catch on startAgentRun if start fails.
-          console.error('[hive] swallowed:orchestrator.restart.stop', error)
+          console.error('[hiveteam] swallowed:orchestrator.restart.stop', error)
         })
         .then(() => startAgentRun(workspaceId, agentId))
         .then((result) => {

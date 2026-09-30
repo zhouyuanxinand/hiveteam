@@ -24,7 +24,7 @@ coverage against the production implementation.
 This fixture validates the native command sandbox. It does **not** certify CLI
 model tools, MCP/plugins, credential delivery, Git commit authorization, or native
 session resume. Those capabilities need separate evidence. Passing under WSL
-does not certify a Windows Hive runtime launching Windows CLIs or Windows Git
+does not certify a Windows HiveTeam runtime launching Windows CLIs or Windows Git
 worktrees through `wsl.exe`.
 
 Observed Windows preflight on 2026-09-19: native Codex 0.155.1 with `unelevated`
@@ -60,7 +60,7 @@ Reviewer and Orchestrator source access is read-only. Generated commands have
 no network access; the trusted native CLI still accesses its model provider.
 CLI authentication uses a separate home displayed by the local policy UI.
 Native Windows, macOS, other CLIs/versions/models, custom launch flags, and a
-Windows Hive runtime driving WSL remain unsupported for strict execution.
+Windows HiveTeam runtime driving WSL remain unsupported for strict execution.
 Users can explicitly grant unsafe access to one member, workspace, executable
 fingerprint and policy revision; changing those bindings requires a new grant.
 Sensitive current files are denied, but previously committed Git history is not

@@ -504,7 +504,7 @@ export const createFrameBridge = (ctx: FrameBridgeContext): FrameBridge => {
           // The gateway socket may already be gone.
         }
         removeStream(key)
-        console.error('[hive] remote loopback output failed', error)
+        console.error('[hiveteam] remote loopback output failed', error)
       })
       .finally(() => {
         stream.outboundDrainActive = false

@@ -195,7 +195,7 @@ const sessionFromRequest = (request: IncomingMessage, store: GatewayStore) => {
 
 const machineView = (daemon: DaemonRecord, online: boolean) => ({
   id: daemon.id,
-  name: daemon.name ?? 'Hive machine',
+  name: daemon.name ?? 'HiveTeam machine',
   online,
 })
 
@@ -520,7 +520,7 @@ export const createGatewayServer = (options: GatewayServerOptions = {}): Gateway
       const body = await readPayload(request)
       const deviceId = typeof body.deviceId === 'string' ? body.deviceId : ''
       const devicePubkey = typeof body.devicePubkey === 'string' ? body.devicePubkey : ''
-      const name = typeof body.name === 'string' ? body.name : 'Hive device'
+      const name = typeof body.name === 'string' ? body.name : 'HiveTeam device'
       const boundJti = typeof body.boundJti === 'string' ? body.boundJti : ''
       const pair = boundJti ? pairPeers.get(daemon.id) : undefined
       if (
@@ -551,8 +551,8 @@ export const createGatewayServer = (options: GatewayServerOptions = {}): Gateway
 
   const shellMachinesPage = (machines: Array<{ id: string; name: string; online: boolean }>) =>
     shell(
-      'Hive machines',
-      `<h1>Hive machines</h1>${machines.length === 0 ? '<p>还没有已登录的 Hive 设备。</p>' : machines.map((machine) => `<p><strong>${machine.name}</strong><br><span class="${machine.online ? 'ok' : 'warn'}">${machine.online ? '在线' : '离线'}</span><br><span class="hint">${machine.id}</span>${machine.online ? `<br><a href="/app?daemonId=${encodeURIComponent(machine.id)}">打开 Hive 控制台 →</a>` : ''}</p>`).join('')}`
+      'HiveTeam machines',
+      `<h1>HiveTeam machines</h1>${machines.length === 0 ? '<p>还没有已登录的 HiveTeam 设备。</p>' : machines.map((machine) => `<p><strong>${machine.name}</strong><br><span class="${machine.online ? 'ok' : 'warn'}">${machine.online ? '在线' : '离线'}</span><br><span class="hint">${machine.id}</span>${machine.online ? `<br><a href="/app?daemonId=${encodeURIComponent(machine.id)}">打开 HiveTeam 控制台 →</a>` : ''}</p>`).join('')}`
     )
 
   return {

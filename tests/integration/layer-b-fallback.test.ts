@@ -228,7 +228,7 @@ afterEach(() => {
 })
 
 describe('Layer B fallback integration', () => {
-  test('orchestrator recovery summary preserves Hive worker dispatch rules', async () => {
+  test('orchestrator recovery summary preserves HiveTeam worker dispatch rules', async () => {
     const root = mkdtempSync(join(tmpdir(), 'hive-orch-layer-b-home-'))
     const workspacePathRaw = join(root, 'workspace')
     tempDirs.push(root)
@@ -301,8 +301,8 @@ describe('Layer B fallback integration', () => {
         expect(state.status).toBe('running')
         expect(state.output).toContain('让 worker 评估一下项目目标')
         expect(state.output).toContain('Bob')
-        expect(state.output).toContain('Hive worker 是右侧卡片里的真实 CLI agent')
-        expect(state.output).toContain('先执行 `team list` 确认真实 Hive worker')
+        expect(state.output).toContain('HiveTeam worker 是右侧卡片里的真实 CLI agent')
+        expect(state.output).toContain('先执行 `team list` 确认真实 HiveTeam worker')
         expect(state.output).toContain('如果只有一个可用 worker，直接用 `team send "<worker-name>"')
         expect(state.output).toContain('team send "<worker-name>" "<task>"')
         expect(state.output).toContain('不要使用你所在 CLI 的内置 subagent / 子代理工具')
@@ -387,7 +387,7 @@ describe('Layer B fallback integration', () => {
       await waitFor(async () => {
         const state = await getRunViaHttp(server.baseUrl, cookie, secondRun.runId)
         expect(state.status).toBe('running')
-        expect(state.output).toContain('STDIN:[Hive 系统消息：你是 Alpha 的')
+        expect(state.output).toContain('STDIN:[HiveTeam 系统消息：你是 Alpha 的')
         expect(state.output).toContain('无法通过原生 session resume 恢复')
         // §3.5.1 场景 C（正常 exit）也走 Layer B，文案不应自称"崩溃"
         expect(state.output).not.toContain('崩溃')

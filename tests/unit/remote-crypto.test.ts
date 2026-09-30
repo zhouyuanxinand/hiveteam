@@ -75,13 +75,13 @@ describe('remote crypto', () => {
       key: first.d2p,
       streamId: 2,
       headerBytes: header,
-      payload: new TextEncoder().encode('hello from Hive'),
+      payload: new TextEncoder().encode('hello from HiveTeam'),
     })
     expect(
       new TextDecoder().decode(
         openNext(opener, { ...sealed, key: first.d2p, streamId: 2, headerBytes: header })
       )
-    ).toBe('hello from Hive')
+    ).toBe('hello from HiveTeam')
     expect(() =>
       openNext(opener, { ...sealed, key: first.d2p, streamId: 2, headerBytes: header })
     ).toThrow('out-of-order or replayed frame')

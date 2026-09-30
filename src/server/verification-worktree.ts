@@ -12,7 +12,7 @@ export const readVerificationVersion = async (workspacePath: string) => {
       ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
       { env: { GIT_OPTIONAL_LOCKS: '0' } }
     )
-    // Hive writes these two untracked coordination files when opening a workspace.
+    // HiveTeam writes these two untracked coordination files when opening a workspace.
     // Tracked edits, including tracked .hive files, still invalidate verification.
     const prefix = repository.relativePath ? `${repository.relativePath}/` : ''
     const metadata = new Set([`?? ${prefix}.hive/tasks.md`, `?? ${prefix}.hive/PROTOCOL.md`])

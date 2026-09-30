@@ -56,7 +56,7 @@ export const runTeamGrill = async (
         typeof result?.error === 'string' ? result.error : 'The runtime did not confirm the handoff'
       const credentialHelp =
         response.status === 401
-          ? ' The runtime rejected the current team credentials. Restart the Orchestrator from Hive to inject fresh credentials before retrying; if rejection continues, inspect its runtime connection. Do not conduct the interview in the main thread.'
+          ? ' The runtime rejected the current team credentials. Restart the Orchestrator from HiveTeam to inject fresh credentials before retrying; if rejection continues, inspect its runtime connection. Do not conduct the interview in the main thread.'
           : ''
       throw new Error(`Request failed with status ${response.status}: ${detail}.${credentialHelp}`)
     }

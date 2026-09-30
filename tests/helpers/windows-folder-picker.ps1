@@ -47,7 +47,7 @@ public static class NativeFolderPickerTest {
 # A normal top-level window exercises the same Windows stacking rule as a browser.
 # Raising it after the picker opens makes the background-dialog bug deterministic.
 $fixture = New-Object System.Windows.Forms.Form
-$fixture.Text = 'Hive folder picker integration check'
+$fixture.Text = 'HiveTeam folder picker integration check'
 $fixture.ShowInTaskbar = $false
 $fixture.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
 $fixture.Size = New-Object System.Drawing.Size(800, 650)

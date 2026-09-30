@@ -20,8 +20,8 @@ const capabilityMessages: Record<string, [string, string]> = {
     'Native tool and session-resume isolation verification is incomplete.',
   ],
   persistent_policy_directory_required: [
-    '受限执行需要持久化的 Hive 数据目录。',
-    'Restricted execution requires a persistent Hive data directory.',
+    '受限执行需要持久化的 HiveTeam 数据目录。',
+    'Restricted execution requires a persistent HiveTeam data directory.',
   ],
   custom_launch_flags_unverified: [
     '自定义启动参数或模型未通过隔离验证。',

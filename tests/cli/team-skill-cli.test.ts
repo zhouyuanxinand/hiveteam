@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe('team Skill CLI integration', () => {
   test(
-    'lists, loads, dispatches, and reads a pinned Skill through a live Hive runtime',
+    'lists, loads, dispatches, and reads a pinned Skill through a live HiveTeam runtime',
     async () => {
       const dataDir = mkdtempSync(join(tmpdir(), 'hive-team-skill-cli-'))
       tempDirs.push(dataDir)

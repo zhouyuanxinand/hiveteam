@@ -1,5 +1,5 @@
 /**
- * Wire constants shared with the Hive remote gateway relay.
+ * Wire constants shared with the HiveTeam remote gateway relay.
  *
  * These strings deliberately stay separate from the encrypted binary data
  * plane. The gateway originates only the control band; all application data

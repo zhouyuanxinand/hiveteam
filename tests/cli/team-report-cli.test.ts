@@ -183,7 +183,7 @@ describe('team report cli', () => {
         })
         const body = (await runResponse.json()) as { output: string }
         const output = normalizeTerminalText(body.output)
-        expect(output).toContain('[Hive 系统消息：来自 @Alice 的状态更新]')
+        expect(output).toContain('[HiveTeam 系统消息：来自 @Alice 的状态更新]')
         expect(output).toContain('Alice 已接入 workspace，等待派单')
       })
       expect(hive.store.listDispatches(workspace.id)).toEqual([])

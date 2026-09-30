@@ -11,7 +11,7 @@ export const uiRoutes: RouteDefinition[] = [
       request.headers[HIVE_REMOTE_DEVICE_HEADER] ||
       !store.validateUiToken(readCookie(request.headers.cookie, 'hive_ui_token'))
     ) {
-      throw new ForbiddenError('UI bootstrap required; reopen Hive from its launcher')
+      throw new ForbiddenError('UI bootstrap required; reopen HiveTeam from its launcher')
     }
     response.setHeader('cache-control', 'no-store')
     sendJson(response, 200, { ok: true })
@@ -23,7 +23,7 @@ export const uiRoutes: RouteDefinition[] = [
     }
     const body = await readJsonBody<{ bootstrap_token?: unknown }>(request, { limitBytes: 1024 })
     if (typeof body.bootstrap_token !== 'string') {
-      throw new ForbiddenError('UI bootstrap required; reopen Hive from its launcher')
+      throw new ForbiddenError('UI bootstrap required; reopen HiveTeam from its launcher')
     }
     const token = store.exchangeUiBootstrap(body.bootstrap_token)
     response.setHeader('cache-control', 'no-store')

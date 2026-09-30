@@ -278,7 +278,7 @@
   }
 }
 
-/* Mobile adaptation for the reused Hive tree. The desktop layout is a split
+/* Mobile adaptation for the reused HiveTeam tree. The desktop layout is a split
    workspace with a permanently wide orchestrator pane. On a phone that is not
    a scaled-down version of the same experience: it becomes a compact avatar
    rail plus a vertical orchestrator/team flow, while terminal text is fitted

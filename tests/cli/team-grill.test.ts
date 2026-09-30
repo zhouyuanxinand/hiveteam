@@ -125,7 +125,7 @@ test('real grill CLI preserves authentication failures and validates retry IDs w
   expect(denied.stderr).toContain(requestId)
   expect(denied.stderr).toContain('401')
   expect(denied.stderr).toContain('Invalid or missing agent token')
-  expect(denied.stderr).toContain('Restart the Orchestrator from Hive')
+  expect(denied.stderr).toContain('Restart the Orchestrator from HiveTeam')
   expect(denied.stderr).toContain('Do not conduct the interview in the main thread')
   expect(denied.stdout).toBe('')
   expect(f.server.store.listWorkers(f.workspace.id)).toHaveLength(0)

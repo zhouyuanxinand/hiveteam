@@ -38,7 +38,7 @@ describe('desktop service environment', () => {
     ).toBe(resolve('acceptance data'))
   })
 
-  it('does not leak pnpm package-prefix overrides into Hive or its agents', () => {
+  it('does not leak pnpm package-prefix overrides into HiveTeam or its agents', () => {
     const parentEnvironment = {
       PATH: 'D:\\Dev\\npm-global',
       npm_config_cache: 'D:\\Dev\\npm-cache',

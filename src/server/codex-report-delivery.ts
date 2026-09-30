@@ -130,7 +130,7 @@ export const deliverCodexReport = async ({
         )
       if (checkpoint && checkpoint.runId !== runId)
         throw new Error(
-          'The previous terminal ended with an unconfirmed message. Review its session before resending; Hive has retained the message without duplicating it.'
+          'The previous terminal ended with an unconfirmed message. Review its session before resending; HiveTeam has retained the message without duplicating it.'
         )
       const screen = await mirror.getScreenText()
       if (
@@ -139,7 +139,7 @@ export const deliverCodexReport = async ({
         )
       )
         throw new Error(
-          'Codex is showing a confirmation or session-lock dialog. Resolve it in the recipient terminal; Hive will not automatically confirm it. The message remains queued.'
+          'Codex is showing a confirmation or session-lock dialog. Resolve it in the recipient terminal; HiveTeam will not automatically confirm it. The message remains queued.'
         )
       const input = composer(screen)
       if (!checkpoint) {
@@ -175,7 +175,7 @@ export const deliverCodexReport = async ({
       } else {
         if (agentManager.getInputSequence(runId) !== checkpoint.inputSequence)
           throw new Error(
-            'Other input reached the recipient while a message was pending. Review its composer; Hive will not overwrite or submit your draft. The message remains queued.'
+            'Other input reached the recipient while a message was pending. Review its composer; HiveTeam will not overwrite or submit your draft. The message remains queued.'
           )
         if (
           encoded

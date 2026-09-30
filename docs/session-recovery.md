@@ -1,12 +1,12 @@
 # Workspace and native session recovery
 
-Hive persists workspace identities, members, launch configuration, dispatches,
+HiveTeam persists workspace identities, members, launch configuration, dispatches,
 and native conversation bindings in its local `runtime.sqlite`. Native conversation
 contents remain in the CLI's own storage. Keep both stores when backing up or
 moving an installation. Terminal scrollback is not a durable conversation archive,
 and shutting down a machine cannot preserve a running process or unwritten output.
 
-## Use the same Hive data directory
+## Use the same HiveTeam data directory
 
 All standard launch modes default to `~/.config/hive`. An explicit `HIVE_DATA_DIR`
 selects a separate database. Launchers resolve a relative override against the
@@ -14,21 +14,21 @@ invocation directory before changing directories, and print the resulting path.
 Switching between an acceptance-test directory and the default directory can make
 workspaces appear missing even though neither database was deleted.
 
-Stop the corresponding Hive instance and back up its data before changing the
+Stop the corresponding HiveTeam instance and back up its data before changing the
 directory. Do not overwrite one database with another to combine workspaces. This
 change does not automatically migrate or merge existing directories, and Windows
 and WSL are separate native session environments.
 
 ## Restart behavior
 
-- Before a normal platform shutdown, Hive commits which runs were active. Their
+- Before a normal platform shutdown, HiveTeam commits which runs were active. Their
   PTYs still exit normally and visible agent status remains `stopped`.
 - On startup, active-before-shutdown and interrupted runs are recovery candidates.
   The workspace's auto-resume toggle, explicit member stop and repeated-fast-exit
   safeguards still apply. Orchestrators are started before workers.
 - A successful new run supersedes old recovery intent. Completed, explicitly
   stopped and never-started members are not restarted just because they exist.
-- Hive waits for native session creation for the lifetime of the run, until a
+- HiveTeam waits for native session creation for the lifetime of the run, until a
   session is captured. It performs a final capture on exit and cancels observation
   before closing SQLite. An idle worker does not lose capture just because it has
   waited more than thirty seconds for its first task.
@@ -36,8 +36,8 @@ and WSL are separate native session environments.
   are persisted. Resumed launches use the recorded capture location; in particular,
   Codex receives its original `CODEX_HOME` even if the launching shell changed it.
 - An unrecorded Codex or Claude conversation may be reattached only when a unique
-  eligible session contains that member's Hive binding marker. A shared project
-  directory alone is not proof of ownership. Hive does not guess between multiple
+  eligible session contains that member's HiveTeam binding marker. A shared project
+  directory alone is not proof of ownership. HiveTeam does not guess between multiple
   matching histories or adopt an unrelated desktop conversation.
 
 On Windows, a new session using the Codex preset receives its startup instructions
@@ -45,13 +45,13 @@ or recovery summary through Codex's initial prompt argument. Console paste burst
 can lose line breaks or split long text into several composer placeholders, leaving
 automatic startup waiting indefinitely. The initial prompt preserves the complete
 message, including documents, skills and memory, without typing it into the composer.
-Hive resolves the same authorized native executable (or Node launcher), bypasses
+HiveTeam resolves the same authorized native executable (or Node launcher), bypasses
 shell quoting, and rejects an oversized Windows command line before spawning.
 It does not also paste the message after launch. Memory preparation retains the
 actual run ID, and native session capture still requires the member binding marker.
 
 A worker's first pending dispatch uses this same initial-prompt path when it has
-no native session. Hive claims the original delivery before spawning and persists
+no native session. HiveTeam claims the original delivery before spawning and persists
 its run ID, receipt marker and full-message SHA256. The ordinary delivery scheduler
 then reconciles the native journal without also pasting the task. A launch with
 uncertain acceptance retains its checkpoint across restart; it is never retried
@@ -86,22 +86,22 @@ original native files/environment and retry. A native resume process that exits
 with an error also retains its session pointer.
 
 If a native CLI reports that another application owns the conversation, release
-that conversation in the other application and use Hive's existing session retry
+that conversation in the other application and use HiveTeam's existing session retry
 control. Closing a conversation tab may leave the application's background server
 holding its writer lock. If the warning persists, finish any active work and quit
 the owning application completely before retrying. A readable history does not
-mean that its write lock has been released. Hive does not delete native locks or
+mean that its write lock has been released. HiveTeam does not delete native locks or
 terminate unrelated applications.
 
 For a member with no native session to resume, the existing recovery summary is a
 best-effort fallback, not a copy of the full conversation. Harness-side deletion,
 manual conversation switching and cross-OS migration are not made lossless by a
-Hive restart. Native ID capture does not preserve unsaved in-flight tool execution.
+HiveTeam restart. Native ID capture does not preserve unsaved in-flight tool execution.
 
 ## Repair a legacy Codex binding
 
 If an older launch never delivered its member marker, its native conversation
-may exist without a Hive binding. Stop the platform, back up its data, identify
+may exist without a HiveTeam binding. Stop the platform, back up its data, identify
 the intended conversation, and attach that exact ID:
 
 ```sh

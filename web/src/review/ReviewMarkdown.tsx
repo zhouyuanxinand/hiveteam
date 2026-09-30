@@ -37,7 +37,7 @@ export const ReviewMarkdown = ({
         continue
       }
       link.removeAttribute('href')
-      // Only listed workspace Markdown links navigate inside Hive, never to a local URL.
+      // Only listed workspace Markdown links navigate inside HiveTeam, never to a local URL.
       const base = new URL(path, 'https://review.invalid/')
       let target: URL
       try {

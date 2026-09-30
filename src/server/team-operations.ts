@@ -285,7 +285,7 @@ export const createTeamOperations = ({
         replayed += 1
       } catch (error) {
         markDispatchDeliveryFailed?.(dispatch.id, reportForwardErrorMessage(error))
-        console.error('[hive] queued dispatch replay failed', {
+        console.error('[hiveteam] queued dispatch replay failed', {
           dispatchId: dispatch.id,
           error: reportForwardErrorMessage(error),
           workerId,
@@ -439,7 +439,7 @@ export const createTeamOperations = ({
             dispatch = { ...dispatch, baseHeadSha }
           }
         } catch (error) {
-          console.error('[hive] swallowed:dispatchTask.baseHeadCapture', error)
+          console.error('[hiveteam] swallowed:dispatchTask.baseHeadCapture', error)
         }
       }
       // A worker-start replay may have accepted the dispatch while
@@ -452,7 +452,7 @@ export const createTeamOperations = ({
         try {
           await baseHeadCapture
         } catch (captureError) {
-          console.error('[hive] swallowed:dispatchTask.failedBaseHeadCapture', captureError)
+          console.error('[hiveteam] swallowed:dispatchTask.failedBaseHeadCapture', captureError)
         }
       }
       if (dispatch && markDispatchDeliveryFailed) {
@@ -474,7 +474,7 @@ export const createTeamOperations = ({
 
   const dispatchTask = (...args: Parameters<typeof dispatchTaskImpl>) => {
     if (closing) {
-      return Promise.reject(new ConflictError('Hive runtime is closing'))
+      return Promise.reject(new ConflictError('HiveTeam runtime is closing'))
     }
     return trackDispatch(dispatchTaskImpl(...args))
   }
@@ -679,7 +679,7 @@ export const createTeamOperations = ({
             forwarded = true
           } catch (error) {
             forwardError = reportForwardErrorMessage(error)
-            console.error('[hive] swallowed:teamStatus.forward', error)
+            console.error('[hiveteam] swallowed:teamStatus.forward', error)
           }
         }
         return { dispatch: null, forwardError, forwarded }
@@ -790,7 +790,7 @@ export const createTeamOperations = ({
             try {
               reportOutbox?.deletePendingForDispatch(openDispatch.id)
             } catch (rollbackError) {
-              console.error('[hive] swallowed:teamReport.outboxRollback', rollbackError)
+              console.error('[hiveteam] swallowed:teamReport.outboxRollback', rollbackError)
             }
           }
           if (messageHandle) deleteMessage(messageHandle)
@@ -831,7 +831,7 @@ export const createTeamOperations = ({
             forwarded = true
           } catch (error) {
             forwardError = reportForwardErrorMessage(error)
-            console.error('[hive] swallowed:teamReport.forward', error)
+            console.error('[hiveteam] swallowed:teamReport.forward', error)
           }
         }
       }

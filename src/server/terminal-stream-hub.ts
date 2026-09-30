@@ -458,7 +458,7 @@ export const createTerminalStreamHub = (store: RuntimeStore): TerminalStreamHub 
         } catch (error) {
           // A terminal can exit between the browser's keystroke and this
           // message handler. Report the stale input to that socket instead of
-          // letting a normal PTY race crash the whole Hive runtime.
+          // letting a normal PTY race crash the whole HiveTeam runtime.
           if (socket.readyState === socket.OPEN) {
             socket.send(
               serializeTerminalError(

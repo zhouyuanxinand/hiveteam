@@ -564,7 +564,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         )
         services.workflowRuntime.recordDispatchReport(workspaceId, result.dispatch)
       } catch (error) {
-        console.error('[hive] post-report workflow bookkeeping failed', {
+        console.error('[hiveteam] post-report workflow bookkeeping failed', {
           error: error instanceof Error ? error.message : String(error),
           workspaceId,
         })
@@ -679,7 +679,7 @@ export const createRuntimeStore = (options: RuntimeStoreOptions = {}): RuntimeSt
         .getStatus(workspace.id, workspace.path)
         .catch((error: unknown) => {
           if (String(error).toLowerCase().includes('database connection is not open')) return
-          console.warn('[hive] Git repository detection failed while binding workspace', {
+          console.warn('[hiveteam] Git repository detection failed while binding workspace', {
             error: error instanceof Error ? error.message : String(error),
             workspaceId: workspace.id,
           })

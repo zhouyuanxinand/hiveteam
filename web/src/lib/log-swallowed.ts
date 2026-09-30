@@ -9,5 +9,5 @@ export const logSwallowed =
   (context: string) =>
   (error: unknown): void => {
     // eslint-disable-next-line no-console
-    console.error(`[hive] swallowed:${context}`, error)
+    console.error(`[hiveteam] swallowed:${context}`, error)
   }

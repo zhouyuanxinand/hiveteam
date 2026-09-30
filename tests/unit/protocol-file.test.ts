@@ -33,7 +33,7 @@ describe('ensureProtocolFile', () => {
     expect(written).toEqual(buildProtocolDoc())
   })
 
-  test('overwrites a stale PROTOCOL.md so a Hive version bump propagates without manual edits', () => {
+  test('overwrites a stale PROTOCOL.md so a HiveTeam version bump propagates without manual edits', () => {
     const workspace = newWorkspace()
     ensureProtocolFile(workspace)
     const path = getProtocolFilePath(workspace)

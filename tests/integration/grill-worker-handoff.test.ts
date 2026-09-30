@@ -131,7 +131,7 @@ test('real CLI + HTTP + PTYs isolate the interview and deliver only the final ha
     (await post('/answer', { ...input, request_id: randomUUID(), text: 'MEMBER-FENCE' })).status
   ).toBe(202)
   await expect.poll(memberReceived).toContain('MEMBER-FENCE')
-  expect(memberReceived().split(`[Hive user response ${input.request_id}]`)).toHaveLength(2)
+  expect(memberReceived().split(`[HiveTeam user response ${input.request_id}]`)).toHaveLength(2)
   // Stop the main process: the final handoff must use the durable outbox.
   const mainRun = server.store.getActiveRunByAgentId(workspaceId, orch)
   if (!mainRun) throw new Error('Expected main PTY')

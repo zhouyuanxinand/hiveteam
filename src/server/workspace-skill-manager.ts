@@ -403,7 +403,7 @@ export const createWorkspaceSkillManager = ({
       if (!planner) {
         throw new SkillPackChangeError(
           'release_unavailable',
-          'Skill Pack changes require a persistent Hive data directory'
+          'Skill Pack changes require a persistent HiveTeam data directory'
         )
       }
       return planner.plan(workspaceId, intent)
@@ -412,7 +412,7 @@ export const createWorkspaceSkillManager = ({
       if (!packResolver) {
         throw new SkillPackResolutionError(
           'cache_unavailable',
-          'Skill Pack resolution requires a persistent Hive data directory'
+          'Skill Pack resolution requires a persistent HiveTeam data directory'
         )
       }
       return packResolver.resolve(input, options)

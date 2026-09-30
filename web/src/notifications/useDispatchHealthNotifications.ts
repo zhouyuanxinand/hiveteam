@@ -16,7 +16,7 @@ export const useDispatchHealthNotifications = (workspaceId: string | undefined) 
       const stored = JSON.parse(window.localStorage.getItem(key) ?? '[]')
       if (Array.isArray(stored)) for (const id of stored) if (typeof id === 'string') seen.add(id)
     } catch (error) {
-      console.warn('[hive] Could not read notification history', error)
+      console.warn('[hiveteam] Could not read notification history', error)
     }
     const poll = async () => {
       try {
@@ -41,10 +41,10 @@ export const useDispatchHealthNotifications = (workspaceId: string | undefined) 
         try {
           window.localStorage.setItem(key, JSON.stringify([...seen].slice(-500)))
         } catch (error) {
-          console.warn('[hive] Could not save notification history', error)
+          console.warn('[hiveteam] Could not save notification history', error)
         }
       } catch (error) {
-        if (!disposed) console.warn('[hive] Task health notifications unavailable', error)
+        if (!disposed) console.warn('[hiveteam] Task health notifications unavailable', error)
       } finally {
         if (!disposed) timer = setTimeout(() => void poll(), 5000)
       }

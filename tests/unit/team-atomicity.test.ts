@@ -473,7 +473,7 @@ describe('team atomicity', () => {
     expect(markTaskReported).toHaveBeenCalledWith(workspace.id, worker.id)
     expect(deleteMessage).not.toHaveBeenCalled()
     expect(reportForwardError).toHaveBeenCalledWith(
-      '[hive] swallowed:teamReport.forward',
+      '[hiveteam] swallowed:teamReport.forward',
       expect.any(Error)
     )
     expect(result).toEqual({

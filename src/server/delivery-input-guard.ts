@@ -19,7 +19,7 @@ export const guardDeliveryInput = (
     if (Date.now() >= deadline) throw new ConflictError('Delivery confirmation deadline reached')
     if (manager.getInputSequence(runId) !== sequence)
       throw new ConflictError(
-        'Other terminal input interrupted delivery. Hive will not overwrite or submit your draft. Review the composer before continuing.'
+        'Other terminal input interrupted delivery. HiveTeam will not overwrite or submit your draft. Review the composer before continuing.'
       )
   }
   const guarded: AgentManager = {

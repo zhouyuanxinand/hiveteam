@@ -1,13 +1,15 @@
-# Hive Gateway（自建 MVP）
+# HiveTeam Gateway（自建 MVP）
 
-这是 Hive 远程访问的自建网关 MVP。它只负责：
+这是 HiveTeam 远程访问的自建网关 MVP。它只负责：
 
 - `hive remote login` 的一次性授权码和 daemon Token；
 - 配对确认时登记设备；
 - 在 daemon、pair 和 device WebSocket 之间转发控制帧和加密二进制帧。
-- 托管 `web/dist/remote.html` 手机入口；手机配对后通过同一条端到端加密通道访问 Hive 的 `/api/*` 和 `/ws/*`。
+- 托管 `web/dist/remote.html` 手机入口；手机配对后通过同一条端到端加密通道访问 HiveTeam 的 `/api/*` 和 `/ws/*`。
 
-网关不会解密 Hive 数据，也不会访问本机 Workspace。当前版本是单用户 MVP，管理 Token 等同于网关所有权凭据。
+网关不会解密 HiveTeam 数据，也不会访问本机 Workspace。当前版本是单用户 MVP，管理 Token 等同于网关所有权凭据。
+
+HiveTeam 不提供默认远程网关地址。启用远程访问前，先按本说明部署自己的网关，首次登录时显式指定它的 URL。已保存的网关地址仍可继续使用。
 
 ## 启动
 
@@ -23,26 +25,28 @@ pnpm gateway:dev
 ```powershell
 $env:HIVE_GATEWAY_HOST = '0.0.0.0'
 $env:HIVE_GATEWAY_PORT = '8787'
-$env:HIVE_GATEWAY_DATA_DIR = 'D:\HiveGatewayData'
+$env:HIVE_GATEWAY_DATA_DIR = 'D:\HiveTeamGatewayData'
 # 如果从其他目录启动网关，显式指定前端构建目录：
-$env:HIVE_WEB_DIST_DIR = 'D:\桌面\hive\web\dist'
+$env:HIVE_WEB_DIST_DIR = 'D:\桌面\hiveteam\web\dist'
 ```
 
-然后让本机 Hive 使用自建地址：
+然后让本机 HiveTeam 使用自建地址：
 
 ```powershell
 hive remote login --gateway https://你的网关域名
 ```
+
+将示例地址替换为已部署的网关 URL。登录保存地址后，下次可以直接执行 `hive remote login` 复用它；切换网关时再次传入 `--gateway`。`HIVE_GATEWAY_*` 环境变量名称保持不变。
 
 打开终端打印的 `/daemon/approve?code=...` 页面，输入 `HIVE_GATEWAY_OWNER_TOKEN` 批准本机。
 
 ## 手机访问
 
 1. 在网关根地址登录管理 Token；
-2. 打开 `/app`，或者在 `/machines` 中点击在线机器的“打开 Hive 控制台”；
-3. 在电脑 Hive 的“远程访问”面板点击“配对手机”，复制两行配对数据；
+2. 打开 `/app`，或者在 `/machines` 中点击在线机器的“打开 HiveTeam 控制台”；
+3. 在电脑 HiveTeam 的“远程访问”面板点击“配对手机”，复制两行配对数据；
 4. 在手机 `/app` 粘贴配对数据，并在电脑端核对相同的 SAS 短码后确认；
-5. 配对完成后，手机会加载完整 Hive 界面，Workspace、Team、Tasks 和终端请求都通过加密设备通道转发。
+5. 配对完成后，手机会加载完整 HiveTeam 界面，Workspace、Team、Tasks 和终端请求都通过加密设备通道转发。
 
 本地开发可以先用 `pnpm build:web`，再启动 `pnpm gateway:dev`。生产环境应使用 HTTPS/WSS 反向代理；临时 Quick Tunnel 仅适合联调。
 

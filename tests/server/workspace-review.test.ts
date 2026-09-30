@@ -178,7 +178,7 @@ test('keeps stopped-agent submissions retryable and delivers free text and revis
   const fence = { ...answer, request_id: randomUUID(), text: 'delivery-fence' }
   await request('/answer', 'POST', fence)
   await expect.poll(() => readFileSync(received, 'utf8')).toContain('delivery-fence')
-  expect(readFileSync(received, 'utf8').split(`[Hive plan review ${reviewId}]`)).toHaveLength(2)
+  expect(readFileSync(received, 'utf8').split(`[HiveTeam plan review ${reviewId}]`)).toHaveLength(2)
   expect((await request('/answer', 'POST', { ...answer, text: 'different request' })).status).toBe(
     409
   )

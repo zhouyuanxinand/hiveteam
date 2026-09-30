@@ -78,7 +78,7 @@
 }
 
 :root {
-  /* Twenty-style dark surfaces (mirror of @theme above). Hive's design used
+  /* Twenty-style dark surfaces (mirror of @theme above). HiveTeam's design used
      to follow Linear's near-black; the move to charcoal #171717 is the
      single biggest "this isn't Tailwind defaults" signal in this commit. */
   --bg-0: #171717;
@@ -731,7 +731,7 @@ html, body {
    `radius.sm`) instead of 8px — the soft 8px reads "SaaS app", 4px reads
    "data-dense CRM" which is the family we want. (2) Rest border is the
    quiet `--border` step; only hover firms it up to `--border-bright`. The
-   accent-tint hover bg from the previous pass was a Hive-original beat
+   accent-tint hover bg from the previous pass was a HiveTeam-original beat
    Twenty never wears — hover is just a gray-step. */
 .card {
   position: relative;
@@ -1242,7 +1242,7 @@ html, body {
 }
 
 /* Dialog.Overlay surface — Twenty uses a flat 72% black backdrop, no blur.
-   Hive previously layered blur(10px) + saturate(140%); dropped to match. */
+   HiveTeam previously layered blur(10px) + saturate(140%); dropped to match. */
 .app-overlay {
   background: var(--bg-overlay);
 }
@@ -1310,7 +1310,7 @@ html, body {
      • .dialog-scale-pop — dialogs centered by an outer grid layer; scale only.
      • .drawer-pop  — side panels (inset-y-0 right-0), slide in from right. */
 /* Dialog enter/exit — Twenty fades opacity-only over its 300ms `normal`
-   animation token. Previously Hive scaled from 0.94 → 1; the scale was a
+   animation token. Previously HiveTeam scaled from 0.94 → 1; the scale was a
    "designed" tell. Translate keyframes keep `dialog-pop` (centered via
    transform) anchored; `dialog-scale-pop` (centered by an outer grid)
    doesn't need transforms at all. */

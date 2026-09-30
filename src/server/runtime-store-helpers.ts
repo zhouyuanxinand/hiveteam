@@ -546,7 +546,7 @@ export const createRuntimeStoreLifecycle = ({
           void services.teamOps
             .replayQueuedDispatches(workspaceId, agentId)
             .catch((error: unknown) => {
-              console.error('[hive] queued dispatch replay failed after agent start', {
+              console.error('[hiveteam] queued dispatch replay failed after agent start', {
                 agentId,
                 error: error instanceof Error ? error.message : String(error),
                 workspaceId,
@@ -554,7 +554,7 @@ export const createRuntimeStoreLifecycle = ({
             })
           if (onAgentStarted) {
             void Promise.resolve(onAgentStarted(workspaceId, agentId)).catch((error: unknown) => {
-              console.error('[hive] post-agent-start bookkeeping failed', {
+              console.error('[hiveteam] post-agent-start bookkeeping failed', {
                 agentId,
                 error: error instanceof Error ? error.message : String(error),
                 workspaceId,
@@ -667,7 +667,9 @@ export const createRuntimeStoreLifecycle = ({
           continue
         }
         if (!settings.autoResumeOnRestart) {
-          console.info(`[hive] auto-resume skipped: workspace ${candidate.workspaceId} is disabled`)
+          console.info(
+            `[hiveteam] auto-resume skipped: workspace ${candidate.workspaceId} is disabled`
+          )
           results.push({
             agentId: candidate.agentId,
             error: 'Workspace auto-resume is disabled.',
@@ -680,7 +682,7 @@ export const createRuntimeStoreLifecycle = ({
 
         if (candidate.consecutiveFastExits >= 3) {
           console.warn(
-            `[hive] auto-resume suspended after ${candidate.consecutiveFastExits} fast exits: ${candidate.agentId}`
+            `[hiveteam] auto-resume suspended after ${candidate.consecutiveFastExits} fast exits: ${candidate.agentId}`
           )
           results.push({
             agentId: candidate.agentId,
@@ -715,7 +717,7 @@ export const createRuntimeStoreLifecycle = ({
           })
           const ok = run.status !== 'error'
           console.info(
-            `[hive] auto-resume ${ok ? 'started' : 'failed'}: ${candidate.agentId} (${run.runId})`
+            `[hiveteam] auto-resume ${ok ? 'started' : 'failed'}: ${candidate.agentId} (${run.runId})`
           )
           results.push({
             agentId: candidate.agentId,
@@ -731,7 +733,7 @@ export const createRuntimeStoreLifecycle = ({
               : null
           const message = error instanceof Error ? error.message : String(error)
           if (!(autoResumeStopped && error instanceof ExecutionCancelledError)) {
-            console.error(`[hive] auto-resume failed: ${candidate.agentId}`, error)
+            console.error(`[hiveteam] auto-resume failed: ${candidate.agentId}`, error)
           }
           results.push({
             ...(queued ? { queueId: queued.id } : {}),

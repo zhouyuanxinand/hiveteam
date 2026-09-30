@@ -9,7 +9,7 @@ type WelcomePaneProps = {
   heroImageSrc?: string
   /**
    * When true, the primary CTA is disabled and a "runtime offline" footnote
-   * appears. Used by App.tsx when the local Hive runtime bootstrap failed.
+   * appears. Used by App.tsx when the local HiveTeam runtime bootstrap failed.
    */
   disabledReason?: string
 }

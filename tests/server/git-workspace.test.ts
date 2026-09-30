@@ -49,7 +49,7 @@ const createRepository = () => {
   runGit(repository, ['init'])
   runGit(repository, ['config', 'user.name', 'HiveTest'])
   runGit(repository, ['config', 'user.email', 'hive-test@example.test'])
-  writeFileSync(join(repository, 'README.md'), '# Hive test\n')
+  writeFileSync(join(repository, 'README.md'), '# HiveTeam test\n')
   runGit(repository, ['add', '-A'])
   runGit(repository, ['commit', '-m', 'initial'])
   return repository
@@ -85,7 +85,7 @@ describe('Git workspace service', () => {
     expect(initialStatus.state).toBe('ready')
     expect(initialStatus.isDirty).toBe(false)
 
-    writeFileSync(join(repository, 'README.md'), '# Hive snapshot\n')
+    writeFileSync(join(repository, 'README.md'), '# HiveTeam snapshot\n')
     const snapshot = await store.git.createSnapshot({
       message: 'HiveTeam: test snapshot',
       turnId: 'turn-1',
@@ -109,7 +109,7 @@ describe('Git workspace service', () => {
     })
     expect(reverted.revertedSha).toBe(snapshot.commit?.sha)
     expect(readFileSync(join(repository, 'README.md'), 'utf8').replace(/\r\n/gu, '\n')).toBe(
-      '# Hive test\n'
+      '# HiveTeam test\n'
     )
     expect((await store.git.getStatus(workspace.id, repository)).isDirty).toBe(false)
   })

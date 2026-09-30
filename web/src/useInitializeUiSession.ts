@@ -56,7 +56,7 @@ export const useInitializeUiSession = (
             setActiveWorkspaceId(nextActiveWorkspaceId)
             if (persistedId !== nextActiveWorkspaceId) {
               saveActiveWorkspaceId(nextActiveWorkspaceId).catch((error: unknown) => {
-                if (!cancelled) console.error('[hive] swallowed:initSession.save', error)
+                if (!cancelled) console.error('[hiveteam] swallowed:initSession.save', error)
               })
             }
             return merged
@@ -78,7 +78,7 @@ export const useInitializeUiSession = (
                   )
             )
           }
-          console.error('[hive] swallowed:initSession.bootstrap', error)
+          console.error('[hiveteam] swallowed:initSession.bootstrap', error)
         }
       })
     return () => {

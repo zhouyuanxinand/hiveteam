@@ -30,5 +30,5 @@ test('consumes the launch fragment before posting and shares the exchange across
 
 test('expired runtime session instructs the user to reopen the trusted launcher', async () => {
   vi.stubGlobal('fetch', async () => new Response('{}', { status: 403 }))
-  await expect(initializeUiSession()).rejects.toThrow('Reopen Hive from its launcher')
+  await expect(initializeUiSession()).rejects.toThrow('Reopen HiveTeam from its launcher')
 })

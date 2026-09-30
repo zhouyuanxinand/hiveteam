@@ -65,16 +65,16 @@ test('does not remove body whitespace or treat a literal chip label as an opaque
 })
 
 test('matches raw multiline messages hidden in mixed paste chips without requiring a visible receipt marker', () => {
-  const text = `[Hive report] ${'中文 🐝\n  report body\n'.repeat(10)}[Hive report receipt: fixture-id]\n`
+  const text = `[HiveTeam report] ${'中文 🐝\n  report body\n'.repeat(10)}[Hive report receipt: fixture-id]\n`
   const points = Array.from(text)
-  const head = points.slice(0, 14).join('')
+  const head = points.slice(0, 18).join('')
   const tail = points.slice(-12).join('').replace(/\n$/u, '')
-  const count = points.length - 14 - 12
+  const count = points.length - 18 - 12
   const content = `› ${head}[Pasted Content ${count} chars]\n  ${tail}\n\n  footer`
   expect(completeCodexTextPasteVisible(content, text)).toBe(true)
   expect(completeCodexEncodedPasteVisible(content, text)).toBe(false)
   for (const changed of [
-    content.replace('[Hive report]', '[Hive wrong]'),
+    content.replace('[HiveTeam report]', '[HiveTeam wrong]'),
     content.replace('fixture-id]', 'fixture-XX]'),
     content.replace(`${count} chars`, `${count - 1} chars`),
     content.replace(`${count} chars`, `${count + 1} chars`),

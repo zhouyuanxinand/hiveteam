@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Hive is broken or behaves unexpectedly.
+description: Something in HiveTeam is broken or behaves unexpectedly.
 labels: ["bug"]
 body:
   - type: markdown
@@ -13,7 +13,7 @@ body:
   - type: input
     id: hive-version
     attributes:
-      label: Hive version
+      label: HiveTeam version
       description: Output of `hive --version`.
       placeholder: e.g. 1.0.0
     validations:
@@ -80,6 +80,6 @@ body:
     attributes:
       label: Logs and additional context
       description: |
-        Browser console output, the Hive runtime stdout, screenshots, or a
+        Browser console output, the HiveTeam runtime stdout, screenshots, or a
         snippet of `.hive/tasks.md` — anything that would speed up triage.
       render: text

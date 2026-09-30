@@ -77,7 +77,7 @@ export const ensureTasksFile = (workspacePath: string) => {
 /**
  * Always overwrites `.hive/PROTOCOL.md` with the freshly-built protocol doc.
  * The doc is marked auto-generated so user edits are not expected; rewriting
- * on every workspace open means a Hive version bump that changes the rules
+ * on every workspace open means a HiveTeam version bump that changes the rules
  * propagates without manual intervention.
  */
 export const ensureProtocolFile = (workspacePath: string, language: WorkspaceLanguage = 'zh') => {

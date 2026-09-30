@@ -353,7 +353,7 @@ const createPlacementOperations = async (
     if (!activePlacement && observed.fingerprint !== 'missing') {
       throw new SkillPackChangeError(
         'placement_conflict',
-        `Native Skill target is not owned by Hive: ${placement.targetPath}`
+        `Native Skill target is not owned by HiveTeam: ${placement.targetPath}`
       )
     }
     operations.push({

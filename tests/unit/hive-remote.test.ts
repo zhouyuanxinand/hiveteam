@@ -47,7 +47,7 @@ describe('hive remote CLI', () => {
     const config = createConfig()
     const output: string[] = []
     let polls = 0
-    const code = await runHiveRemoteCommand(['login'], {
+    const code = await runHiveRemoteCommand(['login', '--gateway', 'https://gateway.test'], {
       config,
       client: {
         requestCode: async () => ({ code: 'ABCD', expiresAt: 2000, pollIntervalMs: 1 }),
@@ -72,7 +72,7 @@ describe('hive remote CLI', () => {
     const config = createConfig({ remote_daemon_id: 'old-daemon' })
     const output: string[] = []
     let revoked = 0
-    const code = await runHiveRemoteCommand(['login'], {
+    const code = await runHiveRemoteCommand(['login', '--gateway', 'https://gateway.test'], {
       config,
       deviceStore: {
         list: () => [],

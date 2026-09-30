@@ -133,7 +133,7 @@ describe('external Supervisor goals', () => {
     await waitFor(() => {
       const output = normalizeTerminalText(server.store.getLiveRun(run.runId).output)
       expect(output).toContain('<hive-untrusted-data kind="external-goal">')
-      expect(output).toContain('[Hive control marker removed]')
+      expect(output).toContain('[HiveTeam control marker removed]')
       expect(output).toContain(`team goal report --goal ${started.goal_id}`)
     })
 

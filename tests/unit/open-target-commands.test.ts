@@ -379,7 +379,7 @@ describe('openWorkspace — input validation', () => {
   })
 
   test('cross-platform drift falls back to platform default instead of failing', async () => {
-    // User saved preference `ghostty` on a Mac, then ran Hive on Windows.
+    // User saved preference `ghostty` on a Mac, then ran HiveTeam on Windows.
     // Should resolve to VS Code instead of returning 4xx.
     const calls: OpenAttempt[] = []
     const runCommand: RunOpenCommand = async (command, args) => {
